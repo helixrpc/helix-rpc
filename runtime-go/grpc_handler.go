@@ -15,26 +15,65 @@ import (
 	"golang.org/x/net/http2/h2c"
 )
 
-type MethodHandler func(ctx context.Context, dec func(interface{}) error) (interface{}, error)
+type UnaryServerInfo struct {
+	FullMethod string
+}
+
+type UnaryHandler func(ctx context.Context, req interface{}) (interface{}, error)
+
+type UnaryServerInterceptor func(ctx context.Context, req interface{}, info *UnaryServerInfo, handler UnaryHandler) (resp interface{}, err error)
+
+type MethodInfo struct {
+	Decoder func(dec func(interface{}) error) (interface{}, error)
+	Handler func(ctx context.Context, req interface{}) (interface{}, error)
+}
 
 type GRPCHandler struct {
-	handlers map[string]MethodHandler
+	methods      map[string]MethodInfo
+	interceptors []UnaryServerInterceptor
+	chained      UnaryServerInterceptor
 }
 
 func NewGRPCHandler() *GRPCHandler {
 	return &GRPCHandler{
-		handlers: make(map[string]MethodHandler),
+		methods: make(map[string]MethodInfo),
 	}
 }
 
-func (h *GRPCHandler) RegisterMethod(path string, handler MethodHandler) {
-	h.handlers[path] = handler
+func (h *GRPCHandler) RegisterMethod(path string, methodInfo MethodInfo) {
+	h.methods[path] = methodInfo
+}
+
+func (h *GRPCHandler) AddInterceptor(interceptor UnaryServerInterceptor) {
+	h.interceptors = append(h.interceptors, interceptor)
+	h.chained = chainInterceptors(h.interceptors)
+}
+
+func chainInterceptors(interceptors []UnaryServerInterceptor) UnaryServerInterceptor {
+	if len(interceptors) == 0 {
+		return nil
+	}
+	if len(interceptors) == 1 {
+		return interceptors[0]
+	}
+	return func(ctx context.Context, req interface{}, info *UnaryServerInfo, handler UnaryHandler) (interface{}, error) {
+		return interceptors[0](ctx, req, info, getChainHandler(interceptors, 0, info, handler))
+	}
+}
+
+func getChainHandler(interceptors []UnaryServerInterceptor, curr int, info *UnaryServerInfo, finalHandler UnaryHandler) UnaryHandler {
+	if curr == len(interceptors)-1 {
+		return finalHandler
+	}
+	return func(ctx context.Context, req interface{}) (interface{}, error) {
+		return interceptors[curr+1](ctx, req, info, getChainHandler(interceptors, curr+1, info, finalHandler))
+	}
 }
 
 func (h *GRPCHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Path
 
-	handler, ok := h.handlers[path]
+	methodInfo, ok := h.methods[path]
 	if !ok {
 		w.Header().Set("grpc-status", "12") // UNIMPLEMENTED
 		w.Header().Set("grpc-message", fmt.Sprintf("path %s not found", path))
@@ -67,7 +106,20 @@ func (h *GRPCHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return json.Unmarshal(payload, v)
 		}
 
-		resp, err := handler(ctx, dec)
+		req, err := methodInfo.Decoder(dec)
+		if err != nil {
+			http.Error(w, "failed to decode request: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		var resp interface{}
+		if h.chained != nil {
+			info := &UnaryServerInfo{FullMethod: path}
+			resp, err = h.chained(ctx, req, info, methodInfo.Handler)
+		} else {
+			resp, err = methodInfo.Handler(ctx, req)
+		}
+
 		if err != nil {
 			http.Error(w, "method execution failed: "+err.Error(), http.StatusInternalServerError)
 			return
@@ -103,7 +155,22 @@ func (h *GRPCHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return unmarshaler.Unmarshal(payload)
 	}
 
-	resp, err := handler(ctx, dec)
+	req, err := methodInfo.Decoder(dec)
+	if err != nil {
+		w.Header().Set("grpc-status", "3") // INVALID_ARGUMENT
+		w.Header().Set("grpc-message", err.Error())
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	var resp interface{}
+	if h.chained != nil {
+		info := &UnaryServerInfo{FullMethod: path}
+		resp, err = h.chained(ctx, req, info, methodInfo.Handler)
+	} else {
+		resp, err = methodInfo.Handler(ctx, req)
+	}
+
 	if err != nil {
 		w.Header().Set("grpc-status", "13") // INTERNAL
 		w.Header().Set("grpc-message", err.Error())
@@ -192,8 +259,12 @@ func NewServer(addr string) *Server {
 	}
 }
 
-func (s *Server) RegisterMethod(path string, handler MethodHandler) {
-	s.grpcHandler.RegisterMethod(path, handler)
+func (s *Server) RegisterMethod(path string, methodInfo MethodInfo) {
+	s.grpcHandler.RegisterMethod(path, methodInfo)
+}
+
+func (s *Server) AddInterceptor(interceptor UnaryServerInterceptor) {
+	s.grpcHandler.AddInterceptor(interceptor)
 }
 
 func (s *Server) Start() error {

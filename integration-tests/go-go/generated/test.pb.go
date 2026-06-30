@@ -310,19 +310,29 @@ func (p *UserProfileServiceProcessor) Process(ctx context.Context, iprot, oprot 
 }
 
 func RegisterUserProfileService(server *runtime.Server, impl UserProfileService) {
-	server.RegisterMethod("/helix.example.UserProfileService/GetUserProfile", func(ctx context.Context, dec func(interface{}) error) (interface{}, error) {
-		req := &UserProfile{}
-		if err := dec(req); err != nil {
-			return nil, err
-		}
-		return impl.GetUserProfile(ctx, req)
+	server.RegisterMethod("/helix.example.UserProfileService/GetUserProfile", runtime.MethodInfo{
+		Decoder: func(dec func(interface{}) error) (interface{}, error) {
+			req := &UserProfile{}
+			if err := dec(req); err != nil {
+				return nil, err
+			}
+			return req, nil
+		},
+		Handler: func(ctx context.Context, req interface{}) (interface{}, error) {
+			return impl.GetUserProfile(ctx, req.(*UserProfile))
+		},
 	})
-	server.RegisterMethod("/helix_example.UserProfileService/GetUserProfile", func(ctx context.Context, dec func(interface{}) error) (interface{}, error) {
-		req := &UserProfile{}
-		if err := dec(req); err != nil {
-			return nil, err
-		}
-		return impl.GetUserProfile(ctx, req)
+	server.RegisterMethod("/helix_example.UserProfileService/GetUserProfile", runtime.MethodInfo{
+		Decoder: func(dec func(interface{}) error) (interface{}, error) {
+			req := &UserProfile{}
+			if err := dec(req); err != nil {
+				return nil, err
+			}
+			return req, nil
+		},
+		Handler: func(ctx context.Context, req interface{}) (interface{}, error) {
+			return impl.GetUserProfile(ctx, req.(*UserProfile))
+		},
 	})
 }
 

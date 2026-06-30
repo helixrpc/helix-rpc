@@ -274,6 +274,65 @@ func callGRPC(addr string, req *generated.UserProfile) (*generated.UserProfile, 
 	return res, nil
 }
 
+func TestE2EInterceptor(t *testing.T) {
+	server := runtime.NewServer("127.0.0.1:0")
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to listen: %v", err)
+	}
+	addr := ln.Addr().String()
+	ln.Close()
+
+	server.Addr = addr
+	serviceImpl := &myUserProfileService{}
+	generated.RegisterUserProfileService(server, serviceImpl)
+
+	var interceptorCalled bool
+	server.AddInterceptor(func(ctx context.Context, req interface{}, info *runtime.UnaryServerInfo, handler runtime.UnaryHandler) (interface{}, error) {
+		interceptorCalled = true
+
+		profile, ok := req.(*generated.UserProfile)
+		if !ok {
+			return nil, fmt.Errorf("unexpected request type in interceptor: %T", req)
+		}
+
+		profile.Username = profile.Username + "-intercepted"
+
+		resp, err := handler(ctx, profile)
+		return resp, err
+	})
+
+	go func() {
+		if err := server.Start(); err != nil {
+			panic(err)
+		}
+	}()
+
+	time.Sleep(200 * time.Millisecond)
+
+	req := &generated.UserProfile{
+		UserID:   777,
+		Username: "interceptor-user",
+		Email:    "interceptor@example.com",
+	}
+
+	resp, err := callGRPCWithHeader(addr, req, "x-trace-id", "trace-tag-abc")
+	if err != nil {
+		t.Fatalf("gRPC call with interceptor failed: %v", err)
+	}
+
+	if !interceptorCalled {
+		t.Error("expected server interceptor to be called, but it was not")
+	}
+
+	expectedUsername := "interceptor-user-intercepted-response-trace-tag-abc"
+	if resp.Username != expectedUsername {
+		t.Errorf("expected username %s, got %s", expectedUsername, resp.Username)
+	}
+}
+
+
 func callGRPCWithHeader(addr string, req *generated.UserProfile, hk, hv string) (*generated.UserProfile, error) {
 	client := &http.Client{
 		Transport: &http2.Transport{
