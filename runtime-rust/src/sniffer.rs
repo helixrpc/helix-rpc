@@ -24,8 +24,11 @@ pub async fn sniff_protocol(stream: &TcpStream) -> std::io::Result<Protocol> {
         return Ok(Protocol::Grpc);
     }
     if bytes_peeked >= 3 {
-        let prefix = &buf[..3];
-        if prefix == b"GET" || prefix == b"POS" || prefix == b"PUT" || prefix == b"DEL" {
+        let (m0, m1, m2) = (buf[0], buf[1], buf[2]);
+        if (m0 == b'G' && m1 == b'E' && m2 == b'T') ||
+           (m0 == b'P' && m1 == b'O' && m2 == b'S') ||
+           (m0 == b'P' && m1 == b'U' && m2 == b'T') ||
+           (m0 == b'D' && m1 == b'E' && m2 == b'L') {
             return Ok(Protocol::Http);
         }
     }

@@ -89,10 +89,13 @@ func (l *SniffingListener) sniffAndRoute(conn net.Conn) {
 		}
 	}
 
-	// 5. Check HTTP/1.1 (REST) - standard HTTP verbs
+	// 5. Check HTTP/1.1 (REST) - standard HTTP verbs (allocation-free check)
 	if len(magic) >= 3 {
-		verb := string(magic[:3])
-		if verb == "GET" || verb == "POS" || verb == "PUT" || verb == "DEL" {
+		m0, m1, m2 := magic[0], magic[1], magic[2]
+		if (m0 == 'G' && m1 == 'E' && m2 == 'T') ||
+			(m0 == 'P' && m1 == 'O' && m2 == 'S') ||
+			(m0 == 'P' && m1 == 'U' && m2 == 'T') ||
+			(m0 == 'D' && m1 == 'E' && m2 == 'L') {
 			l.gRPCHandler(wrappedConn)
 			return
 		}
