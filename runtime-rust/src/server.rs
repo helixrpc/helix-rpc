@@ -51,6 +51,16 @@ where
                 return Ok(response);
             }
 
+            // Extract metadata from request headers
+            let mut md = std::collections::HashMap::new();
+            for (k, v) in req.headers() {
+                if let Ok(val_str) = v.to_str() {
+                    md.entry(k.as_str().to_lowercase())
+                        .or_insert_with(Vec::new)
+                        .push(val_str.to_string());
+                }
+            }
+
             // Read request body
             let body_bytes = match hyper::body::to_bytes(req.into_body()).await {
                 Ok(bytes) => bytes.to_vec(),
@@ -78,8 +88,12 @@ where
                 request_payload = request_payload[5..5+length].to_vec();
             }
 
-            // Call the handler
-            match handler.handle_request(&path, request_payload, is_json).await {
+            // Call the handler inside the tokio task-local metadata context scope
+            let handler_fut = crate::metadata::METADATA.scope(md, async move {
+                handler.handle_request(&path, request_payload, is_json).await
+            });
+
+            match handler_fut.await {
                 Ok((resp_bytes, resp_content_type)) => {
                     if is_grpc {
                         let mut frame = Vec::with_capacity(5 + resp_bytes.len());

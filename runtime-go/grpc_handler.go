@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"golang.org/x/net/http2"
@@ -41,6 +42,13 @@ func (h *GRPCHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Extract metadata from request headers
+	md := make(MD)
+	for k, v := range r.Header {
+		md[strings.ToLower(k)] = v
+	}
+	ctx := NewContext(r.Context(), md)
+
 	type ProtoMarshaler interface {
 		Marshal() ([]byte, error)
 	}
@@ -59,7 +67,7 @@ func (h *GRPCHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return json.Unmarshal(payload, v)
 		}
 
-		resp, err := handler(r.Context(), dec)
+		resp, err := handler(ctx, dec)
 		if err != nil {
 			http.Error(w, "method execution failed: "+err.Error(), http.StatusInternalServerError)
 			return
@@ -95,7 +103,7 @@ func (h *GRPCHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return unmarshaler.Unmarshal(payload)
 	}
 
-	resp, err := handler(r.Context(), dec)
+	resp, err := handler(ctx, dec)
 	if err != nil {
 		w.Header().Set("grpc-status", "13") // INTERNAL
 		w.Header().Set("grpc-message", err.Error())
