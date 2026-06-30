@@ -22,9 +22,15 @@ import (
 type myUserProfileService struct{}
 
 func (s *myUserProfileService) GetUserProfile(ctx context.Context, req *generated.UserProfile) (*generated.UserProfile, error) {
+	username := req.Username + "-response"
+	if md, ok := runtime.FromContext(ctx); ok {
+		if traceID := md.Get("x-trace-id"); len(traceID) > 0 {
+			username = fmt.Sprintf("%s-%s", username, traceID[0])
+		}
+	}
 	return &generated.UserProfile{
 		UserID:   req.UserID,
-		Username: req.Username + "-response",
+		Username: username,
 		Email:    req.Email + "-verified",
 	}, nil
 }
@@ -94,11 +100,11 @@ func TestE2EMultiProtocol(t *testing.T) {
 			Username: "charlie",
 			Email:    "charlie@example.com",
 		}
-		resp, err := callGRPC(addr, req)
+		resp, err := callGRPCWithHeader(addr, req, "x-trace-id", "grpc-trace-123")
 		if err != nil {
 			t.Fatalf("gRPC call failed: %v", err)
 		}
-		if resp.UserID != 999 || resp.Username != "charlie-response" || resp.Email != "charlie@example.com-verified" {
+		if resp.UserID != 999 || resp.Username != "charlie-response-grpc-trace-123" || resp.Email != "charlie@example.com-verified" {
 			t.Errorf("unexpected gRPC response: %+v", resp)
 		}
 	})
@@ -112,6 +118,7 @@ func TestE2EMultiProtocol(t *testing.T) {
 			t.Fatalf("failed to create http request: %v", err)
 		}
 		httpReq.Header.Set("Content-Type", "application/json")
+		httpReq.Header.Set("x-trace-id", "json-trace-456")
 
 		resp, err := http.DefaultClient.Do(httpReq)
 		if err != nil {
@@ -128,7 +135,7 @@ func TestE2EMultiProtocol(t *testing.T) {
 			t.Fatalf("failed to read response body: %v", err)
 		}
 
-		expectedJSON := `{"user_id":555,"username":"david-response","email":"david@example.com-verified"}`
+		expectedJSON := `{"user_id":555,"username":"david-response-json-trace-456","email":"david@example.com-verified"}`
 		if string(respBytes) != expectedJSON {
 			t.Errorf("unexpected response JSON: got %s, expected %s", string(respBytes), expectedJSON)
 		}
@@ -248,6 +255,71 @@ func callGRPC(addr string, req *generated.UserProfile) (*generated.UserProfile, 
 	}
 
 	// Read response gRPC frame
+	frameHeader := make([]byte, 5)
+	if _, err := io.ReadFull(resp.Body, frameHeader); err != nil {
+		return nil, err
+	}
+
+	length := binary.BigEndian.Uint32(frameHeader[1:5])
+	payload := make([]byte, length)
+	if _, err := io.ReadFull(resp.Body, payload); err != nil {
+		return nil, err
+	}
+
+	res := &generated.UserProfile{}
+	if err := res.Unmarshal(payload); err != nil {
+		return nil, err
+	}
+
+	return res, nil
+}
+
+func callGRPCWithHeader(addr string, req *generated.UserProfile, hk, hv string) (*generated.UserProfile, error) {
+	client := &http.Client{
+		Transport: &http2.Transport{
+			AllowHTTP: true,
+			DialTLSContext: func(ctx context.Context, network, addr string, cfg *tls.Config) (net.Conn, error) {
+				var d net.Dialer
+				return d.DialContext(ctx, network, addr)
+			},
+		},
+	}
+
+	marshaled, err := req.Marshal()
+	if err != nil {
+		return nil, err
+	}
+
+	reqFrame := make([]byte, 5+len(marshaled))
+	reqFrame[0] = 0 // uncompressed
+	binary.BigEndian.PutUint32(reqFrame[1:5], uint32(len(marshaled)))
+	copy(reqFrame[5:], marshaled)
+
+	url := fmt.Sprintf("http://%s/helix_example.UserProfileService/GetUserProfile", addr)
+	httpReq, err := http.NewRequest("POST", url, bytes.NewReader(reqFrame))
+	if err != nil {
+		return nil, err
+	}
+	httpReq.Header.Set("Content-Type", "application/grpc")
+	if hk != "" {
+		httpReq.Header.Set(hk, hv)
+	}
+
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected HTTP status: %d", resp.StatusCode)
+	}
+
+	grpcStatus := resp.Header.Get("grpc-status")
+	if grpcStatus != "" && grpcStatus != "0" {
+		return nil, fmt.Errorf("gRPC error: status=%s, message=%s", grpcStatus, resp.Header.Get("grpc-message"))
+	}
+
 	frameHeader := make([]byte, 5)
 	if _, err := io.ReadFull(resp.Body, frameHeader); err != nil {
 		return nil, err

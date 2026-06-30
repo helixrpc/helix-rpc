@@ -106,11 +106,11 @@ func TestCrossLangGoClientRustServer(t *testing.T) {
 			Username: "go-caller-grpc",
 			Email:    "caller-grpc@go.com",
 		}
-		resp, err := callGRPC(addr, req)
+		resp, err := callGRPCWithHeader(addr, req, "x-trace-id", "cross-trace-789")
 		if err != nil {
 			t.Fatalf("gRPC cross-lang call failed: %v", err)
 		}
-		if resp.UserID != 999 || resp.Username != "go-caller-grpc-response" || resp.Email != "caller-grpc@go.com-verified" {
+		if resp.UserID != 999 || resp.Username != "go-caller-grpc-response-cross-trace-789" || resp.Email != "caller-grpc@go.com-verified" {
 			t.Errorf("unexpected response from Rust server: %+v", resp)
 		}
 	})
@@ -124,6 +124,7 @@ func TestCrossLangGoClientRustServer(t *testing.T) {
 			t.Fatalf("failed to create http request: %v", err)
 		}
 		httpReq.Header.Set("Content-Type", "application/json")
+		httpReq.Header.Set("x-trace-id", "cross-trace-abc")
 
 		resp, err := http.DefaultClient.Do(httpReq)
 		if err != nil {
@@ -140,7 +141,7 @@ func TestCrossLangGoClientRustServer(t *testing.T) {
 			t.Fatalf("failed to read response body: %v", err)
 		}
 
-		expectedJSON := `{"user_id":555,"username":"go-caller-json-response","email":"caller-json@go.com-verified"}`
+		expectedJSON := `{"user_id":555,"username":"go-caller-json-response-cross-trace-abc","email":"caller-json@go.com-verified"}`
 		if string(respBytes) != expectedJSON {
 			t.Errorf("unexpected response JSON: got %s, expected %s", string(respBytes), expectedJSON)
 		}

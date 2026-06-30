@@ -15,9 +15,15 @@ struct ServiceImpl;
 #[async_trait::async_trait]
 impl UserProfileService for ServiceImpl {
     async fn get_user_profile(&self, req: UserProfile) -> Result<UserProfile, thrift::Error> {
+        let mut username = format!("{}-response", req.username);
+        if let Some(trace_ids) = helix_rt::get_metadata("x-trace-id") {
+            if !trace_ids.is_empty() {
+                username = format!("{}-{}", username, trace_ids[0]);
+            }
+        }
         Ok(UserProfile {
             user_id: req.user_id,
-            username: format!("{}-response", req.username),
+            username,
             email: format!("{}-verified", req.email),
         })
     }
