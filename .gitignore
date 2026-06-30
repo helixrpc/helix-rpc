@@ -1,0 +1,10 @@
+# Binary build output
+helix-gen
+/compiler/compiler
+
+# Rust target directories
+target/
+**/target/
+
+# Go test binaries
+*.test
