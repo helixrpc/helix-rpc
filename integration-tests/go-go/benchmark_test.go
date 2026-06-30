@@ -103,7 +103,7 @@ func initBenchServers() {
 	// 4. Start Helix Server (Multiplexed)
 	helixSrv := runtime.NewServer("127.0.0.1:0")
 	serviceImpl := &myUserProfileService{}
-	helixSrv.RegisterService("helix_example.UserProfileService", serviceImpl)
+	generated.RegisterUserProfileService(helixSrv, serviceImpl)
 	helixSrv.RegisterThriftProcessor(generated.NewUserProfileServiceProcessor(serviceImpl))
 	ln4, _ := net.Listen("tcp", "127.0.0.1:0")
 	helixAddr = ln4.Addr().String()

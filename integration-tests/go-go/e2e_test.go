@@ -45,7 +45,7 @@ func TestE2EMultiProtocol(t *testing.T) {
 	serviceImpl := &myUserProfileService{}
 	
 	// Register both gRPC and Thrift handler
-	server.RegisterService("helix_example.UserProfileService", serviceImpl)
+	generated.RegisterUserProfileService(server, serviceImpl)
 	server.RegisterThriftProcessor(generated.NewUserProfileServiceProcessor(serviceImpl))
 
 	// Run server in background

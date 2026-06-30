@@ -160,7 +160,7 @@ func TestCrossLangRustClientGoServer(t *testing.T) {
 
 	server.Addr = addr
 	serviceImpl := &myUserProfileService{}
-	server.RegisterService("helix_example.UserProfileService", serviceImpl)
+	generated.RegisterUserProfileService(server, serviceImpl)
 	server.RegisterThriftProcessor(generated.NewUserProfileServiceProcessor(serviceImpl))
 
 	go func() {

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/golang/protobuf/proto"
 	"github.com/apache/thrift/lib/go/thrift"
+	runtime "github.com/helix-rpc/helix/runtime-go"
 )
 
 func writeVarint(buf []byte, offset int, v uint64) int {
@@ -306,5 +307,22 @@ func (p *UserProfileServiceProcessor) Process(ctx context.Context, iprot, oprot 
 	default:
 		return false, thrift.NewTApplicationException(thrift.UNKNOWN_METHOD, "unknown method "+name)
 	}
+}
+
+func RegisterUserProfileService(server *runtime.Server, impl UserProfileService) {
+	server.RegisterMethod("/helix.example.UserProfileService/GetUserProfile", func(ctx context.Context, dec func(interface{}) error) (interface{}, error) {
+		req := &UserProfile{}
+		if err := dec(req); err != nil {
+			return nil, err
+		}
+		return impl.GetUserProfile(ctx, req)
+	})
+	server.RegisterMethod("/helix_example.UserProfileService/GetUserProfile", func(ctx context.Context, dec func(interface{}) error) (interface{}, error) {
+		req := &UserProfile{}
+		if err := dec(req); err != nil {
+			return nil, err
+		}
+		return impl.GetUserProfile(ctx, req)
+	})
 }
 

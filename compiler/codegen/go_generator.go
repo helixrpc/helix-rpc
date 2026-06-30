@@ -19,6 +19,7 @@ func GenerateGo(parsed *ast.AST) (string, error) {
 	sb.WriteString("\t\"fmt\"\n")
 	sb.WriteString("\t\"github.com/golang/protobuf/proto\"\n")
 	sb.WriteString("\t\"github.com/apache/thrift/lib/go/thrift\"\n")
+	sb.WriteString("\truntime \"github.com/helix-rpc/helix/runtime-go\"\n")
 	sb.WriteString(")\n\n")
 
 	// Helper functions for protobuf serialization (varints)
@@ -337,6 +338,38 @@ func readVarint(buf []byte, offset int) (uint64, int, error) {
 		sb.WriteString("\tdefault:\n")
 		sb.WriteString("\t\treturn false, thrift.NewTApplicationException(thrift.UNKNOWN_METHOD, \"unknown method \"+name)\n")
 		sb.WriteString("\t}\n")
+		sb.WriteString("}\n\n")
+
+		// Generate zero-reflection GRPCHandler registration stub
+		sb.WriteString(fmt.Sprintf("func Register%s(server *runtime.Server, impl %s) {\n", srv.Name, srv.Name))
+		for _, m := range srv.Methods {
+			packagePrefix := parsed.Namespace
+			if packagePrefix == "" {
+				packagePrefix = "helix_example"
+			}
+			pathDot := fmt.Sprintf("/%s.%s/%s", packagePrefix, srv.Name, m.Name)
+			pathUnderscore := fmt.Sprintf("/%s.%s/%s", strings.ReplaceAll(packagePrefix, ".", "_"), srv.Name, m.Name)
+
+			// Register dot path
+			sb.WriteString(fmt.Sprintf("\tserver.RegisterMethod(\"%s\", func(ctx context.Context, dec func(interface{}) error) (interface{}, error) {\n", pathDot))
+			sb.WriteString(fmt.Sprintf("\t\treq := &%s{}\n", m.InputType))
+			sb.WriteString("\t\tif err := dec(req); err != nil {\n")
+			sb.WriteString("\t\t\treturn nil, err\n")
+			sb.WriteString("\t\t}\n")
+			sb.WriteString(fmt.Sprintf("\t\treturn impl.%s(ctx, req)\n", m.Name))
+			sb.WriteString("\t})\n")
+
+			// Register underscore path if it differs
+			if pathDot != pathUnderscore {
+				sb.WriteString(fmt.Sprintf("\tserver.RegisterMethod(\"%s\", func(ctx context.Context, dec func(interface{}) error) (interface{}, error) {\n", pathUnderscore))
+				sb.WriteString(fmt.Sprintf("\t\treq := &%s{}\n", m.InputType))
+				sb.WriteString("\t\tif err := dec(req); err != nil {\n")
+				sb.WriteString("\t\t\treturn nil, err\n")
+				sb.WriteString("\t\t}\n")
+				sb.WriteString(fmt.Sprintf("\t\treturn impl.%s(ctx, req)\n", m.Name))
+				sb.WriteString("\t})\n")
+			}
+		}
 		sb.WriteString("}\n\n")
 	}
 
