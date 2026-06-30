@@ -26,10 +26,19 @@ type UnaryServerInterceptor func(ctx context.Context, req interface{}, info *Una
 type MethodInfo struct {
 	Decoder func(dec func(interface{}) error) (interface{}, error)
 	Handler func(ctx context.Context, req interface{}) (interface{}, error)
+	Binder  func(req interface{}, params map[string]string) error
+}
+
+type RESTRoute struct {
+	Method      string
+	Pattern     string
+	PathParts   []string
+	HandlerPath string
 }
 
 type GRPCHandler struct {
 	methods      map[string]MethodInfo
+	restRoutes   []RESTRoute
 	interceptors []UnaryServerInterceptor
 	chained      UnaryServerInterceptor
 }
@@ -42,6 +51,15 @@ func NewGRPCHandler() *GRPCHandler {
 
 func (h *GRPCHandler) RegisterMethod(path string, methodInfo MethodInfo) {
 	h.methods[path] = methodInfo
+}
+
+func (h *GRPCHandler) RegisterRESTRoute(method, pattern, handlerPath string) {
+	h.restRoutes = append(h.restRoutes, RESTRoute{
+		Method:      strings.ToUpper(method),
+		Pattern:     pattern,
+		PathParts:   splitPath(pattern),
+		HandlerPath: handlerPath,
+	})
 }
 
 func (h *GRPCHandler) AddInterceptor(interceptor UnaryServerInterceptor) {
@@ -73,7 +91,15 @@ func getChainHandler(interceptors []UnaryServerInterceptor, curr int, info *Unar
 func (h *GRPCHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Path
 
-	methodInfo, ok := h.methods[path]
+	methodPath := path
+	var pathParams map[string]string
+
+	if route, params := matchREST(r.Method, path, h.restRoutes); route != nil {
+		methodPath = route.HandlerPath
+		pathParams = params
+	}
+
+	methodInfo, ok := h.methods[methodPath]
 	if !ok {
 		w.Header().Set("grpc-status", "12") // UNIMPLEMENTED
 		w.Header().Set("grpc-message", fmt.Sprintf("path %s not found", path))
@@ -97,11 +123,20 @@ func (h *GRPCHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	contentType := r.Header.Get("Content-Type")
 
-	if contentType == "application/json" {
+	// If HTTP/1.1 REST is caller, default to application/json if Content-Type is missing
+	if contentType == "" {
+		contentType = "application/json"
+	}
+
+	if strings.Contains(contentType, "application/json") {
 		dec := func(v interface{}) error {
 			payload, err := io.ReadAll(r.Body)
-			if err != nil {
+			if err != nil && err != io.EOF {
 				return err
+			}
+			// If empty body, init with empty json object so unmarshal doesn't fail
+			if len(payload) == 0 {
+				payload = []byte("{}")
 			}
 			return json.Unmarshal(payload, v)
 		}
@@ -112,9 +147,17 @@ func (h *GRPCHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		// Bind path parameters statically
+		if len(pathParams) > 0 && methodInfo.Binder != nil {
+			if err := methodInfo.Binder(req, pathParams); err != nil {
+				http.Error(w, "failed to bind path parameters: "+err.Error(), http.StatusBadRequest)
+				return
+			}
+		}
+
 		var resp interface{}
 		if h.chained != nil {
-			info := &UnaryServerInfo{FullMethod: path}
+			info := &UnaryServerInfo{FullMethod: methodPath}
 			resp, err = h.chained(ctx, req, info, methodInfo.Handler)
 		} else {
 			resp, err = methodInfo.Handler(ctx, req)
@@ -165,7 +208,7 @@ func (h *GRPCHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	var resp interface{}
 	if h.chained != nil {
-		info := &UnaryServerInfo{FullMethod: path}
+		info := &UnaryServerInfo{FullMethod: methodPath}
 		resp, err = h.chained(ctx, req, info, methodInfo.Handler)
 	} else {
 		resp, err = methodInfo.Handler(ctx, req)
@@ -204,6 +247,40 @@ func (h *GRPCHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	w.Write(respFrame[:5])
 	w.Write(payload)
+}
+
+func matchREST(method, path string, routes []RESTRoute) (*RESTRoute, map[string]string) {
+	reqParts := splitPath(path)
+	method = strings.ToUpper(method)
+
+	for _, r := range routes {
+		if r.Method != method || len(r.PathParts) != len(reqParts) {
+			continue
+		}
+		match := true
+		params := make(map[string]string)
+		for i, part := range r.PathParts {
+			if strings.HasPrefix(part, "{") && strings.HasSuffix(part, "}") {
+				paramName := part[1 : len(part)-1]
+				params[paramName] = reqParts[i]
+			} else if part != reqParts[i] {
+				match = false
+				break
+			}
+		}
+		if match {
+			return &r, params
+		}
+	}
+	return nil, nil
+}
+
+func splitPath(path string) []string {
+	trimmed := strings.Trim(path, "/")
+	if trimmed == "" {
+		return nil
+	}
+	return strings.Split(trimmed, "/")
 }
 
 // ChannelListener implements net.Listener for routing sniffed TCP connections to HTTP/2 server
@@ -261,6 +338,10 @@ func NewServer(addr string) *Server {
 
 func (s *Server) RegisterMethod(path string, methodInfo MethodInfo) {
 	s.grpcHandler.RegisterMethod(path, methodInfo)
+}
+
+func (s *Server) RegisterRESTRoute(method, pattern, handlerPath string) {
+	s.grpcHandler.RegisterRESTRoute(method, pattern, handlerPath)
 }
 
 func (s *Server) AddInterceptor(interceptor UnaryServerInterceptor) {

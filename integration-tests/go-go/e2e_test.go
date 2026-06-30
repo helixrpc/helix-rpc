@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -397,3 +398,141 @@ func callGRPCWithHeader(addr string, req *generated.UserProfile, hk, hv string) 
 
 	return res, nil
 }
+
+type balancerUserProfileService struct {
+	addr string
+}
+
+func (s *balancerUserProfileService) GetUserProfile(ctx context.Context, req *generated.UserProfile) (*generated.UserProfile, error) {
+	return &generated.UserProfile{
+		UserID:   req.UserID,
+		Username: req.Username + "-response",
+		Email:    s.addr,
+	}, nil
+}
+
+func TestClientPoolingAndBalancing(t *testing.T) {
+	servers := make([]*runtime.Server, 3)
+	addrs := make([]string, 3)
+	for i := 0; i < 3; i++ {
+		servers[i] = runtime.NewServer("127.0.0.1:0")
+		ln, _ := net.Listen("tcp", "127.0.0.1:0")
+		addrs[i] = ln.Addr().String()
+		ln.Close()
+		servers[i].Addr = addrs[i]
+
+		impl := &balancerUserProfileService{addr: addrs[i]}
+		generated.RegisterUserProfileService(servers[i], impl)
+		servers[i].RegisterThriftProcessor(generated.NewUserProfileServiceProcessor(impl))
+
+		go func(s *runtime.Server) {
+			_ = s.Start()
+		}(servers[i])
+	}
+
+	time.Sleep(300 * time.Millisecond)
+
+	pools := make(map[string]*runtime.ClientConnPool)
+	for _, addr := range addrs {
+		pools[addr] = runtime.NewClientConnPool(addr, 5)
+	}
+
+	balancer := runtime.NewRoundRobinBalancer()
+
+	expectedOrder := []string{addrs[0], addrs[1], addrs[2], addrs[0], addrs[1], addrs[2]}
+	for _, expectedAddr := range expectedOrder {
+		target, err := balancer.Next(addrs)
+		if err != nil {
+			t.Fatalf("balancer next failed: %v", err)
+		}
+		if target != expectedAddr {
+			t.Errorf("expected target %s, got %s", expectedAddr, target)
+		}
+
+		pool := pools[target]
+		conn, err := pool.Get()
+		if err != nil {
+			t.Fatalf("failed to get connection from pool: %v", err)
+		}
+
+		socket := thrift.NewTSocketFromConnConf(conn, nil)
+		trans := thrift.NewTFramedTransportConf(socket, nil)
+		_ = trans.Open()
+		iprot := thrift.NewTCompactProtocolConf(trans, nil)
+		oprot := thrift.NewTCompactProtocolConf(trans, nil)
+
+		req := &generated.UserProfile{
+			UserID:   123,
+			Username: "balancer-tester",
+			Email:    "test@test.com",
+		}
+		_ = oprot.WriteMessageBegin(context.Background(), "GetUserProfile", thrift.CALL, 1)
+		_ = req.Write(context.Background(), oprot)
+		_ = oprot.WriteMessageEnd(context.Background())
+		_ = oprot.Flush(context.Background())
+
+		_, _, _, _ = iprot.ReadMessageBegin(context.Background())
+		resp := &generated.UserProfile{}
+		_ = resp.Read(context.Background(), iprot)
+		_ = iprot.ReadMessageEnd(context.Background())
+
+		if resp.Email != expectedAddr {
+			t.Errorf("expected request to be handled by %s, but handled by %s", expectedAddr, resp.Email)
+		}
+
+		pool.Put(conn)
+	}
+}
+
+func TestRESTTranscoding(t *testing.T) {
+	server := runtime.NewServer("127.0.0.1:0")
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to listen: %v", err)
+	}
+	addr := ln.Addr().String()
+	ln.Close()
+
+	server.Addr = addr
+	serviceImpl := &myUserProfileService{}
+	generated.RegisterUserProfileService(server, serviceImpl)
+
+	server.RegisterRESTRoute("GET", "/v1/users/{user_id}", "/helix_example.UserProfileService/GetUserProfile")
+
+	go func() {
+		if err := server.Start(); err != nil {
+			panic(err)
+		}
+	}()
+
+	time.Sleep(200 * time.Millisecond)
+
+	resp, err := http.Get(fmt.Sprintf("http://%s/v1/users/998877", addr))
+	if err != nil {
+		t.Fatalf("failed to execute GET request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected status code: %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("failed to read response body: %v", err)
+	}
+
+	var profile generated.UserProfile
+	if err := json.Unmarshal(body, &profile); err != nil {
+		t.Fatalf("failed to unmarshal JSON response: %v", err)
+	}
+
+	if profile.UserID != 998877 {
+		t.Errorf("expected UserID 998877, got %d", profile.UserID)
+	}
+	if profile.Username != "-response" {
+		t.Errorf("expected Username '-response', got %s", profile.Username)
+	}
+}
+

@@ -133,11 +133,19 @@ async fn handle_connection(stream: TcpStream) {
         }
         Protocol::Grpc => {
             let handler = std::sync::Arc::new(ServiceImpl);
-            helix_rt::handle_http_connection(stream, handler, true).await;
+            let rest_routes = vec![
+                helix_rt::RestRoute::new("POST", "/v1/users", "/helix_example.UserProfileService/GetUserProfile"),
+                helix_rt::RestRoute::new("GET", "/v1/users/{user_id}", "/helix_example.UserProfileService/GetUserProfile"),
+            ];
+            helix_rt::handle_http_connection(stream, handler, rest_routes, true).await;
         }
         Protocol::Http => {
             let handler = std::sync::Arc::new(ServiceImpl);
-            helix_rt::handle_http_connection(stream, handler, false).await;
+            let rest_routes = vec![
+                helix_rt::RestRoute::new("POST", "/v1/users", "/helix_example.UserProfileService/GetUserProfile"),
+                helix_rt::RestRoute::new("GET", "/v1/users/{user_id}", "/helix_example.UserProfileService/GetUserProfile"),
+            ];
+            helix_rt::handle_http_connection(stream, handler, rest_routes, false).await;
         }
         _ => {
             println!("Skipping unsupported protocol");

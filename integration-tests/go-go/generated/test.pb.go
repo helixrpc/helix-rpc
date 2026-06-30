@@ -321,6 +321,25 @@ func RegisterUserProfileService(server *runtime.Server, impl UserProfileService)
 		Handler: func(ctx context.Context, req interface{}) (interface{}, error) {
 			return impl.GetUserProfile(ctx, req.(*UserProfile))
 		},
+		Binder: func(req interface{}, params map[string]string) error {
+			p, ok := req.(*UserProfile)
+			if !ok {
+				return fmt.Errorf("invalid request type for binder")
+			}
+			if val, ok := params["user_id"]; ok {
+				var id int64
+				if _, err := fmt.Sscanf(val, "%d", &id); err == nil {
+					p.UserID = id
+				}
+			}
+			if val, ok := params["username"]; ok {
+				p.Username = val
+			}
+			if val, ok := params["email"]; ok {
+				p.Email = val
+			}
+			return nil
+		},
 	})
 	server.RegisterMethod("/helix_example.UserProfileService/GetUserProfile", runtime.MethodInfo{
 		Decoder: func(dec func(interface{}) error) (interface{}, error) {
@@ -332,6 +351,25 @@ func RegisterUserProfileService(server *runtime.Server, impl UserProfileService)
 		},
 		Handler: func(ctx context.Context, req interface{}) (interface{}, error) {
 			return impl.GetUserProfile(ctx, req.(*UserProfile))
+		},
+		Binder: func(req interface{}, params map[string]string) error {
+			p, ok := req.(*UserProfile)
+			if !ok {
+				return fmt.Errorf("invalid request type for binder")
+			}
+			if val, ok := params["user_id"]; ok {
+				var id int64
+				if _, err := fmt.Sscanf(val, "%d", &id); err == nil {
+					p.UserID = id
+				}
+			}
+			if val, ok := params["username"]; ok {
+				p.Username = val
+			}
+			if val, ok := params["email"]; ok {
+				p.Email = val
+			}
+			return nil
 		},
 	})
 }

@@ -362,6 +362,7 @@ func readVarint(buf []byte, offset int) (uint64, int, error) {
 			sb.WriteString(fmt.Sprintf("\t\tHandler: func(ctx context.Context, req interface{}) (interface{}, error) {\n"))
 			sb.WriteString(fmt.Sprintf("\t\t\treturn impl.%s(ctx, req.(*%s))\n", m.Name, m.InputType))
 			sb.WriteString("\t\t},\n")
+			sb.WriteString(generateBinderString(m, parsed))
 			sb.WriteString("\t})\n")
 
 			// Register underscore path if it differs
@@ -377,6 +378,7 @@ func readVarint(buf []byte, offset int) (uint64, int, error) {
 				sb.WriteString(fmt.Sprintf("\t\tHandler: func(ctx context.Context, req interface{}) (interface{}, error) {\n"))
 				sb.WriteString(fmt.Sprintf("\t\t\treturn impl.%s(ctx, req.(*%s))\n", m.Name, m.InputType))
 				sb.WriteString("\t\t},\n")
+				sb.WriteString(generateBinderString(m, parsed))
 				sb.WriteString("\t})\n")
 			}
 		}
@@ -460,4 +462,51 @@ func mapThriftTypeConst(t ast.TypeNode) string {
 	default:
 		return "STOP"
 	}
+}
+
+func generateBinderString(m *ast.MethodNode, parsed *ast.AST) string {
+	var sb strings.Builder
+	sb.WriteString("\t\tBinder: func(req interface{}, params map[string]string) error {\n")
+	sb.WriteString(fmt.Sprintf("\t\t\tp, ok := req.(*%s)\n", m.InputType))
+	sb.WriteString("\t\t\tif !ok {\n")
+	sb.WriteString("\t\t\t\treturn fmt.Errorf(\"invalid request type for binder\")\n")
+	sb.WriteString("\t\t\t}\n")
+
+	var inputStruct *ast.StructNode
+	for i := range parsed.Structs {
+		if parsed.Structs[i].Name == m.InputType {
+			inputStruct = parsed.Structs[i]
+			break
+		}
+	}
+	if inputStruct != nil {
+		for _, f := range inputStruct.Fields {
+			capName := toCamelCase(f.Name)
+			jsonTag := f.Name
+			sb.WriteString(fmt.Sprintf("\t\t\tif val, ok := params[\"%s\"]; ok {\n", jsonTag))
+			switch f.Type.Kind {
+			case ast.TypeInt32:
+				sb.WriteString("\t\t\t\tvar id int32\n")
+				sb.WriteString("\t\t\t\tif _, err := fmt.Sscanf(val, \"%d\", &id); err == nil {\n")
+				sb.WriteString(fmt.Sprintf("\t\t\t\t\tp.%s = id\n", capName))
+				sb.WriteString("\t\t\t\t}\n")
+			case ast.TypeInt64:
+				sb.WriteString("\t\t\t\tvar id int64\n")
+				sb.WriteString("\t\t\t\tif _, err := fmt.Sscanf(val, \"%d\", &id); err == nil {\n")
+				sb.WriteString(fmt.Sprintf("\t\t\t\t\tp.%s = id\n", capName))
+				sb.WriteString("\t\t\t\t}\n")
+			case ast.TypeString:
+				sb.WriteString(fmt.Sprintf("\t\t\t\tp.%s = val\n", capName))
+			case ast.TypeBool:
+				sb.WriteString("\t\t\t\tvar b bool\n")
+				sb.WriteString("\t\t\t\tif _, err := fmt.Sscanf(val, \"%t\", &b); err == nil {\n")
+				sb.WriteString(fmt.Sprintf("\t\t\t\t\tp.%s = b\n", capName))
+				sb.WriteString("\t\t\t\t}\n")
+			}
+			sb.WriteString("\t\t\t}\n")
+		}
+	}
+	sb.WriteString("\t\t\treturn nil\n")
+	sb.WriteString("\t\t},\n")
+	return sb.String()
 }
