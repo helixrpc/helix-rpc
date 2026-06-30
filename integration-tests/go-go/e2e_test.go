@@ -10,6 +10,8 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -535,4 +537,106 @@ func TestRESTTranscoding(t *testing.T) {
 		t.Errorf("expected Username '-response', got %s", profile.Username)
 	}
 }
+
+func TestServiceDiscovery(t *testing.T) {
+	resolver := runtime.NewStaticResolver()
+	addresses := []string{"127.0.0.1:9091", "127.0.0.1:9092"}
+	resolver.Register("user-service", addresses)
+
+	resolved, err := resolver.Resolve("user-service")
+	if err != nil {
+		t.Fatalf("resolve failed: %v", err)
+	}
+
+	if len(resolved) != 2 || resolved[0] != "127.0.0.1:9091" || resolved[1] != "127.0.0.1:9092" {
+		t.Errorf("resolved targets mismatch: got %v, expected %v", resolved, addresses)
+	}
+}
+
+func TestSharedMemoryIPC(t *testing.T) {
+	shmPath := "./helix_shm_test.dat"
+	shmSize := 4096
+
+	// Create dynamic TCP signaling listener
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to listen: %v", err)
+	}
+	defer ln.Close()
+	addr := ln.Addr().String()
+
+	var clientConn *runtime.SHMConn
+	var serverConn net.Conn
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	// Start background reader server
+	go func() {
+		defer wg.Done()
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		// Open memory mapping on accepted signaling connection
+		shmServer, err := runtime.NewSHMConn(conn, shmPath, shmSize, true)
+		if err != nil {
+			conn.Close()
+			return
+		}
+		serverConn = shmServer
+
+		// Read payload directly from memory mapping
+		buf := make([]byte, 1024)
+		n, err := shmServer.Read(buf)
+		if err != nil {
+			return
+		}
+
+		// Echo payload back via memory mapping
+		_, _ = shmServer.Write(buf[:n])
+	}()
+
+	// Dial background reader server
+	conn, err := net.Dial("tcp", addr)
+	if err != nil {
+		t.Fatalf("dial failed: %v", err)
+	}
+
+	// Open memory mapping on dialed signaling connection (isOwner = false)
+	time.Sleep(100 * time.Millisecond) // Let file create first
+	shmClient, err := runtime.NewSHMConn(conn, shmPath, shmSize, false)
+	if err != nil {
+		conn.Close()
+		t.Fatalf("new shm client failed: %v", err)
+	}
+	clientConn = shmClient
+
+	// Write payload into memory mapping
+	payload := []byte("hello zero-copy shared memory!")
+	_, err = shmClient.Write(payload)
+	if err != nil {
+		t.Fatalf("client write failed: %v", err)
+	}
+
+	// Read echoed response payload
+	buf := make([]byte, 1024)
+	n, err := shmClient.Read(buf)
+	if err != nil {
+		t.Fatalf("client read failed: %v", err)
+	}
+
+	if string(buf[:n]) != string(payload) {
+		t.Errorf("echoed payload mismatch: got %s, expected %s", string(buf[:n]), string(payload))
+	}
+
+	// Clean up connections
+	_ = clientConn.Close()
+	wg.Wait()
+	if serverConn != nil {
+		_ = serverConn.Close()
+	}
+	_ = os.Remove(shmPath)
+}
+
 
