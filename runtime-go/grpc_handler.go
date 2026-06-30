@@ -15,6 +15,14 @@ import (
 	"golang.org/x/net/http2/h2c"
 )
 
+type ProtoMarshaler interface {
+	Marshal() ([]byte, error)
+}
+
+type ProtoUnmarshaler interface {
+	Unmarshal([]byte) error
+}
+
 type UnaryServerInfo struct {
 	FullMethod string
 }
@@ -23,10 +31,72 @@ type UnaryHandler func(ctx context.Context, req interface{}) (interface{}, error
 
 type UnaryServerInterceptor func(ctx context.Context, req interface{}, info *UnaryServerInfo, handler UnaryHandler) (resp interface{}, err error)
 
+type ServerStream interface {
+	Context() context.Context
+	Recv(v interface{}) error
+	Send(v interface{}) error
+}
+
+type serverStream struct {
+	ctx context.Context
+	w   http.ResponseWriter
+	r   *http.Request
+}
+
+func (s *serverStream) Context() context.Context {
+	return s.ctx
+}
+
+func (s *serverStream) Recv(v interface{}) error {
+	frameHeader := make([]byte, 5)
+	if _, err := io.ReadFull(s.r.Body, frameHeader); err != nil {
+		return err
+	}
+	length := binary.BigEndian.Uint32(frameHeader[1:5])
+	payload := make([]byte, length)
+	if _, err := io.ReadFull(s.r.Body, payload); err != nil {
+		return err
+	}
+	unmarshaler, ok := v.(ProtoUnmarshaler)
+	if !ok {
+		return fmt.Errorf("type does not implement ProtoUnmarshaler")
+	}
+	return unmarshaler.Unmarshal(payload)
+}
+
+func (s *serverStream) Send(v interface{}) error {
+	marshaler, ok := v.(ProtoMarshaler)
+	if !ok {
+		return fmt.Errorf("type does not implement ProtoMarshaler")
+	}
+	payload, err := marshaler.Marshal()
+	if err != nil {
+		return err
+	}
+
+	header := make([]byte, 5)
+	header[0] = 0 // uncompressed
+	binary.BigEndian.PutUint32(header[1:5], uint32(len(payload)))
+
+	if _, err := s.w.Write(header); err != nil {
+		return err
+	}
+	if _, err := s.w.Write(payload); err != nil {
+		return err
+	}
+
+	if flusher, ok := s.w.(http.Flusher); ok {
+		flusher.Flush()
+	}
+	return nil
+}
+
 type MethodInfo struct {
-	Decoder func(dec func(interface{}) error) (interface{}, error)
-	Handler func(ctx context.Context, req interface{}) (interface{}, error)
-	Binder  func(req interface{}, params map[string]string) error
+	Decoder       func(dec func(interface{}) error) (interface{}, error)
+	Handler       func(ctx context.Context, req interface{}) (interface{}, error)
+	Binder        func(req interface{}, params map[string]string) error
+	IsStreaming   bool
+	StreamHandler func(stream ServerStream) error
 }
 
 type RESTRoute struct {
@@ -177,6 +247,29 @@ func (h *GRPCHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		w.Write(respBytes)
+		return
+	}
+
+	if methodInfo.IsStreaming {
+		w.Header().Set("Content-Type", "application/grpc")
+		w.WriteHeader(http.StatusOK)
+		if flusher, ok := w.(http.Flusher); ok {
+			flusher.Flush()
+		}
+
+		stream := &serverStream{
+			ctx: ctx,
+			w:   w,
+			r:   r,
+		}
+
+		if err := methodInfo.StreamHandler(stream); err != nil {
+			w.Header().Set("grpc-status", "13") // INTERNAL
+			w.Header().Set("grpc-message", err.Error())
+			return
+		}
+
+		w.Header().Set("grpc-status", "0") // OK
 		return
 	}
 

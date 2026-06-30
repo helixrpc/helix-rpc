@@ -639,4 +639,128 @@ func TestSharedMemoryIPC(t *testing.T) {
 	_ = os.Remove(shmPath)
 }
 
+func TestBidirectionalStreaming(t *testing.T) {
+	server := runtime.NewServer("127.0.0.1:0")
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to listen: %v", err)
+	}
+	addr := ln.Addr().String()
+	ln.Close()
+
+	server.Addr = addr
+
+	server.RegisterMethod("/helix_example.UserProfileService/StreamUserProfiles", runtime.MethodInfo{
+		IsStreaming: true,
+		StreamHandler: func(stream runtime.ServerStream) error {
+			for {
+				var req generated.UserProfile
+				err := stream.Recv(&req)
+				if err == io.EOF {
+					return nil
+				}
+				if err != nil {
+					return err
+				}
+				resp := &generated.UserProfile{
+					UserID:   req.UserID,
+					Username: req.Username + "-echoed",
+				}
+				if err := stream.Send(resp); err != nil {
+					return err
+				}
+			}
+		},
+	})
+
+	go func() {
+		_ = server.Start()
+	}()
+
+	time.Sleep(200 * time.Millisecond)
+
+	client := &http.Client{
+		Transport: &http2.Transport{
+			AllowHTTP: true,
+			DialTLSContext: func(ctx context.Context, network, addr string, cfg *tls.Config) (net.Conn, error) {
+				var d net.Dialer
+				return d.DialContext(ctx, network, addr)
+			},
+		},
+	}
+
+	pr, pw := io.Pipe()
+
+	url := fmt.Sprintf("http://%s/helix_example.UserProfileService/StreamUserProfiles", addr)
+	httpReq, err := http.NewRequest("POST", url, pr)
+	if err != nil {
+		t.Fatalf("failed to create http request: %v", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/grpc")
+
+	respChan := make(chan *http.Response, 1)
+	errChan := make(chan error, 1)
+	go func() {
+		res, err := client.Do(httpReq)
+		if err != nil {
+			errChan <- err
+			return
+		}
+		respChan <- res
+	}()
+
+	for i := 1; i <= 3; i++ {
+		req := &generated.UserProfile{
+			UserID:   int64(i),
+			Username: fmt.Sprintf("stream-user-%d", i),
+		}
+		payload, _ := req.Marshal()
+		frame := make([]byte, 5+len(payload))
+		frame[0] = 0
+		binary.BigEndian.PutUint32(frame[1:5], uint32(len(payload)))
+		copy(frame[5:], payload)
+
+		_, _ = pw.Write(frame)
+		time.Sleep(50 * time.Millisecond)
+	}
+	_ = pw.Close()
+
+	select {
+	case err := <-errChan:
+		t.Fatalf("request failed: %v", err)
+	case res := <-respChan:
+		defer res.Body.Close()
+		if res.StatusCode != http.StatusOK {
+			t.Fatalf("unexpected status code: %d", res.StatusCode)
+		}
+
+		for i := 1; i <= 3; i++ {
+			header := make([]byte, 5)
+			_, err := io.ReadFull(res.Body, header)
+			if err != nil {
+				t.Fatalf("failed to read response header at %d: %v", i, err)
+			}
+			length := binary.BigEndian.Uint32(header[1:5])
+			payload := make([]byte, length)
+			_, err = io.ReadFull(res.Body, payload)
+			if err != nil {
+				t.Fatalf("failed to read response payload at %d: %v", i, err)
+			}
+
+			var resp generated.UserProfile
+			_ = resp.Unmarshal(payload)
+
+			if resp.UserID != int64(i) {
+				t.Errorf("expected UserID %d, got %d", i, resp.UserID)
+			}
+			expectedUsername := fmt.Sprintf("stream-user-%d-echoed", i)
+			if resp.Username != expectedUsername {
+				t.Errorf("expected username %s, got %s", expectedUsername, resp.Username)
+			}
+		}
+	}
+}
+
+
 
