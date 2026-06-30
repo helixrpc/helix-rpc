@@ -20,6 +20,11 @@ import (
 	"golang.org/x/net/http2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+
+	kitexserver "github.com/cloudwego/kitex/server"
+	kitexclient "github.com/cloudwego/kitex/client"
+	"github.com/helix-rpc/helix/integration-tests/go-go/kitex_gen/helix/example"
+	"github.com/helix-rpc/helix/integration-tests/go-go/kitex_gen/helix/example/userprofileservice"
 )
 
 var (
@@ -29,8 +34,10 @@ var (
 	nativeThriftAddr  string
 	nativeHttpAddr    string
 	helixAddr         string
+	kitexAddr         string
 
 	grpcConn *grpc.ClientConn
+	kitexClient userprofileservice.Client
 
 	httpClient      *http.Client
 	helixGrpcClient *http.Client
@@ -113,11 +120,20 @@ func initBenchServers() {
 		_ = helixSrv.Start()
 	}()
 
+	// 5. Start Kitex Server (Go Thrift)
+	ln5, _ := net.Listen("tcp", "127.0.0.1:0")
+	kitexAddr = ln5.Addr().String()
+	go func() {
+		svr := userprofileservice.NewServer(new(KitexUserProfileServiceImpl), kitexserver.WithListener(ln5))
+		_ = svr.Run()
+	}()
+
 	// Wait for servers to spin up
 	time.Sleep(300 * time.Millisecond)
 
-	// Pre-dial gRPC connection for native gRPC client
+	// Pre-dial client connections
 	grpcConn, _ = grpc.Dial(nativeGrpcAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	kitexClient, _ = userprofileservice.NewClient("user-service", kitexclient.WithHostPorts(kitexAddr))
 }
 
 // Manual gRPC server registration helpers
@@ -364,5 +380,34 @@ func BenchmarkHelixThriftCompact(b *testing.B) {
 		resp := &generated.UserProfile{}
 		_ = resp.Read(context.Background(), iprot)
 		_ = iprot.ReadMessageEnd(context.Background())
+	}
+}
+
+type KitexUserProfileServiceImpl struct{}
+
+func (s *KitexUserProfileServiceImpl) GetUserProfile(ctx context.Context, req *example.UserProfile) (resp *example.UserProfile, err error) {
+	return &example.UserProfile{
+		UserId:   req.UserId,
+		Username: req.Username + "-response",
+		Email:    req.Email + "-verified",
+	}, nil
+}
+
+func BenchmarkKitexThrift(b *testing.B) {
+	initBenchOnce.Do(initBenchServers)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		req := &example.UserProfile{
+			UserId:   123,
+			Username: "bench",
+			Email:    "bench@kitex.com",
+		}
+		resp, err := kitexClient.GetUserProfile(context.Background(), req)
+		if err != nil {
+			b.Fatalf("kitex call failed: %v", err)
+		}
+		if resp.UserId != 123 {
+			b.Fatalf("invalid response userId: %d", resp.UserId)
+		}
 	}
 }
