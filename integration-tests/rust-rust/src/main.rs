@@ -23,6 +23,33 @@ impl UserProfileService for ServiceImpl {
     }
 }
 
+#[async_trait::async_trait]
+impl helix_rt::HttpServiceHandler for ServiceImpl {
+    async fn handle_request(&self, path: &str, body: Vec<u8>, is_json: bool) -> Result<(Vec<u8>, String), String> {
+        if path == "/helix_example.UserProfileService/GetUserProfile" {
+            if is_json {
+                let req: UserProfile = serde_json::from_slice(&body)
+                    .map_err(|e| format!("invalid json: {}", e))?;
+                let resp = self.get_user_profile(req).await
+                    .map_err(|e| format!("execution error: {}", e))?;
+                let resp_bytes = serde_json::to_vec(&resp)
+                    .map_err(|e| format!("serialization error: {}", e))?;
+                return Ok((resp_bytes, "application/json".to_string()));
+            } else {
+                let req = <UserProfile as prost::Message>::decode(&body[..])
+                    .map_err(|e| format!("invalid protobuf: {}", e))?;
+                let resp = self.get_user_profile(req).await
+                    .map_err(|e| format!("execution error: {}", e))?;
+                let mut resp_bytes = Vec::new();
+                <UserProfile as prost::Message>::encode(&resp, &mut resp_bytes)
+                    .map_err(|e| format!("serialization error: {}", e))?;
+                return Ok((resp_bytes, "application/grpc".to_string()));
+            }
+        }
+        Err(format!("unknown path: {}", path))
+    }
+}
+
 #[tokio::main]
 async fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -76,26 +103,35 @@ async fn handle_connection(stream: TcpStream) {
 
     println!("Detected protocol: {:?}", protocol);
 
-    // Split stream into read and write halves
-    let std_stream = stream.into_std().unwrap();
-    std_stream.set_nonblocking(false).unwrap(); // Configure for blocking operation inside thrift crate
-    let read_conn = std_stream.try_clone().unwrap();
-    let write_conn = std_stream;
-
+    // Only convert stream to blocking std::net::TcpStream for Thrift
     match protocol {
-        Protocol::ThriftCompact => {
-            let reader = TFramedReadTransport::new(read_conn);
-            let writer = TFramedWriteTransport::new(write_conn);
-            let mut iprot = TCompactInputProtocol::new(reader);
-            let mut oprot = TCompactOutputProtocol::new(writer);
-            let _ = process_thrift_request(&mut iprot, &mut oprot).await;
+        Protocol::ThriftCompact | Protocol::ThriftBinary => {
+            let std_stream = stream.into_std().unwrap();
+            std_stream.set_nonblocking(false).unwrap();
+            let read_conn = std_stream.try_clone().unwrap();
+            let write_conn = std_stream;
+
+            if protocol == Protocol::ThriftCompact {
+                let reader = TFramedReadTransport::new(read_conn);
+                let writer = TFramedWriteTransport::new(write_conn);
+                let mut iprot = TCompactInputProtocol::new(reader);
+                let mut oprot = TCompactOutputProtocol::new(writer);
+                let _ = process_thrift_request(&mut iprot, &mut oprot).await;
+            } else {
+                let reader = TFramedReadTransport::new(read_conn);
+                let writer = TFramedWriteTransport::new(write_conn);
+                let mut iprot = TBinaryInputProtocol::new(reader, true);
+                let mut oprot = TBinaryOutputProtocol::new(writer, true);
+                let _ = process_thrift_request(&mut iprot, &mut oprot).await;
+            }
         }
-        Protocol::ThriftBinary => {
-            let reader = TFramedReadTransport::new(read_conn);
-            let writer = TFramedWriteTransport::new(write_conn);
-            let mut iprot = TBinaryInputProtocol::new(reader, true);
-            let mut oprot = TBinaryOutputProtocol::new(writer, true);
-            let _ = process_thrift_request(&mut iprot, &mut oprot).await;
+        Protocol::Grpc => {
+            let handler = std::sync::Arc::new(ServiceImpl);
+            helix_rt::handle_http_connection(stream, handler, true).await;
+        }
+        Protocol::Http => {
+            let handler = std::sync::Arc::new(ServiceImpl);
+            helix_rt::handle_http_connection(stream, handler, false).await;
         }
         _ => {
             println!("Skipping unsupported protocol");

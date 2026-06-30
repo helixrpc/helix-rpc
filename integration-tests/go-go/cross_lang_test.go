@@ -2,7 +2,11 @@ package go_go
 
 import (
 	"bufio"
+	"bytes"
+	"fmt"
+	"io"
 	"net"
+	"net/http"
 	"os/exec"
 	"regexp"
 	"testing"
@@ -93,6 +97,52 @@ func TestCrossLangGoClientRustServer(t *testing.T) {
 		}
 		if resp.UserID != 888 || resp.Username != "go-caller-bin-response" || resp.Email != "caller-bin@go.com-verified" {
 			t.Errorf("unexpected response from Rust server: %+v", resp)
+		}
+	})
+
+	t.Run("gRPC", func(t *testing.T) {
+		req := &generated.UserProfile{
+			UserID:   999,
+			Username: "go-caller-grpc",
+			Email:    "caller-grpc@go.com",
+		}
+		resp, err := callGRPC(addr, req)
+		if err != nil {
+			t.Fatalf("gRPC cross-lang call failed: %v", err)
+		}
+		if resp.UserID != 999 || resp.Username != "go-caller-grpc-response" || resp.Email != "caller-grpc@go.com-verified" {
+			t.Errorf("unexpected response from Rust server: %+v", resp)
+		}
+	})
+
+	t.Run("HTTP-JSON", func(t *testing.T) {
+		reqJSON := []byte(`{"user_id": 555, "username": "go-caller-json", "email": "caller-json@go.com"}`)
+		url := fmt.Sprintf("http://%s/helix_example.UserProfileService/GetUserProfile", addr)
+		
+		httpReq, err := http.NewRequest("POST", url, bytes.NewReader(reqJSON))
+		if err != nil {
+			t.Fatalf("failed to create http request: %v", err)
+		}
+		httpReq.Header.Set("Content-Type", "application/json")
+
+		resp, err := http.DefaultClient.Do(httpReq)
+		if err != nil {
+			t.Fatalf("HTTP JSON cross-lang request failed: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("unexpected status: %d", resp.StatusCode)
+		}
+
+		respBytes, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatalf("failed to read response body: %v", err)
+		}
+
+		expectedJSON := `{"user_id":555,"username":"go-caller-json-response","email":"caller-json@go.com-verified"}`
+		if string(respBytes) != expectedJSON {
+			t.Errorf("unexpected response JSON: got %s, expected %s", string(respBytes), expectedJSON)
 		}
 	})
 }

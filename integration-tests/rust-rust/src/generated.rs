@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use thrift::protocol::{TInputProtocol, TOutputProtocol, TSerializable, TFieldIdentifier, TStructIdentifier, TType};
 use thrift::Error as ThriftError;
 
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message, ::serde::Serialize, ::serde::Deserialize)]
 pub struct UserProfile {
     #[prost(int64, tag = "1")]
     pub user_id: i64,
