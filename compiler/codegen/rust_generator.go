@@ -17,7 +17,7 @@ func GenerateRust(parsed *ast.AST) (string, error) {
 
 	// Generate Structs
 	for _, str := range parsed.Structs {
-		sb.WriteString("#[derive(Clone, PartialEq, ::prost::Message)]\n")
+		sb.WriteString("#[derive(Clone, PartialEq, ::prost::Message, ::serde::Serialize, ::serde::Deserialize)]\n")
 		sb.WriteString(fmt.Sprintf("pub struct %s {\n", str.Name))
 		for _, f := range str.Fields {
 			rustType := mapRustType(f.Type)
