@@ -148,8 +148,12 @@ where
     let mut builder = Http::new();
     if is_http2 {
         builder.http2_only(true);
+        builder.http2_initial_connection_window_size(Some(1024 * 1024 * 2));
+        builder.http2_initial_stream_window_size(Some(1024 * 1024));
+        builder.http2_max_concurrent_streams(Some(250));
     } else {
         builder.http1_only(true);
+        builder.http1_keep_alive(true);
     }
     let _ = builder.serve_connection(stream, service).await;
 }

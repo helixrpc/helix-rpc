@@ -275,7 +275,11 @@ func (s *Server) Start() error {
 
 	s.channelListener = NewChannelListener(ln.Addr())
 
-	h2s := &http2.Server{}
+	h2s := &http2.Server{
+		MaxConcurrentStreams:         250,
+		MaxUploadBufferPerConnection: 1024 * 1024 * 2, // 2MB
+		MaxUploadBufferPerStream:     1024 * 1024,     // 1MB
+	}
 	handler := h2c.NewHandler(s.grpcHandler, h2s)
 	s.httpServer = &http.Server{
 		Handler: handler,
