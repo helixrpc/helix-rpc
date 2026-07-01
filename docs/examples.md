@@ -17,3 +17,8 @@ It uses the browser's native `fetch` API to connect to the Rust AI Gateway's SSE
 **Path:** `examples/go-dynamic-batcher`
 
 A high-performance Go API Gateway that demonstrates the power of the `BatchScheduler`. If you fire dozens of concurrent HTTP requests at this server, you will see in the logs that it elegantly buffers them and processes them as a single array, returning the perfectly scattered responses back to the original callers.
+
+## 4. Python Dynamic Batcher
+**Path:** `examples/python-dynamic-batcher`
+
+A pure-Python equivalent to the Go Dynamic Batcher, using the `helix_rt` Python SDK. It leverages `asyncio` to natively bundle concurrent `await` calls into batch arrays. It also demonstrates native SSE streaming and strict execution deadlines using the built-in middlewares.

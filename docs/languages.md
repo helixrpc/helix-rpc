@@ -22,5 +22,13 @@ Rust is the king of memory safety and zero-cost abstractions. We use Rust where 
 
 *Use Rust when you want absolute minimum latency by running the AI model in the exact same memory space as your API Gateway.*
 
-## Python
-Python is the king of AI modeling (PyTorch, Transformers, vLLM). Helix RPC does not attempt to replace Python. Instead, it embeds Python directly into the Rust runtime, giving you the best of both worlds: Rust's networking speed and Python's AI ecosystem.
+## Python (`runtime-python`)
+Python is the king of AI modeling (PyTorch, Transformers, vLLM). While Helix RPC natively embeds Python into the Rust runtime via PyO3, Python is also fully supported as a **first-class language**.
+
+**Supported Features:**
+*   Code Generation (`helix-gen -lang python` generates `@dataclass` and Service ABCs)
+*   Native Dynamic Batching (via `asyncio` BatchScheduler)
+*   Native Server-Sent Events (SSE) Streaming
+*   Middlewares, Deadline Propagation (`grpc-timeout`), and Gzip Compression
+
+*Use Python when you want to write your entire server using pure Python (`aiohttp` or FastAPI) but still need the high-performance AI Dynamic Batching algorithms that Helix RPC provides.*

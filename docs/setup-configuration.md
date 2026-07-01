@@ -17,6 +17,12 @@ cargo add helix-rt
 ```
 *Note: Because the Rust runtime embeds CPython natively, you must ensure that your host system has `python3-dev` or the equivalent Python development headers installed so that `pyo3` can compile.*
 
+### Python Runtime
+To install the pure-Python runtime, run:
+```bash
+pip install helix-rt
+```
+
 ## 2. Server Configuration
 
 ### Port Binding
@@ -34,16 +40,29 @@ server := runtime.NewServer(":8080")
 let mut server = HelixServer::new("127.0.0.1:8081", handler, routes);
 ```
 
-### Dynamic Batching Configuration (Go)
-The `@batch` interceptor requires careful tuning based on your specific GPU hardware and AI model constraints.
+### Dynamic Batching Configuration
+The `@batch` scheduling algorithm requires careful tuning based on your specific GPU hardware and AI model constraints.
 
+**Go:**
 ```go
 dispatcher := runtime.NewBatchScheduler(
-    100, // Maximum Batch Size (e.g., maximum concurrent requests the GPU can handle in one array)
-    50 * time.Millisecond, // Batch Window (How long to wait for more requests before dispatching)
+    100, // Maximum Batch Size
+    50 * time.Millisecond, // Batch Window
     myBatchHandler,
 )
 ```
+
+**Python:**
+```python
+from helix_rt.batching import BatchScheduler
+
+scheduler = BatchScheduler(
+    100, # Maximum Batch Size
+    50,  # Batch Window in milliseconds
+    my_batch_handler,
+)
+```
+
 *   **Max Batch Size:** If you set this too high, you risk Out-Of-Memory (OOM) errors on the GPU. If you set it too low, you leave GPU compute capacity on the table.
 *   **Batch Window:** If you set this too high, single requests suffer high latency. If you set it too low, you lose the benefits of batching under light load.
 
