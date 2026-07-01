@@ -3,6 +3,7 @@ package runtime
 import (
 	"bufio"
 	"bytes"
+	"crypto/tls"
 	"net"
 	"sync"
 	"time"
@@ -11,6 +12,7 @@ import (
 type SniffingListener struct {
 	net.Listener
 	SniffTimeout  time.Duration
+	TLSConfig     *tls.Config
 	gRPCHandler   func(net.Conn)
 	thriftHandler func(net.Conn, bool) // connection, isCompact
 }
@@ -52,6 +54,18 @@ func (l *SniffingListener) sniffAndRoute(conn net.Conn) {
 
 	if err != nil {
 		conn.Close()
+		return
+	}
+
+	// Detect TLS Handshake (first byte is 0x16)
+	if len(magic) >= 1 && magic[0] == 0x16 && l.TLSConfig != nil {
+		bufferedRaw := &BufferedConn{Conn: conn, r: br}
+		tlsConn := tls.Server(bufferedRaw, l.TLSConfig)
+		if err := tlsConn.Handshake(); err != nil {
+			conn.Close()
+			return
+		}
+		l.sniffAndRoute(tlsConn)
 		return
 	}
 

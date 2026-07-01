@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/net/http2"
@@ -182,7 +184,9 @@ func (h *GRPCHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	for k, v := range r.Header {
 		md[strings.ToLower(k)] = v
 	}
-	ctx := NewContext(r.Context(), md)
+	baseCtx := NewContext(r.Context(), md)
+	ctx, cancel := contextWithDeadlineFromHeaders(baseCtx, r.Header)
+	defer cancel()
 
 	type ProtoMarshaler interface {
 		Marshal() ([]byte, error)
@@ -192,6 +196,7 @@ func (h *GRPCHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	contentType := r.Header.Get("Content-Type")
+	grpcEncoding := r.Header.Get("grpc-encoding")
 
 	// If HTTP/1.1 REST is caller, default to application/json if Content-Type is missing
 	if contentType == "" {
@@ -279,10 +284,22 @@ func (h *GRPCHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if _, err := io.ReadFull(r.Body, frameHeader); err != nil {
 			return err
 		}
+		compressedFlag := frameHeader[0]
 		length := binary.BigEndian.Uint32(frameHeader[1:5])
 		payload := make([]byte, length)
 		if _, err := io.ReadFull(r.Body, payload); err != nil {
 			return err
+		}
+		// Decompress if compressed flag is set
+		if compressedFlag == 1 && grpcEncoding != "" {
+			comp := getCompressor(grpcEncoding)
+			if comp != nil {
+				decompressed, err := comp.Decompress(payload)
+				if err != nil {
+					return fmt.Errorf("failed to decompress payload: %w", err)
+				}
+				payload = decompressed
+			}
 		}
 		unmarshaler, ok := v.(ProtoUnmarshaler)
 		if !ok {
@@ -330,16 +347,33 @@ func (h *GRPCHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respFrame := make([]byte, 5+len(payload))
-	respFrame[0] = 0 // uncompressed
-	binary.BigEndian.PutUint32(respFrame[1:5], uint32(len(payload)))
+	// Compress response if client sent grpc-encoding
+	respPayload := payload
+	compressFlag := byte(0)
+	if grpcEncoding != "" {
+		comp := getCompressor(grpcEncoding)
+		if comp != nil {
+			compressed, cerr := comp.Compress(payload)
+			if cerr == nil {
+				respPayload = compressed
+				compressFlag = 1
+			}
+		}
+	}
+
+	respFrame := make([]byte, 5+len(respPayload))
+	respFrame[0] = compressFlag
+	binary.BigEndian.PutUint32(respFrame[1:5], uint32(len(respPayload)))
 
 	w.Header().Set("Content-Type", "application/grpc")
+	if compressFlag == 1 {
+		w.Header().Set("grpc-encoding", grpcEncoding)
+	}
 	w.Header().Set("grpc-status", "0") // OK
 	w.WriteHeader(http.StatusOK)
 
 	w.Write(respFrame[:5])
-	w.Write(payload)
+	w.Write(respPayload)
 }
 
 func matchREST(method, path string, routes []RESTRoute) (*RESTRoute, map[string]string) {
@@ -416,16 +450,26 @@ func (l *ChannelListener) Addr() net.Addr {
 type Server struct {
 	Addr             string
 	SniffTimeout     time.Duration
+	Health           *HealthChecker
+	TLSConfig        *tls.Config
 	grpcHandler      *GRPCHandler
 	channelListener  *ChannelListener
 	httpServer       *http.Server
 	thriftProcessors []ThriftProcessor
+	activeConns      sync.WaitGroup
+	snifferListener  net.Listener
+	mu               sync.Mutex
+	inShutdown       bool
 }
 
 func NewServer(addr string) *Server {
+	hc := NewHealthChecker()
+	handler := NewGRPCHandler()
+	RegisterHealthMethods(handler, hc)
 	return &Server{
 		Addr:        addr,
-		grpcHandler: NewGRPCHandler(),
+		Health:      hc,
+		grpcHandler: handler,
 	}
 }
 
@@ -447,6 +491,10 @@ func (s *Server) Start() error {
 		return err
 	}
 
+	s.mu.Lock()
+	s.snifferListener = ln
+	s.mu.Unlock()
+
 	s.channelListener = NewChannelListener(ln.Addr())
 
 	h2s := &http2.Server{
@@ -464,10 +512,23 @@ func (s *Server) Start() error {
 	sniffer := NewSniffingListener(ln, func(conn net.Conn) {
 		s.channelListener.Conns <- conn
 	}, func(conn net.Conn, isCompact bool) {
+		s.mu.Lock()
+		if s.inShutdown {
+			s.mu.Unlock()
+			conn.Close()
+			return
+		}
+		s.mu.Unlock()
+
 		for _, tp := range s.thriftProcessors {
-			go HandleThriftConnection(conn, tp, isCompact)
+			s.activeConns.Add(1)
+			go func(tpVal ThriftProcessor) {
+				defer s.activeConns.Done()
+				HandleThriftConnection(conn, tpVal, isCompact)
+			}(tp)
 		}
 	})
+	sniffer.TLSConfig = s.TLSConfig
 
 	if s.SniffTimeout > 0 {
 		sniffer.SniffTimeout = s.SniffTimeout
@@ -479,4 +540,43 @@ func (s *Server) Start() error {
 
 func (s *Server) RegisterThriftProcessor(tp ThriftProcessor) {
 	s.thriftProcessors = append(s.thriftProcessors, tp)
+}
+
+func (s *Server) Shutdown(ctx context.Context) error {
+	s.mu.Lock()
+	if s.inShutdown {
+		s.mu.Unlock()
+		return nil
+	}
+	s.inShutdown = true
+	s.mu.Unlock()
+
+	var err error
+	if s.snifferListener != nil {
+		err = s.snifferListener.Close()
+	}
+
+	if s.channelListener != nil {
+		s.channelListener.Close()
+	}
+
+	if s.httpServer != nil {
+		if httpErr := s.httpServer.Shutdown(ctx); httpErr != nil {
+			err = httpErr
+		}
+	}
+
+	c := make(chan struct{})
+	go func() {
+		s.activeConns.Wait()
+		close(c)
+	}()
+
+	select {
+	case <-c:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+
+	return err
 }
