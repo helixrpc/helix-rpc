@@ -41,6 +41,7 @@ markdown_extensions:
 
 nav:
   - Home: index.md
+  - Setup & Configuration: setup-configuration.md
   - Architecture: architecture.md
   - Features: features.md
   - Language Support: languages.md
