@@ -18,3 +18,4 @@ rustls = "0.21"
 tokio-rustls = "0.24"
 rustls-pemfile = "1.0"
 tokio-util = { version = "0.7", features = ["rt"] }
+pyo3 = { version = "0.23", features = ["auto-initialize", "abi3-py310"] }
