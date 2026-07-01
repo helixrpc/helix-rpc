@@ -23,5 +23,6 @@ pub use shm_transport::ShmConn;
 pub use deadline::{parse_grpc_timeout, extract_deadline};
 pub use health::{HealthChecker, HealthStatus};
 pub use compression::{Compressor, GzipCompressor, get_compressor};
+pub mod telemetry; pub use telemetry::attach_span_context;
 pub mod pyo3_runner;
 pub use pyo3_runner::PyModelHandler;

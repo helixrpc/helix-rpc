@@ -186,6 +186,10 @@ where
             let path = req.uri().path().to_string();
             let req_method = req.method().as_str().to_uppercase();
 
+            let span = tracing::info_span!("HTTP Request", method = %req_method, path = %path);
+            crate::telemetry::attach_span_context(req.headers(), &span, crate::telemetry::SamplingStrategy::Probabilistic(0.01));
+            let _enter = span.enter();
+
             let content_type = req.headers()
                 .get("content-type")
                 .and_then(|v| v.to_str().ok())

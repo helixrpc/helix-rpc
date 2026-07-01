@@ -37,6 +37,8 @@ async def gzip_middleware(request: web.Request, handler: Callable[[web.Request],
             response.headers["Content-Length"] = str(len(compressed))
     return response
 
+from .telemetry import telemetry_middleware
+
 class HelixServer:
     """
     A lightweight, high-performance HTTP server wrapper leveraging aiohttp.
@@ -46,7 +48,7 @@ class HelixServer:
         self.host = host
         self.port = port
         # Built-in middlewares for Production Parity
-        self.app = web.Application(middlewares=[deadline_middleware, gzip_middleware])
+        self.app = web.Application(middlewares=[telemetry_middleware, deadline_middleware, gzip_middleware])
 
     def add_middleware(self, mw):
         """Register a custom aiohttp middleware"""
