@@ -33,5 +33,15 @@ if __name__ == "__main__":
     async def predict_handler(body: dict):
         return await scheduler.invoke(body)
 
+    # A simple streaming handler simulating token-by-token generation
+    async def stream_handler(body: dict):
+        prompt = body.get("prompt", "")
+        async def token_generator():
+            for i in range(1, 6):
+                await asyncio.sleep(0.1) # Simulate generation
+                yield {"chunk": f"Token {i} for {prompt}"}
+        return token_generator()
+
     server.register_route("POST", "/v1/models/predict", predict_handler)
+    server.register_route("POST", "/v1/models/stream", stream_handler)
     server.start()
