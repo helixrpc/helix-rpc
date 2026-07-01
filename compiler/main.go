@@ -15,12 +15,12 @@ import (
 
 func main() {
 	idlPath := flag.String("idl", "", "Path to the IDL file (.proto or .thrift)")
-	lang := flag.String("lang", "go", "Target language (go, rust)")
+	lang := flag.String("lang", "go", "Target language (go, rust, python)")
 	outPath := flag.String("out", "", "Output filepath for generated code")
 	flag.Parse()
 
 	if *idlPath == "" || *outPath == "" {
-		fmt.Println("Usage: helix -idl <path> -lang <go|rust> -out <output-file>")
+		fmt.Println("Usage: helix -idl <path> -lang <go|rust|python> -out <output-file>")
 		flag.PrintDefaults()
 		os.Exit(1)
 	}
@@ -52,6 +52,8 @@ func main() {
 		generated, err = codegen.GenerateGo(parsed)
 	case "rust":
 		generated, err = codegen.GenerateRust(parsed)
+	case "python":
+		generated, err = codegen.GeneratePython(parsed)
 	default:
 		log.Fatalf("unsupported language target: %s", *lang)
 	}
