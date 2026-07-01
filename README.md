@@ -140,6 +140,55 @@ impl HttpSseHandler for StreamSseHandler {
 // server.set_sse_handler(Arc::new(StreamSseHandler { model: py_handler }));
 ```
 
+### 4. Production Features (Go)
+
+Helix RPC ships with built-in primitives for building production-grade services.
+
+#### 4a. Health Checking (gRPC Health v1)
+Helix automatically mounts the standard gRPC health checking protocol (`/grpc.health.v1.Health/Check`). You can programmatically control the serving status of your services.
+```go
+server := runtime.NewServer(":8080")
+
+// Mark a service as Serving
+server.Health.SetServingStatus("ai.generation.Service", runtime.HealthServing)
+
+// Later, mark as Not Serving if the GPU goes offline
+server.Health.SetServingStatus("ai.generation.Service", runtime.HealthNotServing)
+```
+
+#### 4b. mTLS (Mutual TLS)
+You can easily secure your Helix Gateway using standard Go TLS Configurations.
+```go
+import "crypto/tls"
+
+server := runtime.NewServer(":8443")
+
+// Load your certificates and configure mTLS
+cert, _ := tls.LoadX509KeyPair("server.crt", "server.key")
+server.TLSConfig = &tls.Config{
+	Certificates: []tls.Certificate{cert},
+	ClientAuth:   tls.RequireAndVerifyClientCert,
+}
+
+server.Start()
+```
+
+#### 4c. Middleware Injection (Interceptors)
+Helix supports gRPC-style Unary Server Interceptors for implementing logging, tracing, auth, and deadline propagation.
+```go
+server := runtime.NewServer(":8080")
+
+server.AddInterceptor(func(ctx context.Context, req interface{}, info *runtime.UnaryServerInfo, handler runtime.UnaryHandler) (interface{}, error) {
+	fmt.Printf("Incoming request to: %s\n", info.FullMethod)
+	start := time.Now()
+	
+	resp, err := handler(ctx, req)
+	
+	fmt.Printf("Completed in %v\n", time.Since(start))
+	return resp, err
+})
+```
+
 ## 🎮 Demo Applications
 
 We've provided 3 fully functional demo applications out of the box in the `examples/` directory! 
