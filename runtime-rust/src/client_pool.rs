@@ -45,6 +45,12 @@ pub struct RoundRobinBalancer {
     counter: AtomicU64,
 }
 
+impl Default for RoundRobinBalancer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RoundRobinBalancer {
     pub fn new() -> Self {
         RoundRobinBalancer {

@@ -403,32 +403,30 @@ where
                 request_payload = request_payload[5..5+length].to_vec();
 
                 // Decompress if compressed flag is 1
-                if compressed_flag == 1 {
-                    if !grpc_encoding.is_empty() {
-                        if let Some(compressor) = crate::compression::get_compressor(&grpc_encoding) {
-                            match compressor.decompress(&request_payload) {
-                                Ok(decompressed) => request_payload = decompressed,
-                                Err(e) => {
-                                    let res = Response::builder()
-                                        .status(StatusCode::OK)
-                                        .header("content-type", "application/grpc")
-                                        .header("grpc-status", "13")
-                                        .header("grpc-message", format!("decompression error: {}", e))
-                                        .body(Body::empty())
-                                        .unwrap();
-                                    return Ok(res);
-                                }
+                if compressed_flag == 1 && !grpc_encoding.is_empty() {
+                    if let Some(compressor) = crate::compression::get_compressor(&grpc_encoding) {
+                        match compressor.decompress(&request_payload) {
+                            Ok(decompressed) => request_payload = decompressed,
+                            Err(e) => {
+                                let res = Response::builder()
+                                    .status(StatusCode::OK)
+                                    .header("content-type", "application/grpc")
+                                    .header("grpc-status", "13")
+                                    .header("grpc-message", format!("decompression error: {}", e))
+                                    .body(Body::empty())
+                                    .unwrap();
+                                return Ok(res);
                             }
-                        } else {
-                            let res = Response::builder()
-                                .status(StatusCode::OK)
-                                .header("content-type", "application/grpc")
-                                .header("grpc-status", "12") // UNIMPLEMENTED
-                                .header("grpc-message", format!("unsupported grpc-encoding: {}", grpc_encoding))
-                                .body(Body::empty())
-                                .unwrap();
-                            return Ok(res);
                         }
+                    } else {
+                        let res = Response::builder()
+                            .status(StatusCode::OK)
+                            .header("content-type", "application/grpc")
+                            .header("grpc-status", "12") // UNIMPLEMENTED
+                            .header("grpc-message", format!("unsupported grpc-encoding: {}", grpc_encoding))
+                            .body(Body::empty())
+                            .unwrap();
+                        return Ok(res);
                     }
                 }
             }
@@ -454,13 +452,10 @@ where
                         let mut compress_flag = 0;
                         if !grpc_encoding.is_empty() {
                             if let Some(compressor) = crate::compression::get_compressor(&grpc_encoding) {
-                                match compressor.compress(&final_payload) {
-                                    Ok(compressed) => {
-                                        final_payload = compressed;
-                                        compress_flag = 1;
-                                    }
-                                    Err(_) => {} // fallback to uncompressed
-                                }
+                            if let Ok(compressed) = compressor.compress(&final_payload) {
+                                final_payload = compressed;
+                                compress_flag = 1;
+                            }
                             }
                         }
 
@@ -587,6 +582,7 @@ pub struct HelixServer<H> {
     streaming_handler: Option<Arc<dyn HttpStreamingHandler>>,
     tls_acceptor: Option<tokio_rustls::TlsAcceptor>,
     shutdown_tx: broadcast::Sender<()>,
+    #[allow(clippy::type_complexity)]
     protocol_fallback: Option<Arc<Box<dyn Fn(tokio::net::TcpStream, crate::sniffer::Protocol) + Send + Sync>>>,
 }
 

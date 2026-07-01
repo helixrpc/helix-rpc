@@ -17,6 +17,12 @@ pub struct HealthChecker {
     statuses: Arc<RwLock<HashMap<String, HealthStatus>>>,
 }
 
+impl Default for HealthChecker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl HealthChecker {
     /// Create a new `HealthChecker`.  The empty-string service (representing
     /// the overall server) defaults to `Serving`.
@@ -154,7 +160,7 @@ fn decode_proto_string(buf: &[u8]) -> String {
 fn encode_proto_varint_field(field: u32, value: i32) -> Vec<u8> {
     let mut out = Vec::new();
     // tag = (field << 3) | 0  (wire-type 0 = varint)
-    encode_varint_to(&mut out, ((field as u64) << 3) | 0);
+    encode_varint_to(&mut out, (field as u64) << 3);
     encode_varint_to(&mut out, value as u64);
     out
 }

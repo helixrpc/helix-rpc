@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  go-tests:
+    name: Go Unit & Integration Tests (Data Race)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.20'
+
+      - name: Go Runtime Tests (with -race)
+        working-directory: ./runtime-go
+        run: go test -v -race ./...
+
+  rust-tests:
+    name: Rust Clippy & Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Rust (Stable)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Rust Runtime Clippy Check
+        working-directory: ./runtime-rust
+        run: cargo clippy -- -D warnings
+
+      - name: Rust Runtime Tests
+        working-directory: ./runtime-rust
+        run: cargo test
+
+  cross-language-integration:
+    name: Cross-Language Integration (ASan)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.20'
+
+      - name: Set up Rust (Nightly for ASan)
+        uses: dtolnay/rust-toolchain@nightly
+
+      - name: Set up Protoc
+        uses: arduino/setup-protoc@v2
+        with:
+          version: '23.4'
+
+      - name: Install Rust ASan Dependencies
+        run: sudo apt-get update && sudo apt-get install -y llvm-dev libclang-dev
+
+      - name: Run Test Harness (Go Race + Rust ASan)
+        env:
+          RUSTFLAGS: "-Zsanitizer=address"
+          RUSTDOCFLAGS: "-Zsanitizer=address"
+        run: |
+          chmod +x ./test.sh
+          ./test.sh

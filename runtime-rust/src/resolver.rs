@@ -10,6 +10,12 @@ pub struct StaticResolver {
     targets: Arc<Mutex<HashMap<String, Vec<String>>>>,
 }
 
+impl Default for StaticResolver {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl StaticResolver {
     pub fn new() -> Self {
         StaticResolver {

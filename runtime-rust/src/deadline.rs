@@ -34,7 +34,7 @@ pub fn extract_deadline(headers: &hyper::HeaderMap) -> Option<Duration> {
     headers
         .get("grpc-timeout")
         .and_then(|v| v.to_str().ok())
-        .and_then(|s| parse_grpc_timeout(s))
+        .and_then(parse_grpc_timeout)
 }
 
 #[cfg(test)]

@@ -1,6 +1,7 @@
 use std::fs::OpenOptions;
 use std::os::unix::io::AsRawFd;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 use tokio::net::TcpStream;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
@@ -77,7 +78,7 @@ impl ShmConn {
     }
 
     pub async fn write_payload(&mut self, payload: &[u8]) -> Result<(), std::io::Error> {
-        let _guard = self.write_mu.lock().unwrap();
+        let _guard = self.write_mu.lock().await;
 
         let length = payload.len();
         if length > self.size {
