@@ -9,3 +9,4 @@ pyo3 = { version = "0.23", features = ["auto-initialize", "abi3-py310"] }
 tokio = { version = "1.0", features = ["full"] }
 async-trait = "0.1"
 hyper = { version = "0.14", features = ["full"] }
+serde_json = "1.0.150"

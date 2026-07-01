@@ -2,10 +2,8 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
-	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -58,41 +56,41 @@ func main() {
 	fmt.Println("Initializing Helix RPC Go Dynamic Batching Server...")
 
 	// 1. Create the Batch Dispatcher
-	dispatcher := runtime.NewBatchDispatcher(50*time.Millisecond, 100, &MockBatchAIModel{})
-	dispatcher.Start()
-	defer dispatcher.Stop()
-
-	// 2. Initialize the Server
-	server := runtime.NewServer()
-
-	// 3. Register the Batching Interceptor (Handler)
-	server.RegisterUnary("/v1/models/predict", func(ctx context.Context, payload []byte) (interface{}, error) {
-		var req PredictRequest
-		if err := json.Unmarshal(payload, &req); err != nil {
-			return nil, err
-		}
-		
-		// Dispatch to the batcher. This blocks until the batch window closes and the batch executes!
-		resp, err := dispatcher.Dispatch(ctx, &req)
-		if err != nil {
-			return nil, err
-		}
-		
-		return resp, nil
-	}, runtime.RestOptions{
-		Method: "POST",
-		Path:   "/v1/models/predict",
+	mockModel := &MockBatchAIModel{}
+	dispatcher := runtime.NewBatchScheduler(100, 50*time.Millisecond, func(ctx context.Context, reqs []interface{}) ([]interface{}, error) {
+		return mockModel.PredictBatch(ctx, reqs)
 	})
 
-	// 4. Start the HTTP server
-	srv := &http.Server{
-		Addr:    ":8080",
-		Handler: server,
-	}
+	// 2. Initialize the Server
+	server := runtime.NewServer(":8082")
 
+	// 3. Register the Batching Interceptor (Handler)
+	server.RegisterMethod("/v1/models/predict", runtime.MethodInfo{
+		IsStreaming: false,
+		Decoder: func(dec func(interface{}) error) (interface{}, error) {
+			var req PredictRequest
+			if err := dec(&req); err != nil {
+				return nil, err
+			}
+			return req, nil
+		},
+		Handler: func(ctx context.Context, req interface{}) (interface{}, error) {
+			// Dispatch to the batcher. This blocks until the batch window closes and the batch executes!
+			resp, err := dispatcher.Invoke(ctx, req)
+			if err != nil {
+				return nil, err
+			}
+			return resp, nil
+		},
+	})
+	
+	// Expose as REST
+	server.RegisterRESTRoute("POST", "/v1/models/predict", "/v1/models/predict")
+
+	// 4. Start the HTTP server
 	go func() {
-		fmt.Println("🚀 Starting API Gateway on http://127.0.0.1:8080...")
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		fmt.Println("🚀 Starting API Gateway on http://127.0.0.1:8082...")
+		if err := server.Start(); err != nil {
 			log.Fatalf("Listen error: %v\n", err)
 		}
 	}()
@@ -103,10 +101,5 @@ func main() {
 	<-quit
 
 	fmt.Println("\nShutting down server...")
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err := srv.Shutdown(ctx); err != nil {
-		log.Fatalf("Server Shutdown Failed: %v", err)
-	}
 	fmt.Println("Server gracefully stopped")
 }
