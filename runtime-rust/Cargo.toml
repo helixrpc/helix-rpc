@@ -2,6 +2,13 @@
 name = "helix-rt"
 version = "0.1.0"
 edition = "2021"
+authors = ["Helix RPC Authors <authors@helixrpc.dev>"]
+description = "A high-performance AI API Gateway and Dynamic Batching framework."
+license = "MIT"
+repository = "https://github.com/helixrpc/helix-rpc"
+readme = "README.md"
+keywords = ["ai", "rpc", "grpc", "batching"]
+categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 tokio = { version = "1.0", features = ["full"] }

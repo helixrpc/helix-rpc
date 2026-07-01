@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "helix-rt"
+version = "0.1.0"
+authors = [
+  { name="Helix RPC Authors", email="authors@helixrpc.dev" },
+]
+description = "A high-performance AI API Gateway and Dynamic Batching framework."
+readme = "README.md"
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "aiohttp>=3.8.0",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/helixrpc/helix-rpc"
+"Bug Tracker" = "https://github.com/helixrpc/helix-rpc/issues"
