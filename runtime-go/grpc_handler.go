@@ -93,6 +93,40 @@ func (s *serverStream) Send(v interface{}) error {
 	return nil
 }
 
+type sseServerStream struct {
+	ctx     context.Context
+	w       http.ResponseWriter
+	payload []byte
+	read    bool
+}
+
+func (s *sseServerStream) Context() context.Context {
+	return s.ctx
+}
+
+func (s *sseServerStream) Recv(v interface{}) error {
+	if s.read {
+		return io.EOF
+	}
+	s.read = true
+	return json.Unmarshal(s.payload, v)
+}
+
+func (s *sseServerStream) Send(v interface{}) error {
+	respBytes, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	msg := fmt.Sprintf("data: %s\n\n", string(respBytes))
+	if _, err := s.w.Write([]byte(msg)); err != nil {
+		return err
+	}
+	if flusher, ok := s.w.(http.Flusher); ok {
+		flusher.Flush()
+	}
+	return nil
+}
+
 type MethodInfo struct {
 	Decoder       func(dec func(interface{}) error) (interface{}, error)
 	Handler       func(ctx context.Context, req interface{}) (interface{}, error)
@@ -203,7 +237,7 @@ func (h *GRPCHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		contentType = "application/json"
 	}
 
-	if strings.Contains(contentType, "application/json") {
+	if strings.Contains(contentType, "application/json") && !methodInfo.IsStreaming {
 		dec := func(v interface{}) error {
 			payload, err := io.ReadAll(r.Body)
 			if err != nil && err != io.EOF {
@@ -256,6 +290,39 @@ func (h *GRPCHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if methodInfo.IsStreaming {
+		isSSE := strings.Contains(r.Header.Get("Accept"), "text/event-stream") || strings.Contains(contentType, "application/json")
+		if isSSE {
+			payload, err := io.ReadAll(r.Body)
+			if err != nil && err != io.EOF {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			if len(payload) == 0 {
+				payload = []byte("{}")
+			}
+
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.Header().Set("Cache-Control", "no-cache")
+			w.Header().Set("Connection", "keep-alive")
+			w.WriteHeader(http.StatusOK)
+			if flusher, ok := w.(http.Flusher); ok {
+				flusher.Flush()
+			}
+
+			stream := &sseServerStream{
+				ctx:     ctx,
+				w:       w,
+				payload: payload,
+			}
+
+			if err := methodInfo.StreamHandler(stream); err != nil {
+				errBytes, _ := json.Marshal(map[string]string{"error": err.Error()})
+				fmt.Fprintf(w, "data: %s\n\n", string(errBytes))
+			}
+			fmt.Fprintf(w, "data: [DONE]\n\n")
+			return
+		}
+
 		w.Header().Set("Content-Type", "application/grpc")
 		w.WriteHeader(http.StatusOK)
 		if flusher, ok := w.(http.Flusher); ok {
