@@ -1,0 +1,49 @@
+site_name: Helix RPC
+site_description: The next-generation AI infrastructure framework for maximum efficiency.
+repo_url: https://github.com/helixrpc/helix-rpc
+repo_name: helixrpc/helix-rpc
+
+theme:
+  name: material
+  palette:
+    # Palette toggle for dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: black
+      accent: blue
+    # Palette toggle for light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: white
+      accent: blue
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - toc.integrate
+    - search.suggest
+    - search.highlight
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - admonition
+  - pymdownx.details
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Architecture: architecture.md
+  - Features: features.md
+  - Language Support: languages.md
+  - Tutorials: tutorials.md
+  - Examples: examples.md
+  - Developer Guide: developer-guide.md
