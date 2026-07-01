@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Helix RPC - AI Chat</title>
+    <meta name="description" content="Experience lightning-fast AI inference powered by Helix RPC">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="index.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h2>Helix RPC</h2>
+                <span class="badge">Zero-Copy</span>
+            </div>
+            <button class="new-chat-btn" id="newChatBtn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                New Chat
+            </button>
+            <div class="stats-panel">
+                <h3>Backend Stats</h3>
+                <div class="stat-row">
+                    <span>Protocol</span>
+                    <strong>SSE (Stream)</strong>
+                </div>
+                <div class="stat-row">
+                    <span>Inference</span>
+                    <strong>PyO3 Native</strong>
+                </div>
+                <div class="stat-row">
+                    <span>Serialization</span>
+                    <strong>Zero-Copy</strong>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Chat Area -->
+        <main class="chat-area">
+            <header class="chat-header">
+                <div class="model-selector">
+                    <span class="dot pulse"></span>
+                    <span>DummyModel (Native CPython)</span>
+                </div>
+            </header>
+            
+            <div class="messages-container" id="messagesContainer">
+                <div class="message assistant welcome-message">
+                    <div class="avatar">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 10 10H12V2z"></path><path d="M12 12L2.1 7.1"></path><path d="M12 12l9.9 4.9"></path></svg>
+                    </div>
+                    <div class="message-content">
+                        <p>Welcome to Helix RPC! I am currently running as a 100% Zero-Serialization embedded Python model inside a Rust Async process. Try asking me something!</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="input-area">
+                <form id="chatForm" class="input-form">
+                    <textarea id="promptInput" placeholder="Send a message to Helix AI..." rows="1" autofocus></textarea>
+                    <button type="submit" id="sendBtn" disabled>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                    </button>
+                </form>
+                <div class="footer-text">Powered by Tokio, Hyper, and PyO3</div>
+            </div>
+        </main>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>
