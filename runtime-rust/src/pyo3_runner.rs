@@ -1,5 +1,6 @@
 use pyo3::prelude::*;
 use pyo3::types::{PyList, PyString};
+use std::sync::Arc;
 
 pub struct PyModelHandler {
     model: PyObject,
@@ -36,5 +37,44 @@ impl PyModelHandler {
             
             Ok(out)
         })
+    }
+
+    /// Iterates over a Python generator and pipes tokens to an MPSC channel.
+    pub fn generate_stream(
+        self: Arc<Self>,
+        prompt: String,
+        tx: tokio::sync::mpsc::Sender<Result<String, String>>,
+    ) {
+        tokio::task::spawn_blocking(move || {
+            let res = Python::with_gil(|py| -> PyResult<()> {
+                let py_prompt = pyo3::types::PyString::new(py, &prompt);
+                
+                let result = self.model.call_method1(py, "generate_stream", (py_prompt,))?;
+                
+                let iter = result.downcast_bound::<pyo3::types::PyIterator>(py)?;
+                
+                for item in iter {
+                    match item {
+                        Ok(it) => {
+                            if let Ok(s) = it.downcast::<pyo3::types::PyString>() {
+                                if let Ok(s_str) = s.to_str() {
+                                    // Send to channel, ignoring send errors (e.g. client disconnected)
+                                    let _ = tx.blocking_send(Ok(s_str.to_owned()));
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            let _ = tx.blocking_send(Err(e.to_string()));
+                            break;
+                        }
+                    }
+                }
+                Ok(())
+            });
+
+            if let Err(e) = res {
+                let _ = tx.blocking_send(Err(e.to_string()));
+            }
+        });
     }
 }

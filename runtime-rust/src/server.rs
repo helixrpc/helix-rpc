@@ -113,6 +113,15 @@ pub trait HttpStreamingHandler: Send + Sync + 'static {
     async fn handle_stream(&self, path: &str, stream: Box<dyn ServerStream>) -> Result<(), String>;
 }
 
+/// Handler trait for Server-Sent Events (SSE).
+#[async_trait::async_trait]
+pub trait HttpSseHandler: Send + Sync {
+    /// Return `true` if `path` should be handled as an SSE stream.
+    fn is_sse(&self, path: &str) -> bool;
+    /// Execute the SSE handler. Returns a channel receiver for the text events.
+    async fn handle_sse(&self, path: &str, body: Vec<u8>, is_json: bool) -> Result<tokio::sync::mpsc::Receiver<Result<String, String>>, String>;
+}
+
 #[async_trait::async_trait]
 pub trait HttpServiceHandler: Send + Sync + 'static {
     async fn handle_request(&self, path: &str, body: Vec<u8>, is_json: bool) -> Result<(Vec<u8>, String), String>;
@@ -148,6 +157,7 @@ pub struct HelixHttpService<H> {
     pub handler: Arc<H>,
     pub rest_routes: Vec<RestRoute>,
     pub streaming_handler: Option<Arc<dyn HttpStreamingHandler>>,
+    pub sse_handler: Option<Arc<dyn HttpSseHandler>>,
     pub health_checker: Option<crate::health::HealthChecker>,
 }
 
@@ -170,6 +180,7 @@ where
         let handler = self.handler.clone();
         let rest_routes = self.rest_routes.clone();
         let streaming_handler = self.streaming_handler.clone();
+        let sse_handler = self.sse_handler.clone();
         let health_checker = self.health_checker.clone();
         Box::pin(async move {
             let path = req.uri().path().to_string();
@@ -201,6 +212,11 @@ where
 
             // Extract deadline
             let deadline = crate::deadline::extract_deadline(req.headers());
+            
+            let accepts_sse = req.headers()
+                .get(hyper::header::ACCEPT)
+                .map(|v| v.as_bytes() == b"text/event-stream")
+                .unwrap_or(false);
 
             // Extract metadata from request headers
             let mut md = std::collections::HashMap::new();
@@ -334,6 +350,60 @@ where
                     }
                     if let Ok(new_body) = serde_json::to_vec(&json_val) {
                         request_payload = new_body;
+                    }
+                }
+            }
+
+            // --- SSE dispatch ---
+            if accepts_sse {
+                if let Some(ref sse_h) = sse_handler {
+                    if sse_h.is_sse(&matched_path) {
+                        let sse_h_clone = sse_h.clone();
+                        let matched_path_clone = matched_path.clone();
+                        
+                        // Execute the SSE handler
+                        match sse_h_clone.handle_sse(&matched_path_clone, request_payload.clone(), is_json).await {
+                            Ok(mut rx) => {
+                                let (mut body_tx, body_rx) = Body::channel();
+                                tokio::spawn(async move {
+                                    while let Some(msg) = rx.recv().await {
+                                        match msg {
+                                            Ok(text) => {
+                                                let escaped_text = text.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', "\\n");
+                                                let json_data = format!("{{\"choices\":[{{\"delta\":{{\"content\":\"{}\"}}}}]}}", escaped_text);
+                                                let sse_msg = format!("data: {}\n\n", json_data);
+                                                
+                                                if body_tx.send_data(hyper::body::Bytes::from(sse_msg)).await.is_err() {
+                                                    break;
+                                                }
+                                            }
+                                            Err(e) => {
+                                                let err_msg = format!("data: {{\"error\": \"{}\"}}\n\n", e.replace('"', "\\\""));
+                                                let _ = body_tx.send_data(hyper::body::Bytes::from(err_msg)).await;
+                                                break;
+                                            }
+                                        }
+                                    }
+                                    let _ = body_tx.send_data(hyper::body::Bytes::from("data: [DONE]\n\n"));
+                                });
+
+                                let response = Response::builder()
+                                    .status(StatusCode::OK)
+                                    .header("content-type", "text/event-stream")
+                                    .header("cache-control", "no-cache")
+                                    .header("connection", "keep-alive")
+                                    .body(body_rx)
+                                    .unwrap();
+                                return Ok(response);
+                            }
+                            Err(e) => {
+                                let response = Response::builder()
+                                    .status(StatusCode::INTERNAL_SERVER_ERROR)
+                                    .body(Body::from(e))
+                                    .unwrap();
+                                return Ok(response);
+                            }
+                        }
                     }
                 }
             }
@@ -529,6 +599,7 @@ pub async fn handle_http_connection<H>(
         handler,
         rest_routes,
         streaming_handler: None,
+        sse_handler: None,
         health_checker: Some(crate::health::HealthChecker::new()),
     };
     let mut builder = Http::new();
@@ -558,6 +629,7 @@ pub async fn handle_http_connection_streaming<H>(
         handler,
         rest_routes,
         streaming_handler: Some(streaming_handler),
+        sse_handler: None,
         health_checker: Some(crate::health::HealthChecker::new()),
     };
     let mut builder = Http::new();
@@ -580,6 +652,7 @@ pub struct HelixServer<H> {
     handler: Arc<H>,
     rest_routes: Vec<RestRoute>,
     streaming_handler: Option<Arc<dyn HttpStreamingHandler>>,
+    sse_handler: Option<Arc<dyn HttpSseHandler>>,
     tls_acceptor: Option<tokio_rustls::TlsAcceptor>,
     shutdown_tx: broadcast::Sender<()>,
     #[allow(clippy::type_complexity)]
@@ -594,6 +667,7 @@ impl<H: HttpServiceHandler + Send + Sync + 'static> HelixServer<H> {
             handler,
             rest_routes,
             streaming_handler: None,
+            sse_handler: None,
             tls_acceptor: None,
             shutdown_tx: tx,
             protocol_fallback: None,
@@ -602,6 +676,10 @@ impl<H: HttpServiceHandler + Send + Sync + 'static> HelixServer<H> {
 
     pub fn set_streaming_handler(&mut self, handler: Arc<dyn HttpStreamingHandler>) {
         self.streaming_handler = Some(handler);
+    }
+    
+    pub fn set_sse_handler(&mut self, handler: Arc<dyn HttpSseHandler>) {
+        self.sse_handler = Some(handler);
     }
 
     pub fn set_tls_acceptor(&mut self, acceptor: tokio_rustls::TlsAcceptor) {
@@ -624,6 +702,7 @@ impl<H: HttpServiceHandler + Send + Sync + 'static> HelixServer<H> {
                     let handler = self.handler.clone();
                     let rest_routes = self.rest_routes.clone();
                     let streaming_handler = self.streaming_handler.clone();
+                    let sse_handler = self.sse_handler.clone();
                     let fallback = self.protocol_fallback.clone();
                     let mut conn_shutdown_rx = self.shutdown_tx.subscribe();
                     
@@ -656,6 +735,7 @@ impl<H: HttpServiceHandler + Send + Sync + 'static> HelixServer<H> {
                                         handler,
                                         rest_routes,
                                         streaming_handler,
+                                        sse_handler: sse_handler.clone(),
                                         health_checker: Some(crate::health::HealthChecker::new()),
                                     };
                                     
@@ -688,6 +768,7 @@ impl<H: HttpServiceHandler + Send + Sync + 'static> HelixServer<H> {
                                     handler,
                                     rest_routes,
                                     streaming_handler,
+                                    sse_handler,
                                     health_checker: Some(crate::health::HealthChecker::new()),
                                 };
                                 let conn = http.serve_connection(stream, service);
