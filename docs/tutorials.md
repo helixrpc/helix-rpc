@@ -47,3 +47,72 @@ async fn main() {
 cargo run
 ```
 You can now `curl -X POST http://127.0.0.1:8080/predict -d '{"prompt": "Hello"}'` and it will securely and instantly cross the FFI boundary, execute the Python code, and return the result!
+
+---
+
+## Setting up Advanced Features
+
+### Deadline Propagation (`grpc-timeout`)
+
+When building microservices, you want to ensure your AI model stops processing if the client has already timed out. Helix RPC automatically extracts the `grpc-timeout` header and applies it to the Go `context.Context` and Rust `tokio::time::timeout`.
+
+**Client Side (cURL):**
+```bash
+# Send a 50-millisecond timeout
+curl -H "grpc-timeout: 50m" -X POST http://127.0.0.1:8080/predict -d '{"prompt": "Hello"}'
+```
+
+**Server Side (Go):**
+```go
+// Inside your handler, listen for context cancellation
+func(ctx context.Context, req interface{}) (interface{}, error) {
+    select {
+    case <-ctx.Done():
+        // Client timed out! Abort GPU processing to save resources.
+        return nil, ctx.Err()
+    case res := <-processOnGPU(req):
+        return res, nil
+    }
+}
+```
+
+### Per-Message Compression (Gzip)
+
+To enable Gzip compression on large JSON/Protobuf responses, register the compressor when starting your server.
+
+**Go:**
+```go
+import runtime "github.com/helixrpc/helix-rt"
+
+server := runtime.NewServer(":8080")
+
+// Register the Gzip Compressor
+server.RegisterCompressor(runtime.NewGzipCompressor())
+
+server.Start()
+```
+Now, any client sending `grpc-encoding: gzip` will automatically have their request decompressed, and the response compressed natively by the gateway!
+
+### Multi-Protocol Endpoints
+
+The Go Runtime is capable of natively binding gRPC, Thrift, and REST JSON onto the exact same port and the exact same route logic using `h2c`.
+
+```go
+server := runtime.NewServer(":8080")
+
+// 1. Register the underlying handler (Used by gRPC and Thrift natively)
+server.RegisterMethod("/v1.ModelService/Predict", runtime.MethodInfo{
+    Decoder: myProtobufDecoder,
+    Handler: myPredictionLogic,
+})
+
+// 2. Map a REST Route to the EXACT SAME METHOD
+server.RegisterRESTRoute(
+    "POST",                  // HTTP Method
+    "/v1/models/predict",    // REST Path
+    "/v1.ModelService/Predict", // Target Method
+)
+
+server.Start()
+```
+Your server can now seamlessly handle standard HTTP `POST /v1/models/predict` requests with JSON, as well as high-performance `HTTP/2` Protobuf frames sent by gRPC clients!
