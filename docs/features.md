@@ -18,3 +18,14 @@ When a client requests `Accept: text/event-stream`, the gateway will automatical
 *   **mTLS:** Mutually authenticated TLS is supported out of the box.
 *   **Health Checking:** Standard `grpc.health.v1` is automatically mounted, allowing orchestrators like Kubernetes to know if your GPU is healthy.
 *   **Interceptors:** Full support for Unary Request Interception to allow you to inject logging, tracing, and metric collection effortlessly.
+*   **Deadline Propagation (`grpc-timeout`):** The gateways automatically extract `grpc-timeout` headers, converting them into native `context.Context` deadlines (Go) or `tokio::time::timeout` limits (Rust). If the AI model hangs, the gateway will flawlessly cancel the request and free the resources.
+*   **Per-Message Compression:** Out-of-the-box support for `gzip` compression across both the Go and Rust runtimes. If a client sends a `grpc-encoding: gzip` header, Helix RPC natively decompresses the payload, routes it to the AI, and compresses the response back over the wire.
+
+## Multi-Protocol Multiplexing
+Unlike standard frameworks that force you to choose between gRPC, REST, or GraphQL, Helix RPC is a **true multi-protocol gateway**. 
+
+Using `golang.org/x/net/http2/h2c`, the Go server multiplexes multiple protocols on the exact same port:
+*   **gRPC**: First-class support with Protobuf framing.
+*   **Thrift**: Deep native support for the Apache Thrift protocol.
+*   **REST/JSON**: Standard HTTP/1.1 REST endpoints with automatic JSON unmarshaling.
+*   **Server-Sent Events (SSE)**: Built-in support for streaming real-time JSON chunks (`text/event-stream`).
