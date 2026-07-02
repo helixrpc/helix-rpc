@@ -123,15 +123,24 @@ async def health_handler(body: dict) -> dict:
 if __name__ == "__main__":
     server = HelixServer(host="127.0.0.1", port=8084)
 
+    # 1. Add JWT authentication middleware (secret: "example-secret-key-that-is-long-enough")
+    from helix_rt.auth import jwt_middleware
+    server.add_middleware(jwt_middleware(secret="example-secret-key-that-is-long-enough"))
+
+    # 2. Add Rate Limiter middleware (10 requests per second, burst 5)
+    from helix_rt.ratelimit import RateLimiter
+    limiter = RateLimiter(requests_per_second=10.0, burst=5)
+    server.add_middleware(limiter.middleware())
+
     server.register_route("POST", "/v1/model/predict",   predict_handler)
     server.register_route("POST", "/v1/model/resilient", resilient_handler)
     server.register_route("POST", "/v1/model/slow",      slow_handler)
     server.register_route("GET",  "/health",             health_handler)
 
     print("📋 Routes:")
-    print("  POST /v1/model/predict   — direct prediction (HelixError on bad model)")
-    print("  POST /v1/model/resilient — prediction with retry + circuit breaker")
-    print("  POST /v1/model/slow      — slow endpoint (test grpc-timeout header)")
-    print("  GET  /health             — health check")
+    print("  POST /v1/model/predict   — (JWT auth & RateLimited) direct prediction")
+    print("  POST /v1/model/resilient — (JWT auth & RateLimited) prediction with retry + circuit breaker")
+    print("  POST /v1/model/slow      — (JWT auth & RateLimited) slow endpoint")
+    print("  GET  /health             — (JWT auth & RateLimited) health check")
 
     server.start()

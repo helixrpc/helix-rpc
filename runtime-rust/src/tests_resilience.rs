@@ -266,4 +266,77 @@ mod resilience_tests {
         assert_eq!(chosen, "x");
         lb.done("x").await;
     }
+
+    // -----------------------------------------------------------------------
+    // Auth & Rate Limit Tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_jwt_validator_hmac() {
+        use crate::auth::JwtValidator;
+        use hyper::Request;
+        use jsonwebtoken::{encode, Header, EncodingKey};
+        use std::collections::HashMap;
+        use serde_json::Value;
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let secret = b"my_test_secret_key_1234567890_long";
+        let validator = JwtValidator::new_hmac(secret, vec!["sub".to_string()]);
+
+        let mut claims = HashMap::new();
+        claims.insert("sub".to_string(), Value::String("user123".to_string()));
+        let exp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs() + 3600;
+        claims.insert("exp".to_string(), Value::Number(exp.into()));
+
+        let token = encode(
+            &Header::default(),
+            &claims,
+            &EncodingKey::from_secret(secret),
+        ).unwrap();
+
+        let req = Request::builder()
+            .header("authorization", format!("Bearer {}", token))
+            .body(())
+            .unwrap();
+
+        let parsed = validator.validate_request(&req).unwrap();
+        assert_eq!(parsed.get("sub").unwrap().as_str().unwrap(), "user123");
+    }
+
+    #[test]
+    fn test_validate_api_key() {
+        use crate::auth::validate_api_key;
+        use hyper::header::HeaderMap;
+        use std::collections::HashMap;
+
+        let mut valid_keys = HashMap::new();
+        valid_keys.insert("secret-key-1".to_string(), "admin".to_string());
+
+        let mut headers = HeaderMap::new();
+        headers.insert("x-api-key", "secret-key-1".parse().unwrap());
+
+        let principal = validate_api_key(&headers, &valid_keys).unwrap();
+        assert_eq!(principal, "admin");
+    }
+
+    #[test]
+    fn test_rate_limiter() {
+        use crate::ratelimit::RateLimiter;
+        let limiter = RateLimiter::new(10.0, Some(2));
+        
+        let (rem, allowed) = limiter.allow("client1");
+        assert!(allowed);
+        assert_eq!(rem, 1);
+
+        let (rem2, allowed2) = limiter.allow("client1");
+        assert!(allowed2);
+        assert_eq!(rem2, 0);
+
+        let (_, allowed3) = limiter.allow("client1");
+        assert!(!allowed3);
+    }
 }
+

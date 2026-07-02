@@ -30,6 +30,11 @@ pub use retry::{CircuitBreaker, TokenBucket, RetryPolicy, execute_with_retry};
 pub mod telemetry; pub use telemetry::attach_span_context;
 pub mod pyo3_runner;
 pub use pyo3_runner::PyModelHandler;
+pub mod auth;
+pub use auth::{JwtValidator, get_jwt_claims, get_api_key_principal, validate_api_key};
+pub mod ratelimit;
+pub use ratelimit::RateLimiter;
+
 
 #[cfg(test)]
 mod tests_resilience;

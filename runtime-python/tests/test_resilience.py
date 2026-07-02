@@ -296,3 +296,105 @@ class TestHelixServerIntegration:
         server = HelixServer()
         assert hasattr(server, "start_async")
         assert hasattr(server, "stop_async")
+
+
+# ---------------------------------------------------------------------------
+# Auth Middleware Tests
+# ---------------------------------------------------------------------------
+
+class TestAuthMiddleware:
+    def test_jwt_middleware_success(self):
+        import time
+        import jwt as pyjwt
+        from helix_rt.auth import jwt_middleware
+        from aiohttp import web
+        
+        async def run():
+            app = web.Application()
+            app.middlewares.append(jwt_middleware(secret="secret", required_claims=["sub"]))
+            
+            async def ok_handler(request):
+                assert request["jwt_claims"]["sub"] == "user123"
+                return web.json_response({"ok": True})
+            
+            app.router.add_post("/test", ok_handler)
+            
+            token = pyjwt.encode({"sub": "user123", "exp": int(time.time()) + 3600}, "secret", algorithm="HS256")
+            
+            from aiohttp.test_utils import TestClient, TestServer
+            client = TestClient(TestServer(app))
+            await client.start_server()
+            resp = await client.post("/test", headers={"Authorization": f"Bearer {token}"})
+            body = await resp.json()
+            await client.close()
+            return resp.status, body
+
+        status, body = asyncio.run(run())
+        assert status == 200
+        assert body["ok"] is True
+
+    def test_api_key_middleware_success(self):
+        from helix_rt.auth import api_key_middleware
+        from aiohttp import web
+        
+        async def run():
+            app = web.Application()
+            app.middlewares.append(api_key_middleware(valid_keys={"key123": "user_principal"}))
+            
+            async def ok_handler(request):
+                assert request["api_key_principal"] == "user_principal"
+                return web.json_response({"ok": True})
+            
+            app.router.add_post("/test", ok_handler)
+            
+            from aiohttp.test_utils import TestClient, TestServer
+            client = TestClient(TestServer(app))
+            await client.start_server()
+            resp = await client.post("/test", headers={"X-API-Key": "key123"})
+            body = await resp.json()
+            await client.close()
+            return resp.status, body
+
+        status, body = asyncio.run(run())
+        assert status == 200
+        assert body["ok"] is True
+
+
+# ---------------------------------------------------------------------------
+# Rate Limiter Middleware Tests
+# ---------------------------------------------------------------------------
+
+class TestRateLimiterMiddleware:
+    def test_ratelimit_middleware(self):
+        from helix_rt.ratelimit import RateLimiter
+        from aiohttp import web
+        
+        async def run():
+            app = web.Application()
+            limiter = RateLimiter(requests_per_second=100.0, burst=2)
+            app.middlewares.append(limiter.middleware())
+            
+            async def ok_handler(request):
+                return web.json_response({"ok": True})
+            
+            app.router.add_post("/test", ok_handler)
+            
+            from aiohttp.test_utils import TestClient, TestServer
+            client = TestClient(TestServer(app))
+            await client.start_server()
+            
+            # First request
+            r1 = await client.post("/test")
+            # Second request
+            r2 = await client.post("/test")
+            # Third request (should be rate limited)
+            r3 = await client.post("/test")
+            
+            await client.close()
+            return r1.status, r2.status, r3.status
+
+        s1, s2, s3 = asyncio.run(run())
+        assert s1 == 200
+        assert s2 == 200
+        assert s3 == 429
+

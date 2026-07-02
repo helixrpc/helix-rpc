@@ -65,6 +65,7 @@ func TestCrossLangGoClientRustServer(t *testing.T) {
 	select {
 	case addr = <-lineChan:
 		t.Logf("Found Rust server address: %s", addr)
+		time.Sleep(200 * time.Millisecond) // Wait for Rust server to start listening
 	case <-time.After(5 * time.Second):
 		t.Fatalf("timeout waiting for Rust server to print port")
 	}

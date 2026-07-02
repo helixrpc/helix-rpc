@@ -21,6 +21,19 @@ const (
 	CircuitHalfOpen                     // Probe: one request is allowed through to test recovery
 )
 
+func (cs CircuitState) String() string {
+	switch cs {
+	case CircuitClosed:
+		return "CLOSED"
+	case CircuitOpen:
+		return "OPEN"
+	case CircuitHalfOpen:
+		return "HALF-OPEN"
+	default:
+		return "UNKNOWN"
+	}
+}
+
 // CircuitBreaker is a thread-safe, atomic state machine that prevents cascading
 // failures by fast-failing requests when the error rate exceeds a threshold.
 type CircuitBreaker struct {

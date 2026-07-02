@@ -527,6 +527,9 @@ type Server struct {
 	snifferListener  net.Listener
 	mu               sync.Mutex
 	inShutdown       bool
+	balancer         *LeastConnBalancer
+	balancerTargets  []string
+	debugBreaker     *CircuitBreaker
 }
 
 func NewServer(addr string) *Server {

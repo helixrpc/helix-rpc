@@ -133,14 +133,29 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
 // ---------------------------------------------------------------------------
 
 func main() {
+	// Create rate limiter (10 req/s, burst of 5)
+	limiter := runtime.NewRateLimiter(runtime.RateLimitConfig{
+		RequestsPerSecond: 10.0,
+		BurstSize:         5,
+	})
+
+	// Create JWT configuration
+	authCfg := runtime.JWTAuthConfig{
+		SecretKey: []byte("example-secret-key-that-is-long-enough"),
+	}
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/route",     routeHandler)
-	mux.HandleFunc("/resilient", resilientHandler)
+
+	// Wrap /resilient with JWT auth and rate limiting middlewares
+	resilientHandlerWithMiddleware := runtime.NewJWTMiddleware(authCfg, limiter.HTTPMiddleware(http.HandlerFunc(resilientHandler)))
+	mux.Handle("/resilient", resilientHandlerWithMiddleware)
+
 	mux.HandleFunc("/status",    statusHandler)
 
 	log.Println("📋 Routes:")
 	log.Println("  GET /route     — least-conn routed backend call")
-	log.Println("  GET /resilient — retry + circuit breaker + hedging")
+	log.Println("  GET /resilient — (JWT auth & RateLimited) retry + circuit breaker + hedging")
 	log.Println("  GET /status    — balancer & circuit state")
 	log.Println("🚀 Go resilience example listening on :8085")
 	log.Fatal(http.ListenAndServe(":8085", mux))
