@@ -14,6 +14,10 @@ class Config:
         disable_deadline: bool = False,
         rate_limit_rate: float = 100.0,
         rate_limit_burst: int = 10,
+        enable_jwt_auth: bool = False,
+        jwt_secret: str = "",
+        enable_api_key_auth: bool = False,
+        api_key: str = "",
     ):
         self.host = host
         self.port = port
@@ -23,6 +27,10 @@ class Config:
         self.disable_deadline = disable_deadline
         self.rate_limit_rate = rate_limit_rate
         self.rate_limit_burst = rate_limit_burst
+        self.enable_jwt_auth = enable_jwt_auth
+        self.jwt_secret = jwt_secret
+        self.enable_api_key_auth = enable_api_key_auth
+        self.api_key = api_key
 
 def load_config(path: str) -> Config:
     with open(path, "r") as f:

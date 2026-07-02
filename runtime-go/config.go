@@ -9,14 +9,18 @@ import (
 
 // Config defines all Helix RPC service configurables.
 type Config struct {
-	Host            string  `json:"host"`
-	Port            int     `json:"port"`
-	DisableMetrics  bool    `json:"disable_metrics"`
-	DisableHealth   bool    `json:"disable_health"`
-	DisableGzip     bool    `json:"disable_gzip"`
-	DisableDeadline bool    `json:"disable_deadline"`
-	RateLimitRate   float64 `json:"rate_limit_rate"`
-	RateLimitBurst  int     `json:"rate_limit_burst"`
+	Host             string  `json:"host"`
+	Port             int     `json:"port"`
+	DisableMetrics   bool    `json:"disable_metrics"`
+	DisableHealth    bool    `json:"disable_health"`
+	DisableGzip      bool    `json:"disable_gzip"`
+	DisableDeadline  bool    `json:"disable_deadline"`
+	RateLimitRate    float64 `json:"rate_limit_rate"`
+	RateLimitBurst   int     `json:"rate_limit_burst"`
+	EnableJWTAuth    bool    `json:"enable_jwt_auth"`
+	JWTSecret        string  `json:"jwt_secret"`
+	EnableApiKeyAuth bool    `json:"enable_api_key_auth"`
+	ApiKey           string  `json:"api_key"`
 }
 
 // LoadConfig reads the JSON configuration file.

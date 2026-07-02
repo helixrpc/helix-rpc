@@ -12,6 +12,10 @@ pub struct Config {
     pub disable_deadline: bool,
     pub rate_limit_rate: f64,
     pub rate_limit_burst: u32,
+    pub enable_jwt_auth: bool,
+    pub jwt_secret: String,
+    pub enable_api_key_auth: bool,
+    pub api_key: String,
 }
 
 impl Default for Config {
@@ -25,6 +29,10 @@ impl Default for Config {
             disable_deadline: false,
             rate_limit_rate: 100.0,
             rate_limit_burst: 10,
+            enable_jwt_auth: false,
+            jwt_secret: "".to_string(),
+            enable_api_key_auth: false,
+            api_key: "".to_string(),
         }
     }
 }

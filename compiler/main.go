@@ -325,7 +325,11 @@ Edit [schema.proto](./schema.proto) and run `+"`make gen`"+` to regenerate.
   "disable_gzip": %t,
   "disable_deadline": %t,
   "rate_limit_rate": 100.0,
-  "rate_limit_burst": 10
+  "rate_limit_burst": 10,
+  "enable_jwt_auth": false,
+  "jwt_secret": "default-secret-key",
+  "enable_api_key_auth": false,
+  "api_key": "default-api-key"
 }
 `, disableMetrics, disableHealth, disableGzip, disableDeadline))
 
