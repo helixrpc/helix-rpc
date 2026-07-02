@@ -99,6 +99,18 @@ func (cb *CircuitBreaker) RecordSuccess() {
 	}
 }
 
+// ForceOpen forces the circuit breaker to the Open state.
+func (cb *CircuitBreaker) ForceOpen() {
+	atomic.StoreInt32(&cb.state, int32(CircuitOpen))
+	atomic.StoreInt64(&cb.lastOpenTime, time.Now().UnixNano())
+}
+
+// ForceClose forces the circuit breaker to the Closed state.
+func (cb *CircuitBreaker) ForceClose() {
+	atomic.StoreInt32(&cb.state, int32(CircuitClosed))
+	atomic.StoreInt64(&cb.failures, 0)
+}
+
 // RecordFailure records a failed operation, potentially opening the circuit.
 func (cb *CircuitBreaker) RecordFailure() {
 	f := atomic.AddInt64(&cb.failures, 1)

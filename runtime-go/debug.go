@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"runtime/debug"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -101,9 +102,35 @@ func MountDebugHandler(mux *http.ServeMux, server *Server) {
 
 func debugHandler(server *Server) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		if r.Method == "POST" {
+			path := r.URL.Path
+			if strings.HasSuffix(path, "/circuit/open") {
+				if server.debugBreaker != nil {
+					server.debugBreaker.ForceOpen()
+				}
+				w.Header().Set("Content-Type", "application/json")
+				w.Write([]byte(`{"status":"success","message":"circuit forced open"}`))
+				return
+			}
+			if strings.HasSuffix(path, "/circuit/close") {
+				if server.debugBreaker != nil {
+					server.debugBreaker.ForceClose()
+				}
+				w.Header().Set("Content-Type", "application/json")
+				w.Write([]byte(`{"status":"success","message":"circuit forced closed"}`))
+				return
+			}
+		}
+
+		w.Header().Set("Content-Type", "application/json")
 		snap := buildSnapshot(server)
 		json.NewEncoder(w).Encode(snap) //nolint:errcheck
 	}

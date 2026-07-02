@@ -180,6 +180,33 @@ const dashboardHTML = `<!DOCTYPE html>
             background-color: var(--accent);
             box-shadow: 0 0 8px var(--accent);
         }
+        .btn {
+            font-family: 'Outfit', sans-serif;
+            font-weight: 600;
+            font-size: 0.8rem;
+            padding: 0.4rem 0.8rem;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background-color 0.2s, transform 0.1s;
+        }
+        .btn:active {
+            transform: scale(0.95);
+        }
+        .btn-danger {
+            background-color: var(--accent);
+            color: white;
+        }
+        .btn-danger:hover {
+            background-color: #ff3344;
+        }
+        .btn-success {
+            background-color: var(--accent-green);
+            color: #0d0f14;
+        }
+        .btn-success:hover {
+            background-color: #00c853;
+        }
     </style>
 </head>
 <body>
@@ -196,6 +223,10 @@ const dashboardHTML = `<!DOCTYPE html>
         <div class="card green" id="circuit-card">
             <div class="card-title">Circuit Breaker</div>
             <div class="card-value" id="circuit-val">CLOSED</div>
+            <div style="margin-top: 1rem; display: flex; gap: 0.5rem;">
+                <button class="btn btn-danger" onclick="triggerCircuit('open')">Force Open</button>
+                <button class="btn btn-success" onclick="triggerCircuit('close')">Force Close</button>
+            </div>
         </div>
         <div class="card yellow" id="go-version-card">
             <div class="card-title">Go Version</div>
@@ -295,6 +326,15 @@ const dashboardHTML = `<!DOCTYPE html>
 
             } catch (err) {
                 console.error('Failed to fetch dashboard metrics:', err);
+            }
+        }
+
+        async function triggerCircuit(action) {
+            try {
+                await fetch('/__helix/debug/circuit/' + action, { method: 'POST' });
+                updateDashboard();
+            } catch (err) {
+                console.error('Failed to trigger circuit action:', err);
             }
         }
 
