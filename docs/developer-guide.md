@@ -4,6 +4,10 @@
 
 ---
 
+> **Zero-Configuration Business Logic Focus:** Helix RPC is architected so developers spend **zero time** configuring network stacks, security parameters, database connection limits, Docker files, or Terraform scripts. Scaffolding a project with `helix-gen init` yields a fully pre-configured, production-grade microservice. Your only task is writing the core business logic handler.
+
+---
+
 ## Table of Contents
 
 1. [Architecture Overview](#architecture-overview)

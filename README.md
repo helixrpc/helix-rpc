@@ -4,6 +4,14 @@ Helix RPC is a next-generation AI infrastructure framework designed from the gro
 
 Built in **Go** and **Rust**, it features a multi-protocol gateway (gRPC, HTTP/2, REST, SSE) and leverages PyO3 to completely eliminate the serialization bottleneck between the network gateway and the Python AI execution environment.
 
+## 🎯 Focus on Business Logic, Zero-Config
+
+Helix RPC is architected so developers spend **zero time** configuring network stacks, deployment pipelines, telemetry, or security middlewares. 
+
+Scaffolding a project with `helix-gen init` yields a fully production-grade, highly available microservice out-of-the-box. Middlewares like structured JSON logging, Prometheus metrics, K8s health checks, TLS, gzip compression, and rate limiting are pre-configured and active automatically. 
+
+**Your only task is to write the core business logic handler.**
+
 ## 🚀 Key Features
 
 *   **Zero-Serialization PyO3 Runtime (Rust)**: Embeds the CPython interpreter directly inside the Rust Async Gateway. Tensors and prompts are passed in-memory using zero-copy FFI, bypassing JSON/gRPC serialization entirely.
