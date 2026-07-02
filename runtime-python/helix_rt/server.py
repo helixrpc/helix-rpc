@@ -53,6 +53,32 @@ async def gzip_middleware(request: web.Request, handler: Callable[[web.Request],
     return response
 
 
+@web.middleware
+async def logging_middleware(request: web.Request, handler: Callable[[web.Request], Awaitable[web.StreamResponse]]):
+    """
+    Logs request path, method, latency, status code, and trace IDs in JSON.
+    """
+    start = asyncio.get_event_loop().time()
+    try:
+        response = await handler(request)
+        status = response.status
+        return response
+    except Exception as e:
+        status = 500
+        raise e
+    finally:
+        latency = (asyncio.get_event_loop().time() - start) * 1000.0
+        trace_id = request.headers.get("traceparent", "")
+        log_entry = {
+            "method": request.method,
+            "path": request.path,
+            "status": status,
+            "duration_ms": round(latency, 2),
+            "trace_id": trace_id,
+        }
+        logging.info(f"RPC Request: {json.dumps(log_entry)}")
+
+
 # ---------------------------------------------------------------------------
 # HelixServer
 # ---------------------------------------------------------------------------
@@ -83,7 +109,7 @@ class HelixServer:
         self.host = host
         self.port = port
         
-        middlewares = [telemetry_middleware]
+        middlewares = [telemetry_middleware, logging_middleware]
         if not disable_deadline:
             middlewares.append(deadline_middleware)
         if not disable_gzip:
