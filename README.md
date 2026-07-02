@@ -1,206 +1,206 @@
-# Helix RPC 🧬
+<p align="center">
+  <img src="docs/assets/logo.png" alt="Helix RPC Logo" width="160"/>
+</p>
 
-Helix RPC is a next-generation AI infrastructure framework designed from the ground up for the absolute highest efficiency in deploying LLMs and machine learning models. 
+<h1 align="center">Helix RPC 🧬</h1>
 
-Built in **Go** and **Rust**, it features a multi-protocol gateway (gRPC, HTTP/2, REST, SSE) and leverages PyO3 to completely eliminate the serialization bottleneck between the network gateway and the Python AI execution environment.
+<p align="center">
+  <strong>The next-generation AI infrastructure framework built for maximum efficiency.</strong><br/>
+  Zero-serialization. Multi-protocol. Zero-configuration.
+</p>
 
-## 🎯 Focus on Business Logic, Zero-Config
-
-Helix RPC is architected so developers spend **zero time** configuring network stacks, deployment pipelines, telemetry, or security middlewares. 
-
-Scaffolding a project with `helix-gen init` yields a fully production-grade, highly available microservice out-of-the-box. Middlewares like structured JSON logging, Prometheus metrics, K8s health checks, TLS, gzip compression, and rate limiting are pre-configured and active automatically. 
-
-**Your only task is to write the core business logic handler.**
-
-## 🚀 Key Features
-
-*   **Zero-Serialization PyO3 Runtime (Rust)**: Embeds the CPython interpreter directly inside the Rust Async Gateway. Tensors and prompts are passed in-memory using zero-copy FFI, bypassing JSON/gRPC serialization entirely.
-*   **Dynamic Batching (Go)**: A powerful `@batch` interceptor that buffers concurrent incoming REST/gRPC requests and dispatches them mathematically as a single array to the underlying AI model to maximize GPU utilization and prevent OOMs.
-*   **Native SSE Streaming (Rust/Python)**: The Rust Hyper server bridges directly into Python `yield` generators using `PyIterator`, allowing for real-time token streaming natively to clients via Server-Sent Events (SSE).
-*   **Multi-Protocol Gateway**: Supports gRPC, HTTP/2 multiplexing, REST API fallbacks, and SSE out-of-the-box.
-*   **Production-Ready Middlewares**: Includes Deadline Propagation (gRPC Timeout), Health Checking, and gzip Per-Message Compression.
+<p align="center">
+  <a href="https://github.com/helixrpc/helix-rpc/actions/workflows/ci.yml">
+    <img src="https://github.com/helixrpc/helix-rpc/actions/workflows/ci.yml/badge.svg" alt="CI"/>
+  </a>
+  <a href="https://github.com/helixrpc/helix-rpc/actions/workflows/docs.yml">
+    <img src="https://github.com/helixrpc/helix-rpc/actions/workflows/docs.yml/badge.svg" alt="Docs"/>
+  </a>
+  <img src="https://img.shields.io/badge/go-1.23+-00ADD8?logo=go&logoColor=white" alt="Go"/>
+  <img src="https://img.shields.io/badge/rust-stable-orange?logo=rust&logoColor=white" alt="Rust"/>
+  <img src="https://img.shields.io/badge/python-3.12+-3776AB?logo=python&logoColor=white" alt="Python"/>
+  <img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"/>
+</p>
 
 ---
 
-## 📖 Usage Examples
+## 🎯 Focus on Business Logic, Not Plumbing
 
-Here are the code snippets demonstrating how to integrate and use the core features of Helix RPC.
+Helix RPC is architected so developers spend **zero time** on network stacks, deployment pipelines, TLS, observability, or database connection tuning.
 
-### 1. Go: Setting up Dynamic Batching
+Run `helix-gen init` and get a **fully production-grade**, highly available microservice — with structured logging, Prometheus metrics, health checks, gzip compression, JWT auth, and Kubernetes manifests all pre-configured.
 
-Dynamic Batching allows your API server to absorb 100 concurrent HTTP requests, and send them as 1 single batched request to your GPU.
+**Your only task is to write the core business logic handler.**
+
+---
+
+## 🚀 Key Features
+
+| Feature | Description |
+|---|---|
+| **Zero-Serialization PyO3** | Embeds CPython directly in the Rust gateway — tensors pass over FFI, never JSON |
+| **Dynamic Batching** | `@batch` interceptor coalesces 100 concurrent requests → 1 GPU call |
+| **Multi-Protocol Gateway** | gRPC · Thrift Binary/Compact · HTTP/JSON REST · SSE — one TCP port |
+| **Single-File Scaffolding** | `helix-gen init` generates schema, stubs, Dockerfile, Terraform & `helix.json` |
+| **Hot-Reload Config** | `helix.json` watched at runtime — auth, rate limits, features toggled without restart |
+| **Secure Containers** | Statically-linked `scratch` Docker + Firecracker microVM blueprints included |
+| **Service Discovery** | Built-in DNS/SRV, Consul, and Kubernetes resolvers |
+| **Cloud Deployment** | One-command Terraform for AWS ECS · GCP Cloud Run · Azure Container Apps |
+| **Enterprise Auth** | JWT (HS256/RS256/ES256) + API key validation — toggle via `helix.json` |
+| **Observability** | Prometheus `/metrics`, Grafana dashboard JSON, HPA-ready Kubernetes manifests |
+
+---
+
+## ⚡ Quick Start
+
+### 1. Install the compiler
+
+```bash
+go install github.com/helixrpc/helix-rpc/compiler/helix-gen@latest
+```
+
+### 2. Scaffold a new service (Go)
+
+```bash
+helix-gen init my-service --lang go
+cd my-service
+```
+
+This generates:
+```
+my-service/
+├── schema.proto          # your IDL
+├── server/main.go        # handler stub — write your logic here
+├── generated/            # auto-generated stubs
+├── helix.json            # full config (auth, rate limits, features)
+├── Makefile              # gen · build · test · docker-build · deploy-aws/gcp/azure
+├── containers/           # optimised Dockerfile + docker-compose
+├── deployments/          # Terraform for AWS/GCP/Azure + k8s manifests
+└── README.md
+```
+
+### 3. Define your schema
+
+```protobuf
+// schema.proto
+message PredictRequest  { string prompt = 1; }
+message PredictResponse { string completion = 1; }
+
+service ModelService {
+  rpc Predict(PredictRequest) returns (PredictResponse);
+}
+```
+
+### 4. Generate stubs
+
+```bash
+make gen
+```
+
+### 5. Write your handler (the only code you write)
 
 ```go
-package main
-
-import (
-	"context"
-	"time"
-	runtime "github.com/helixrpc/helix-rt"
-)
-
-// 1. Define your batch processing logic
-type MyAIModel struct{}
-
-func (m *MyAIModel) PredictBatch(ctx context.Context, reqs []interface{}) ([]interface{}, error) {
-	// Execute your model on the batched array here!
-	var resps []interface{}
-	for _, req := range reqs {
-		resps = append(resps, map[string]string{"completion": "Done"})
-	}
-	return resps, nil
-}
-
-func main() {
-	// 2. Initialize the Batch Scheduler (Max 100 requests, 50ms wait window)
-	dispatcher := runtime.NewBatchScheduler(100, 50*time.Millisecond, func(ctx context.Context, reqs []interface{}) ([]interface{}, error) {
-		model := &MyAIModel{}
-		return model.PredictBatch(ctx, reqs)
-	})
-
-	// 3. Create Server and Register Route
-	server := runtime.NewServer(":8080")
-	server.RegisterMethod("/v1/models/predict", runtime.MethodInfo{
-		Decoder: func(dec func(interface{}) error) (interface{}, error) {
-			var req map[string]interface{}
-			err := dec(&req)
-			return req, err
-		},
-		Handler: func(ctx context.Context, req interface{}) (interface{}, error) {
-			// This blocks until the batch window closes and resolves!
-			return dispatcher.Invoke(ctx, req) 
-		},
-	})
-	
-	server.RegisterRESTRoute("POST", "/v1/models/predict", "/v1/models/predict")
-	server.Start()
-}
-```
-
-### 2. Rust: Zero-Serialization PyO3 Server
-
-Embed a Python model in your Rust server. Data is passed without any JSON/Protocol Buffer serialization.
-
-```rust
-use helix_rt::server::{HelixServer, RestRoute};
-use helix_rt::pyo3_runner::PyModelHandler;
-use std::sync::Arc;
-
-#[tokio::main]
-async fn main() {
-    // 1. Load the Python file `model.py` and instantiate `DummyModel` natively via PyO3
-    let py_handler = PyModelHandler::new(".", "model", "DummyModel").unwrap();
-
-    // 2. Wrap it in a Server
-    let mut server = HelixServer::new(
-        "127.0.0.1:8080",
-        Arc::new(py_handler),
-        vec![RestRoute::new("POST", "/v1/predict", "/v1/predict")],
-    );
-
-    server.start().await.unwrap();
-}
-```
-
-### 3. Python/Rust: Native SSE Token Streaming
-
-To build a ChatGPT-like streaming experience, define a generator in Python. Helix RPC will natively bridge the generator across the FFI boundary and transcode it to SSE JSON over the network.
-
-**Python Model (`model.py`):**
-```python
-import time
-
-class DummyModel:
-    def generate_stream(self, prompt: str):
-        words = ["This", " is", " streaming", " natively", "!"]
-        for word in words:
-            yield word
-            time.sleep(0.1)
-```
-
-**Rust Server Setup:**
-```rust
-use helix_rt::server::HttpSseHandler;
-use async_trait::async_trait;
-
-struct StreamSseHandler {
-    model: Arc<PyModelHandler>,
-}
-
-#[async_trait]
-impl HttpSseHandler for StreamSseHandler {
-    fn is_sse(&self, path: &str) -> bool {
-        path == "/v1/chat/completions"
-    }
-
-    async fn handle_sse(&self, path: &str, body: Vec<u8>, is_json: bool) 
-    -> Result<tokio::sync::mpsc::Receiver<Result<String, String>>, String> {
-        let (tx, rx) = tokio::sync::mpsc::channel(64);
-        
-        // Spawn blocking Python generator iteration, piping yields to the MPSC channel
-        self.model.clone().generate_stream("Hello!".to_string(), tx);
-        
-        Ok(rx)
-    }
-}
-
-// In your server setup:
-// server.set_sse_handler(Arc::new(StreamSseHandler { model: py_handler }));
-```
-
-### 4. Production Features (Go)
-
-Helix RPC ships with built-in primitives for building production-grade services.
-
-#### 4a. Health Checking (gRPC Health v1)
-Helix automatically mounts the standard gRPC health checking protocol (`/grpc.health.v1.Health/Check`). You can programmatically control the serving status of your services.
-```go
-server := runtime.NewServer(":8080")
-
-// Mark a service as Serving
-server.Health.SetServingStatus("ai.generation.Service", runtime.HealthServing)
-
-// Later, mark as Not Serving if the GPU goes offline
-server.Health.SetServingStatus("ai.generation.Service", runtime.HealthNotServing)
-```
-
-#### 4b. mTLS (Mutual TLS)
-You can easily secure your Helix Gateway using standard Go TLS Configurations.
-```go
-import "crypto/tls"
-
-server := runtime.NewServer(":8443")
-
-// Load your certificates and configure mTLS
-cert, _ := tls.LoadX509KeyPair("server.crt", "server.key")
-server.TLSConfig = &tls.Config{
-	Certificates: []tls.Certificate{cert},
-	ClientAuth:   tls.RequireAndVerifyClientCert,
-}
-
-server.Start()
-```
-
-#### 4c. Middleware Injection (Interceptors)
-Helix supports gRPC-style Unary Server Interceptors for implementing logging, tracing, auth, and deadline propagation.
-```go
-server := runtime.NewServer(":8080")
-
-server.AddInterceptor(func(ctx context.Context, req interface{}, info *runtime.UnaryServerInfo, handler runtime.UnaryHandler) (interface{}, error) {
-	fmt.Printf("Incoming request to: %s\n", info.FullMethod)
-	start := time.Now()
-	
-	resp, err := handler(ctx, req)
-	
-	fmt.Printf("Completed in %v\n", time.Since(start))
-	return resp, err
+// server/main.go
+server.RegisterMethod("/v1.ModelService/Predict", runtime.MethodInfo{
+    Handler: func(ctx context.Context, req interface{}) (interface{}, error) {
+        // ← your business logic here
+        return &PredictResponse{Completion: "Hello from Helix!"}, nil
+    },
 })
 ```
 
-## 🎮 Demo Applications
+### 6. Run it
 
-We've provided 3 fully functional demo applications out of the box in the `examples/` directory! 
+```bash
+make dev           # local dev with hot-reload
+make docker-build  # optimised scratch container
+make deploy-aws    # push to AWS ECS Fargate via Terraform
+```
 
-1. `examples/rust-ai-gateway`: An end-to-end PyO3 server with SSE streaming.
-2. `examples/go-dynamic-batcher`: A high-concurrency Go server demonstrating request batching.
-3. `examples/frontend-chat-ui`: A sleek, glassmorphic UI built in Vanilla JS to visualize the SSE stream natively!
+---
+
+## 🌐 Supported Languages
+
+| Runtime | Protocols | Key Capabilities |
+|---|---|---|
+| **Go** | gRPC · Thrift · HTTP/JSON | Dynamic batching, circuit breaker, JWT auth, Prometheus |
+| **Rust** | gRPC · HTTP/JSON · SSE | PyO3 zero-copy FFI, TLS, keepalive, Firecracker |
+| **Python** | HTTP/JSON · SSE | asyncio, streaming generators, asyncpg pool |
+
+---
+
+## 📦 What `helix.json` Controls
+
+```jsonc
+{
+  "host": "0.0.0.0",
+  "port": 8080,
+  "disable_metrics": false,    // Prometheus /metrics endpoint
+  "disable_health": false,     // /healthz liveness probe
+  "disable_gzip": false,       // per-message compression
+  "disable_deadline": false,   // grpc-timeout propagation
+  "rate_limit_rate": 100.0,    // token-bucket refill rate
+  "rate_limit_burst": 10,
+  "enable_jwt_auth": false,    // toggle JWT validation
+  "jwt_secret": "...",
+  "enable_api_key_auth": false, // toggle API key validation
+  "api_key": "..."
+}
+```
+
+Changes take effect **without restart** — the runtime watches and hot-reloads automatically.
+
+---
+
+## 🏗 Architecture Overview
+
+```
+Client
+  │
+  ▼
+┌─────────────────────────────────────────────────────────┐
+│              Single TCP Port (protocol sniffing)        │
+│   gRPC / HTTP2  │  Thrift Binary/Compact  │  REST/JSON  │
+└────────────────────────┬────────────────────────────────┘
+                         │
+              ┌──────────▼──────────┐
+              │   Helix Gateway     │
+              │  (Go / Rust)        │
+              │  ┌───────────────┐  │
+              │  │  Interceptors │  │  JWT · Rate Limit · Circuit Breaker
+              │  │  Middlewares  │  │  Logging · Metrics · Deadline
+              │  └───────┬───────┘  │
+              │          │          │
+              │  ┌───────▼───────┐  │
+              │  │  Your Handler │  │  ← write this only
+              │  └───────────────┘  │
+              └─────────────────────┘
+                         │
+             ┌───────────┼───────────┐
+             ▼           ▼           ▼
+          Database    Kafka/MQ    AI Model (PyO3)
+```
+
+---
+
+## 📚 Documentation
+
+Full documentation is available at **[helixrpc.github.io/helix-rpc](https://helixrpc.github.io/helix-rpc)**
+
+- [Setup & Configuration](https://helixrpc.github.io/helix-rpc/setup-configuration/)
+- [Developer Guide](https://helixrpc.github.io/helix-rpc/developer-guide/)
+- [Tutorials](https://helixrpc.github.io/helix-rpc/tutorials/)
+- [Integrations](https://helixrpc.github.io/helix-rpc/integrations/)
+- [Enterprise Concerns](https://helixrpc.github.io/helix-rpc/enterprise-concerns/)
+
+---
+
+## 🤝 Contributing
+
+We welcome contributions! Please read our [Contributing Guide](CONTRIBUTING.md) and open a pull request.
+
+---
+
+## 📄 License
+
+MIT © Helix RPC Contributors
