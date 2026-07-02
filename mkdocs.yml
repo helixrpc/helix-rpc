@@ -52,6 +52,7 @@ nav:
   - Features: features.md
   - Language Support: languages.md
   - Tutorials: tutorials.md
+  - LLM Token Serving: llm-serving.md
   - Examples: examples.md
   - Developer Guide: developer-guide.md
   - Integrations: integrations.md
