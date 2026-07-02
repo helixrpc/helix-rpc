@@ -607,6 +607,7 @@ func (s *Server) Start() error {
 		MaxConcurrentStreams:         250,
 		MaxUploadBufferPerConnection: 1024 * 1024 * 2, // 2MB
 		MaxUploadBufferPerStream:     1024 * 1024,     // 1MB
+		IdleTimeout:                  3 * time.Minute,
 	}
 	handler := h2c.NewHandler(s.grpcHandler, h2s)
 	s.httpServer = &http.Server{

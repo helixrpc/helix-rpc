@@ -769,6 +769,8 @@ impl<H: HttpServiceHandler + Send + Sync + 'static> HelixServer<H> {
                                             http.http2_initial_connection_window_size(Some(1024 * 1024 * 2));
                                             http.http2_initial_stream_window_size(Some(1024 * 1024));
                                             http.http2_max_concurrent_streams(Some(250));
+                                            http.http2_keep_alive_interval(Some(std::time::Duration::from_secs(60)));
+                                            http.http2_keep_alive_timeout(std::time::Duration::from_secs(20));
                                         } else {
                                             http.http1_only(true);
                                             http.http1_keep_alive(true);
