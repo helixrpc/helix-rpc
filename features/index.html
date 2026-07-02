@@ -1,0 +1,1099 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="The next-generation AI infrastructure framework for maximum efficiency.">
+      
+      
+      
+      
+        <link rel="prev" href="../architecture/">
+      
+      
+        <link rel="next" href="../languages/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Features - Helix RPC</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="black" data-md-color-accent="blue">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#core-features" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Helix RPC" class="md-header__button md-logo" aria-label="Helix RPC" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Helix RPC
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Features
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="black" data-md-color-accent="blue"  aria-hidden="true"  type="radio" name="__palette" id="__palette_0">
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="white" data-md-color-accent="blue"  aria-hidden="true"  type="radio" name="__palette" id="__palette_1">
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/helixrpc/helix-rpc" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    helixrpc/helix-rpc
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href=".." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../setup-configuration/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Setup & Configuration
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../architecture/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Architecture
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    <li class="md-tabs__item md-tabs__item--active">
+      <a href="./" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Features
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../languages/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Language Support
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../tutorials/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Tutorials
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../examples/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Examples
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../developer-guide/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Developer Guide
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../integrations/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Integrations
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../enterprise-concerns/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Enterprise Concerns
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+  
+
+<nav class="md-nav md-nav--primary md-nav--lifted md-nav--integrated" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Helix RPC" class="md-nav__button md-logo" aria-label="Helix RPC" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Helix RPC
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/helixrpc/helix-rpc" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    helixrpc/helix-rpc
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../setup-configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Setup & Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Features
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Features
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#dynamic-batching" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Dynamic Batching
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#zero-serialization-engine-rust" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Zero-Serialization Engine (Rust)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#native-sse-streaming" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Native SSE Streaming
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#graceful-shutdown" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Graceful Shutdown
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#structured-errors-helixerror" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Structured Errors (HelixError)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#production-middlewares" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Production Middlewares
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#distributed-tracing-opentelemetry" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Distributed Tracing (OpenTelemetry)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#circuit-breaker-retry-p99-hedging" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Circuit Breaker, Retry &amp; P99 Hedging
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#advanced-load-balancing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Advanced Load Balancing
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#multi-protocol-multiplexing-go" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Multi-Protocol Multiplexing (Go)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#prometheus-metrics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prometheus Metrics
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#developer-dashboard" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Developer Dashboard
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#schema-compatibility-engine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Schema Compatibility Engine
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dns-service-discovery" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DNS Service Discovery
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../languages/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Language Support
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../examples/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Examples
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../developer-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Developer Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../integrations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Integrations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../enterprise-concerns/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Enterprise Concerns
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="core-features">Core Features<a class="headerlink" href="#core-features" title="Permanent link">&para;</a></h1>
+<h2 id="dynamic-batching">Dynamic Batching<a class="headerlink" href="#dynamic-batching" title="Permanent link">&para;</a></h2>
+<p>AI models process large batches of data far more efficiently than individual requests. HTTP clients, however, fire one request at a time.</p>
+<p>Helix RPC's <code>BatchScheduler</code> intercepts concurrent individual REST/gRPC requests, holds them open for a configurable window (e.g. 50 ms), collapses them into a single array, and dispatches the array to the AI model as one GPU call. When the model finishes, the scheduler fans results back out to the correct waiting HTTP connections.</p>
+<p>This single feature can increase GPU throughput by up to <strong>10,000%</strong> under high load.</p>
+<p><strong>Available in:</strong> Go (<code>batching.go</code>), Rust (<code>batching.rs</code>), Python (<code>batching.py</code>)</p>
+<hr />
+<h2 id="zero-serialization-engine-rust">Zero-Serialization Engine (Rust)<a class="headerlink" href="#zero-serialization-engine-rust" title="Permanent link">&para;</a></h2>
+<p>JSON unmarshaling is incredibly CPU-intensive. Under heavy load, an API gateway can spend 60% of its CPU cycles just formatting JSON and Protobufs to talk to a Python backend.</p>
+<p>Helix RPC completely bypasses the network stack between the Gateway and the Model. It uses Rust's <code>PyO3</code> to invoke Python C-bindings natively in-memory — zero network hops, zero serialization, zero copies.</p>
+<p><strong>Available in:</strong> Rust only (by design)</p>
+<hr />
+<h2 id="native-sse-streaming">Native SSE Streaming<a class="headerlink" href="#native-sse-streaming" title="Permanent link">&para;</a></h2>
+<p>Chat UIs require real-time token streaming. Helix RPC implements native Server-Sent Events (SSE) across all three runtimes. When a client sends <code>Accept: text/event-stream</code>, the gateway automatically detects the stream, launches the async generator, and proxies yields into standard <code>data: {...}\n\n</code> SSE frames.</p>
+<p><strong>Available in:</strong> Go, Rust, Python</p>
+<hr />
+<h2 id="graceful-shutdown">Graceful Shutdown<a class="headerlink" href="#graceful-shutdown" title="Permanent link">&para;</a></h2>
+<p>In Kubernetes, pods are terminated during rolling updates. Without graceful shutdown, in-flight AI inference requests are silently dropped.</p>
+<p>Helix RPC implements graceful shutdown across all three runtimes:
+- <strong>Go</strong>: <code>broadcast.Sender</code> signals all connection handlers to call <code>conn.GracefulShutdown()</code> and drain.
+- <strong>Rust</strong>: <code>tokio::sync::broadcast</code> with <code>graceful_shutdown()</code> on each hyper connection.
+- <strong>Python</strong>: SIGTERM/SIGINT handlers set a stop event; <code>stop_async(drain_seconds=5.0)</code> waits for in-flight requests before tearing down the <code>AppRunner</code>.</p>
+<p><strong>Available in:</strong> Go, Rust, Python</p>
+<hr />
+<h2 id="structured-errors-helixerror">Structured Errors (<code>HelixError</code>)<a class="headerlink" href="#structured-errors-helixerror" title="Permanent link">&para;</a></h2>
+<p>All three runtimes define a common <code>HelixError</code> type carrying a gRPC-compatible <code>ErrorCode</code> (0–16) alongside a human-readable message. The runtime automatically maps the code to the correct HTTP status (e.g. <code>NOT_FOUND → 404</code>, <code>UNAVAILABLE → 503</code>) so handlers simply raise/return the error and the framework takes care of the wire format.</p>
+<p><strong>Available in:</strong> Go (<code>errors.go</code>), Rust (<code>errors.rs</code>), Python (<code>errors.py</code>)</p>
+<hr />
+<h2 id="production-middlewares">Production Middlewares<a class="headerlink" href="#production-middlewares" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>mTLS</strong>: Mutually authenticated TLS (<code>tokio-rustls</code> in Rust; <code>crypto/tls</code> in Go).</li>
+<li><strong>Health Checking</strong>: Standard <code>grpc.health.v1.Health/Check</code> auto-mounted so Kubernetes liveness/readiness probes work out of the box.</li>
+<li><strong>Interceptors / Middleware</strong>: Full unary interceptor chains in Go; <code>aiohttp</code> middleware stack in Python; <code>Service</code> wrappers in Rust.</li>
+<li><strong>Deadline Propagation (<code>grpc-timeout</code>)</strong>: All six units (<code>n/u/m/S/M/H</code>) parsed and converted into native <code>context.Context</code> deadlines (Go), <code>tokio::time::timeout</code> (Rust), or <code>asyncio.wait_for</code> (Python).</li>
+<li><strong>Per-Message Compression</strong>: Automatic <code>gzip</code> compress/decompress when the client sends <code>grpc-encoding: gzip</code>, across all three runtimes.</li>
+</ul>
+<hr />
+<h2 id="distributed-tracing-opentelemetry">Distributed Tracing (OpenTelemetry)<a class="headerlink" href="#distributed-tracing-opentelemetry" title="Permanent link">&para;</a></h2>
+<p>W3C <code>traceparent</code> / <code>tracestate</code> headers are extracted from every inbound request and used to start a child span, allowing full distributed tracing from the edge gateway down to the GPU model — across language boundaries.</p>
+<p>A <strong>configurable probabilistic sampler</strong> (default 1%) prevents the OpenTelemetry collector from being overwhelmed in production, while ensuring sufficient coverage for latency debugging.</p>
+<p><strong>Available in:</strong> Go (<code>telemetry.go</code>), Rust (<code>telemetry.rs</code>), Python (<code>telemetry.py</code>)</p>
+<hr />
+<h2 id="circuit-breaker-retry-p99-hedging">Circuit Breaker, Retry &amp; P99 Hedging<a class="headerlink" href="#circuit-breaker-retry-p99-hedging" title="Permanent link">&para;</a></h2>
+<p>Three resilience primitives work together to guarantee extreme availability:</p>
+<ol>
+<li><strong><code>CircuitBreaker</code></strong> — atomic FSM (Closed → Open → HalfOpen) that fast-fails requests when error rates exceed a threshold, preventing cascading failures across the cluster.</li>
+<li><strong>Exponential Backoff with Full Jitter</strong> — avoids thundering-herd retries. Sleep duration is <code>rand[0, backoff)</code> per the AWS recommendation.</li>
+<li><strong>P99 Hedging with <code>TokenBucket</code></strong> — if a request doesn't complete within the P99 latency threshold, a duplicate is fired to a different backend. The token bucket limits hedging to e.g. 10 duplicates/second, preventing hedge-induced amplification during cluster-wide slowdowns.</li>
+</ol>
+<p><strong>Available in:</strong> Go, Rust, Python</p>
+<hr />
+<h2 id="advanced-load-balancing">Advanced Load Balancing<a class="headerlink" href="#advanced-load-balancing" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Round-Robin</strong>: Thread-safe atomic counter; available in Go and Rust.</li>
+<li><strong>Least-Connections (<code>LeastConnBalancer</code>)</strong>: Lock-free in Go (atomic pointer swaps + cache-line padding); <code>RwLock</code>-based in Rust. Dynamically routes new requests to the backend with the fewest in-flight connections — ideal for AI inference where request latency is highly variable.</li>
+</ul>
+<p><strong>Available in:</strong> Go (lock-free), Rust</p>
+<hr />
+<h2 id="multi-protocol-multiplexing-go">Multi-Protocol Multiplexing (Go)<a class="headerlink" href="#multi-protocol-multiplexing-go" title="Permanent link">&para;</a></h2>
+<p>Unlike frameworks that force you to choose a protocol, Helix RPC multiplexes <strong>gRPC, REST, Apache Thrift, and SSE</strong> on the exact same port using <code>h2c</code> (HTTP/2 cleartext):</p>
+<ul>
+<li><strong>gRPC</strong>: First-class Protobuf framing.</li>
+<li><strong>Thrift</strong>: Deep native support for Apache Thrift binary protocol.</li>
+<li><strong>REST/JSON</strong>: Standard HTTP/1.1 with automatic JSON unmarshaling and path parameter extraction.</li>
+<li><strong>Server-Sent Events (SSE)</strong>: Built-in <code>text/event-stream</code> streaming.</li>
+</ul>
+<p><strong>Available in:</strong> Go (all four protocols)</p>
+<hr />
+<h2 id="prometheus-metrics">Prometheus Metrics<a class="headerlink" href="#prometheus-metrics" title="Permanent link">&para;</a></h2>
+<p>Helix RPC runtimes gather and expose performance metrics at <code>/metrics</code> and <code>/__helix/metrics</code> in the standard Prometheus text exposition format:
+- <code>helix_requests_total</code>: Total number of RPC requests labeled by method, path, and HTTP status.
+- <code>helix_errors_total</code>: Total number of RPC errors labeled by method and path.
+- <code>helix_request_duration_seconds</code>: Histogram of request latencies.
+- <code>helix_backend_active_connections</code>: Current active connections to each backend target.</p>
+<p><strong>Available in:</strong> Go, Rust, Python</p>
+<hr />
+<h2 id="developer-dashboard">Developer Dashboard<a class="headerlink" href="#developer-dashboard" title="Permanent link">&para;</a></h2>
+<p>Go services embed a single-page reactive dashboard at <code>/__helix/ui</code>. It offers:
+- Real-time visualization of circuit breaker states (CLOSED, OPEN, HALF-OPEN).
+- Average latency, error rate, and request counters per RPC method.
+- Real-time active connection tracking for the backend server pool.
+- <strong>Chaos Testing Override Controls</strong>: Live buttons to manually <strong>Trip</strong> (Force Open) or <strong>Reset</strong> (Force Close) the circuit breaker for verifying client-side failover logic.</p>
+<p><strong>Available in:</strong> Go (Dev UI)</p>
+<hr />
+<h2 id="schema-compatibility-engine">Schema Compatibility Engine<a class="headerlink" href="#schema-compatibility-engine" title="Permanent link">&para;</a></h2>
+<p>The <code>helix-gen diff &lt;old.proto&gt; &lt;new.proto&gt;</code> command uses a semantic compatibility engine to verify that schema updates don't break downstream clients:
+- <strong><code>BACKWARD_COMPATIBLE</code> (Safe)</strong>: Adding optional fields, new RPC services, new methods, or enum values.
+- <strong><code>BREAKING</code> (Fatal)</strong>: Deleting fields, changing field types, altering field tag IDs, renaming methods, changing streaming configurations, or making optional fields required.</p>
+<p><strong>Available in:</strong> Compiler CLI</p>
+<hr />
+<h2 id="dns-service-discovery">DNS Service Discovery<a class="headerlink" href="#dns-service-discovery" title="Permanent link">&para;</a></h2>
+<p>Helix supports pluggable service discovery interfaces. Out of the box, all runtimes provide:
+- <strong><code>StaticResolver</code></strong>: A local registry mapping service names directly to static IP addresses.
+- <strong><code>DNSResolver</code></strong>: Resolves target endpoints dynamically using standard A/AAAA record queries or port-aware SRV records—making it ready for Kubernetes cluster-internal service discovery.</p>
+<p><strong>Available in:</strong> Go, Rust, Python</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.tabs", "navigation.sections", "navigation.top", "toc.integrate", "search.suggest", "search.highlight"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
