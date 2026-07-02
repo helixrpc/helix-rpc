@@ -159,6 +159,7 @@ pub struct HelixHttpService<H> {
     pub streaming_handler: Option<Arc<dyn HttpStreamingHandler>>,
     pub sse_handler: Option<Arc<dyn HttpSseHandler>>,
     pub health_checker: Option<crate::health::HealthChecker>,
+    pub disable_metrics: bool,
 }
 
 impl<H, B> Service<Request<B>> for HelixHttpService<H>
@@ -182,12 +183,13 @@ where
         let streaming_handler = self.streaming_handler.clone();
         let sse_handler = self.sse_handler.clone();
         let health_checker = self.health_checker.clone();
+        let disable_metrics = self.disable_metrics;
         let start_time = std::time::Instant::now();
         Box::pin(async move {
             let path = req.uri().path().to_string();
             let req_method = req.method().as_str().to_uppercase();
 
-            if path == "/metrics" || path == "/metrics/" || path == "/__helix/metrics" || path == "/__helix/metrics/" {
+            if !disable_metrics && (path == "/metrics" || path == "/metrics/" || path == "/__helix/metrics" || path == "/__helix/metrics/") {
                 let metrics_data = crate::metrics::GLOBAL_METRICS.format_prometheus();
                 let response = Response::builder()
                     .status(StatusCode::OK)
@@ -605,9 +607,11 @@ where
         }.await;
 
             if let Ok(ref response) = response_result {
-                let duration = start_time.elapsed();
-                let status_code = response.status().as_u16();
-                crate::metrics::GLOBAL_METRICS.record(&req_method_clone, &path_clone, status_code, duration);
+                if !disable_metrics {
+                    let duration = start_time.elapsed();
+                    let status_code = response.status().as_u16();
+                    crate::metrics::GLOBAL_METRICS.record(&req_method_clone, &path_clone, status_code, duration);
+                }
             }
 
             response_result
@@ -629,6 +633,7 @@ pub async fn handle_http_connection<H>(
         streaming_handler: None,
         sse_handler: None,
         health_checker: Some(crate::health::HealthChecker::new()),
+        disable_metrics: false,
     };
     let mut builder = Http::new();
     if is_http2 {
@@ -659,6 +664,7 @@ pub async fn handle_http_connection_streaming<H>(
         streaming_handler: Some(streaming_handler),
         sse_handler: None,
         health_checker: Some(crate::health::HealthChecker::new()),
+        disable_metrics: false,
     };
     let mut builder = Http::new();
     if is_http2 {
@@ -675,6 +681,12 @@ pub async fn handle_http_connection_streaming<H>(
 
 use tokio::sync::broadcast;
 
+#[derive(Clone, Debug, Default)]
+pub struct ServerConfig {
+    pub disable_metrics: bool,
+    pub disable_health: bool,
+}
+
 pub struct HelixServer<H> {
     addr: String,
     handler: Arc<H>,
@@ -685,6 +697,7 @@ pub struct HelixServer<H> {
     shutdown_tx: broadcast::Sender<()>,
     #[allow(clippy::type_complexity)]
     protocol_fallback: Option<Arc<Box<dyn Fn(tokio::net::TcpStream, crate::sniffer::Protocol) + Send + Sync>>>,
+    config: ServerConfig,
 }
 
 impl<H: HttpServiceHandler + Send + Sync + 'static> HelixServer<H> {
@@ -699,7 +712,12 @@ impl<H: HttpServiceHandler + Send + Sync + 'static> HelixServer<H> {
             tls_acceptor: None,
             shutdown_tx: tx,
             protocol_fallback: None,
+            config: ServerConfig::default(),
         }
+    }
+
+    pub fn set_config(&mut self, config: ServerConfig) {
+        self.config = config;
     }
 
     pub fn set_streaming_handler(&mut self, handler: Arc<dyn HttpStreamingHandler>) {
@@ -733,6 +751,7 @@ impl<H: HttpServiceHandler + Send + Sync + 'static> HelixServer<H> {
                     let sse_handler = self.sse_handler.clone();
                     let fallback = self.protocol_fallback.clone();
                     let mut conn_shutdown_rx = self.shutdown_tx.subscribe();
+                    let config = self.config.clone();
                     
                     tokio::spawn(async move {
                         let mut buf = [0u8; 8];
@@ -764,7 +783,8 @@ impl<H: HttpServiceHandler + Send + Sync + 'static> HelixServer<H> {
                                         rest_routes,
                                         streaming_handler,
                                         sse_handler: sse_handler.clone(),
-                                        health_checker: Some(crate::health::HealthChecker::new()),
+                                        health_checker: if config.disable_health { None } else { Some(crate::health::HealthChecker::new()) },
+                                        disable_metrics: config.disable_metrics,
                                     };
                                     
                                     let conn = http.serve_connection(tls_stream, service);
@@ -792,13 +812,14 @@ impl<H: HttpServiceHandler + Send + Sync + 'static> HelixServer<H> {
                                     http.http1_only(true);
                                     http.http1_keep_alive(true);
                                 }
-                                let service = HelixHttpService {
-                                    handler,
-                                    rest_routes,
-                                    streaming_handler,
-                                    sse_handler,
-                                    health_checker: Some(crate::health::HealthChecker::new()),
-                                };
+                                 let service = HelixHttpService {
+                                     handler,
+                                     rest_routes,
+                                     streaming_handler,
+                                     sse_handler,
+                                     health_checker: if config.disable_health { None } else { Some(crate::health::HealthChecker::new()) },
+                                     disable_metrics: config.disable_metrics,
+                                 };
                                 let conn = http.serve_connection(stream, service);
                                 let mut conn = Box::pin(conn.with_upgrades());
                                 tokio::select! {

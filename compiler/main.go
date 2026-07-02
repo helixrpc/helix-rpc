@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/helix-rpc/helix/compiler/ast"
@@ -177,24 +178,53 @@ func generate(idlPath, lang, outPath string) error {
 func runInit(args []string) {
 	fs := flag.NewFlagSet("init", flag.ExitOnError)
 	lang := fs.String("lang", "go", "Primary language (go, rust, python)")
+	disableMetrics := fs.Bool("disable-metrics", false, "Disable Prometheus metrics endpoint")
+	disableHealth := fs.Bool("disable-health", false, "Disable built-in health checking")
+	disableGzip := fs.Bool("disable-gzip", false, "Disable response gzip compression")
+	disableDeadline := fs.Bool("disable-deadline", false, "Disable deadline propagation")
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "Usage: helix-gen init <service-name> [--lang go|rust|python]")
+		fmt.Fprintln(os.Stderr, "Usage: helix-gen init <service-name> [--lang go|rust|python] [--disable-metrics] [--disable-health] [--disable-gzip] [--disable-deadline]")
 	}
-	fs.Parse(args) //nolint:errcheck
 
-	name := fs.Arg(0)
-	if name == "" {
+	var serviceName string
+	var flagArgs []string
+	for i := 0; i < len(args); i++ {
+		if strings.HasPrefix(args[i], "-") {
+			flagArgs = append(flagArgs, args[i])
+			if (args[i] == "-lang" || args[i] == "--lang") && i+1 < len(args) {
+				flagArgs = append(flagArgs, args[i+1])
+				i++
+			}
+		} else {
+			if serviceName == "" {
+				serviceName = args[i]
+			} else {
+				flagArgs = append(flagArgs, args[i])
+			}
+		}
+	}
+
+	fs.Parse(flagArgs) //nolint:errcheck
+
+	if serviceName == "" {
 		fs.Usage()
 		printError("service name is required")
 		os.Exit(1)
 	}
 
-	if err := scaffold(name, *lang); err != nil {
+	if err := scaffold(serviceName, *lang, *disableMetrics, *disableHealth, *disableGzip, *disableDeadline); err != nil {
 		log.Fatal(err)
 	}
 }
 
-func scaffold(name, lang string) error {
+func pyBool(val bool) string {
+	if val {
+		return "True"
+	}
+	return "False"
+}
+
+func scaffold(name, lang string, disableMetrics, disableHealth, disableGzip, disableDeadline bool) error {
 	base := name
 	if err := os.MkdirAll(base, 0755); err != nil {
 		return err
@@ -287,7 +317,10 @@ import (
 )
 
 func main() {
-	server := runtime.NewServer(":8080")
+	server := runtime.NewServerWithConfig(":8080", runtime.ServerConfig{
+		DisableMetrics: %t,
+		DisableHealth:  %t,
+	})
 
 	// Register your service methods here
 	server.RegisterMethod("/v1.ModelService/Predict", runtime.MethodInfo{
@@ -300,7 +333,7 @@ func main() {
 	log.Println("🚀 %s listening on :8080")
 	log.Fatal(server.Start())
 }
-`, name, name))
+`, disableMetrics, disableHealth, name, name))
 
 	case "python":
 		os.MkdirAll(filepath.Join(base, "generated"), 0755) //nolint:errcheck
@@ -309,7 +342,14 @@ sys.path.insert(0, ".")
 
 from helix_rt.server import HelixServer
 
-server = HelixServer(host="127.0.0.1", port=8080)
+server = HelixServer(
+    host="127.0.0.1",
+    port=8080,
+    disable_metrics=%s,
+    disable_health=%s,
+    disable_gzip=%s,
+    disable_deadline=%s,
+)
 
 async def predict(body: dict) -> dict:
     prompt = body.get("prompt", "")
@@ -317,7 +357,7 @@ async def predict(body: dict) -> dict:
 
 server.register_route("POST", "/predict", predict)
 server.start()
-`, name))
+`, pyBool(disableMetrics), pyBool(disableHealth), pyBool(disableGzip), pyBool(disableDeadline), name))
 
 	case "rust":
 		os.MkdirAll(filepath.Join(base, "src"), 0755)       //nolint:errcheck
@@ -332,16 +372,20 @@ helix-rt = "0.1.0"
 tokio = { version = "1.0", features = ["full"] }
 serde_json = "1.0"
 `, name))
-		writeFile(filepath.Join(base, "src", "main.rs"), fmt.Sprintf(`use helix_rt::server::{HttpServiceHandler, RestRoute};
+		writeFile(filepath.Join(base, "src", "main.rs"), fmt.Sprintf(`use helix_rt::server::{HttpServiceHandler, RestRoute, HelixServer, ServerConfig};
 use std::sync::Arc;
 
 #[tokio::main]
 async fn main() {
     println!("🚀 %s listening on :8080");
-    // Add your service handler here
+    // To configure custom options:
+    // let mut config = ServerConfig::default();
+    // config.disable_metrics = %t;
+    // config.disable_health = %t;
+    // ...
     todo!("wire up generated handler")
 }
-`, name))
+`, name, disableMetrics, disableHealth))
 	}
 
 	fmt.Printf("\n✅ Scaffolded %q (%s)\n\n", name, lang)

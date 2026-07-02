@@ -71,14 +71,27 @@ class HelixServer:
     time, matching the Go and Rust gateway behaviour.
     """
 
-    def __init__(self, host: str = "127.0.0.1", port: int = 8080):
+    def __init__(
+        self,
+        host: str = "127.0.0.1",
+        port: int = 8080,
+        disable_metrics: bool = False,
+        disable_health: bool = False,
+        disable_gzip: bool = False,
+        disable_deadline: bool = False,
+    ):
         self.host = host
         self.port = port
-        self.app = web.Application(middlewares=[
-            telemetry_middleware,
-            deadline_middleware,
-            gzip_middleware,
-        ])
+        
+        middlewares = [telemetry_middleware]
+        if not disable_deadline:
+            middlewares.append(deadline_middleware)
+        if not disable_gzip:
+            middlewares.append(gzip_middleware)
+
+        self.app = web.Application(middlewares=middlewares)
+        self.disable_metrics = disable_metrics
+        self.disable_health = disable_health
         self._runner: web.AppRunner | None = None
         self._site:   web.TCPSite | None   = None
 

@@ -539,19 +539,44 @@ type Server struct {
 	debugBreaker     *CircuitBreaker
 }
 
-func NewServer(addr string) *Server {
-	hc := NewHealthChecker()
+type ServerConfig struct {
+	SniffTimeout   time.Duration
+	DisableHealth  bool
+	DisableMetrics bool
+	DisableDebugUI bool
+	TLSConfig      *tls.Config
+}
+
+func NewServerWithConfig(addr string, config ServerConfig) *Server {
+	var hc *HealthChecker
 	handler := NewGRPCHandler()
-	RegisterHealthMethods(handler, hc)
-	s := &Server{
-		Addr:        addr,
-		Health:      hc,
-		grpcHandler: handler,
+	if !config.DisableHealth {
+		hc = NewHealthChecker()
+		RegisterHealthMethods(handler, hc)
 	}
-	MountDebugHandler(handler.debugMux, s)
-	MountMetricsHandler(handler.debugMux)
-	MountDebugUI(handler.debugMux)
+
+	s := &Server{
+		Addr:            addr,
+		SniffTimeout:    config.SniffTimeout,
+		Health:          hc,
+		TLSConfig:       config.TLSConfig,
+		grpcHandler:     handler,
+	}
+
+	if !config.DisableDebugUI || !config.DisableMetrics {
+		MountDebugHandler(handler.debugMux, s)
+	}
+	if !config.DisableMetrics {
+		MountMetricsHandler(handler.debugMux)
+	}
+	if !config.DisableDebugUI {
+		MountDebugUI(handler.debugMux)
+	}
 	return s
+}
+
+func NewServer(addr string) *Server {
+	return NewServerWithConfig(addr, ServerConfig{})
 }
 
 func (s *Server) RegisterMethod(path string, methodInfo MethodInfo) {
