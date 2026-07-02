@@ -6,6 +6,8 @@ pub mod client_pool;
 pub mod deadline;
 pub mod health;
 pub mod compression;
+pub mod batching;
+pub mod retry;
 
 pub use sniffer::{sniff_protocol, Protocol};
 pub use server::{
@@ -23,6 +25,11 @@ pub use shm_transport::ShmConn;
 pub use deadline::{parse_grpc_timeout, extract_deadline};
 pub use health::{HealthChecker, HealthStatus};
 pub use compression::{Compressor, GzipCompressor, get_compressor};
+pub use batching::{BatchScheduler, LeastConnBalancer};
+pub use retry::{CircuitBreaker, TokenBucket, RetryPolicy, execute_with_retry};
 pub mod telemetry; pub use telemetry::attach_span_context;
 pub mod pyo3_runner;
 pub use pyo3_runner::PyModelHandler;
+
+#[cfg(test)]
+mod tests_resilience;
