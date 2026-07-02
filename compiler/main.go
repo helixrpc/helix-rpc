@@ -179,13 +179,14 @@ func generate(idlPath, lang, outPath string) error {
 
 func runInit(args []string) {
 	fs := flag.NewFlagSet("init", flag.ExitOnError)
-	lang := fs.String("lang", "go", "Primary language (go, rust, python)")
+	lang := fs.String("lang", "go", "Primary language (go, rust, python, node)")
+	db := fs.String("db", "none", "Scaffold database configuration (mysql, nosql, none)")
 	disableMetrics := fs.Bool("disable-metrics", false, "Disable Prometheus metrics endpoint")
 	disableHealth := fs.Bool("disable-health", false, "Disable built-in health checking")
 	disableGzip := fs.Bool("disable-gzip", false, "Disable response gzip compression")
 	disableDeadline := fs.Bool("disable-deadline", false, "Disable deadline propagation")
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "Usage: helix-gen init <service-name> [--lang go|rust|python] [--disable-metrics] [--disable-health] [--disable-gzip] [--disable-deadline]")
+		fmt.Fprintln(os.Stderr, "Usage: helix-gen init <service-name> [--lang go|rust|python|node] [--db mysql|nosql|none] [--disable-metrics] [--disable-health] [--disable-gzip] [--disable-deadline]")
 	}
 
 	var serviceName string
@@ -193,7 +194,7 @@ func runInit(args []string) {
 	for i := 0; i < len(args); i++ {
 		if strings.HasPrefix(args[i], "-") {
 			flagArgs = append(flagArgs, args[i])
-			if (args[i] == "-lang" || args[i] == "--lang") && i+1 < len(args) {
+			if (args[i] == "-lang" || args[i] == "--lang" || args[i] == "-db" || args[i] == "--db") && i+1 < len(args) {
 				flagArgs = append(flagArgs, args[i+1])
 				i++
 			}
@@ -214,7 +215,7 @@ func runInit(args []string) {
 		os.Exit(1)
 	}
 
-	if err := scaffold(serviceName, *lang, *disableMetrics, *disableHealth, *disableGzip, *disableDeadline); err != nil {
+	if err := scaffold(serviceName, *lang, *db, *disableMetrics, *disableHealth, *disableGzip, *disableDeadline); err != nil {
 		log.Fatal(err)
 	}
 }
@@ -226,7 +227,7 @@ func pyBool(val bool) string {
 	return "False"
 }
 
-func scaffold(name, lang string, disableMetrics, disableHealth, disableGzip, disableDeadline bool) error {
+func scaffold(name, lang, dbType string, disableMetrics, disableHealth, disableGzip, disableDeadline bool) error {
 	base := name
 	if err := os.MkdirAll(base, 0755); err != nil {
 		return err
@@ -257,20 +258,20 @@ LANG    := %s
 .PHONY: gen build test dev docker-build deploy-aws deploy-gcp deploy-azure
 
 gen:
-	helix-gen generate -idl schema.proto -lang $(LANG) -out generated/generated.$(if $(filter go,$(LANG)),go,$(if $(filter rust,$(LANG)),rs,py))
+	helix-gen generate -idl schema.proto -lang $(LANG) -out generated/generated.$(if $(filter go,$(LANG)),go,$(if $(filter rust,$(LANG)),rs,$(if $(filter node,$(LANG)),ts,py)))
 
 watch:
-	helix-gen generate -idl schema.proto -lang $(LANG) -out generated/generated.$(if $(filter go,$(LANG)),go,$(if $(filter rust,$(LANG)),rs,py)) --watch
+	helix-gen generate -idl schema.proto -lang $(LANG) -out generated/generated.$(if $(filter go,$(LANG)),go,$(if $(filter rust,$(LANG)),rs,$(if $(filter node,$(LANG)),ts,py))) --watch
 
 build: gen
-	$(if $(filter go,$(LANG)),go build ./...,$(if $(filter rust,$(LANG)),cargo build,echo "Python: no build step required"))
+	$(if $(filter go,$(LANG)),go build ./...,$(if $(filter rust,$(LANG)),cargo build,$(if $(filter node,$(LANG)),npm run build,echo "Python: no build step required")))
 
 test:
-	$(if $(filter go,$(LANG)),go test ./...,$(if $(filter rust,$(LANG)),cargo test,pytest tests/))
+	$(if $(filter go,$(LANG)),go test ./...,$(if $(filter rust,$(LANG)),cargo test,$(if $(filter node,$(LANG)),npm test,pytest tests/)))
 
 dev: gen
 	@echo "🚀 Starting $(SERVICE) in dev mode..."
-	$(if $(filter go,$(LANG)),go run server/main.go,$(if $(filter rust,$(LANG)),cargo run,python server.py))
+	$(if $(filter go,$(LANG)),go run server/main.go,$(if $(filter rust,$(LANG)),cargo run,$(if $(filter node,$(LANG)),npm run dev,python server.py)))
 
 docker-build:
 	@echo "🐳 Building optimized Docker container..."
@@ -340,7 +341,29 @@ Edit [schema.proto](./schema.proto) and run `+"`make gen`"+` to regenerate.
 	case "go":
 		os.MkdirAll(filepath.Join(base, "server"), 0755)     //nolint:errcheck
 		os.MkdirAll(filepath.Join(base, "generated"), 0755)  //nolint:errcheck
-		writeFile(filepath.Join(base, "go.mod"), fmt.Sprintf("module github.com/example/%s\n\ngo 1.22\n\nrequire github.com/helix-rpc/helix/runtime-go v0.2.0\n", name))
+		goModDeps := "require github.com/helix-rpc/helix/runtime-go v0.2.0\n"
+		if dbType == "mysql" {
+			goModDeps += "require github.com/go-sql-driver/mysql v1.8.1\n"
+			writeFile(filepath.Join(base, "server", "database.go"), `package main
+import (
+	"database/sql"
+	_ "github.com/go-sql-driver/mysql"
+)
+func ConnectDB() (*sql.DB, error) {
+	return sql.Open("mysql", "root:secret@tcp(127.0.0.1:3306)/dbname")
+}
+`)
+		} else if dbType == "nosql" {
+			goModDeps += "require github.com/redis/go-redis/v9 v9.7.0\n"
+			writeFile(filepath.Join(base, "server", "database.go"), `package main
+import "github.com/redis/go-redis/v9"
+func ConnectNoSQL() *redis.Client {
+	return redis.NewClient(&redis.Options{Addr: "127.0.0.1:6379"})
+}
+`)
+		}
+		writeFile(filepath.Join(base, "go.mod"), fmt.Sprintf("module github.com/example/%s\n\ngo 1.24\n\n%s", name, goModDeps))
+
 		writeFile(filepath.Join(base, "server", "main.go"), fmt.Sprintf(`package main
 
 import (
@@ -385,6 +408,17 @@ func main() {
 
 	case "python":
 		os.MkdirAll(filepath.Join(base, "generated"), 0755) //nolint:errcheck
+		if dbType == "mysql" {
+			writeFile(filepath.Join(base, "database.py"), `import aiomysql
+async def connect_db():
+    return await aiomysql.create_pool(host='127.0.0.1', port=3306, user='root', password='', db='dbname')
+`)
+		} else if dbType == "nosql" {
+			writeFile(filepath.Join(base, "database.py"), `import redis.asyncio as redis
+def connect_nosql():
+    return redis.Redis(host='127.0.0.1', port=6379)
+`)
+		}
 		writeFile(filepath.Join(base, "server.py"), fmt.Sprintf(`import sys
 sys.path.insert(0, ".")
 
@@ -424,17 +458,30 @@ server.start()
 	case "rust":
 		os.MkdirAll(filepath.Join(base, "src"), 0755)       //nolint:errcheck
 		os.MkdirAll(filepath.Join(base, "generated"), 0755) //nolint:errcheck
+		rustDeps := "helix-rt = \"0.1.0\"\ntokio = { version = \"1.0\", features = [\"full\"] }\nserde_json = \"1.0\"\nserde = { version = \"1.0\", features = [\"derive\"] }\n"
+		if dbType == "mysql" {
+			rustDeps += "sqlx = { version = \"0.7\", features = [\"runtime-tokio-native-tls\", \"mysql\"] }\n"
+			writeFile(filepath.Join(base, "src", "database.rs"), `use sqlx::mysql::MySqlPool;
+pub async fn connect_db() -> Result<MySqlPool, sqlx::Error> {
+	MySqlPool::connect("mysql://root:secret@127.0.0.1:3306/dbname").await
+}
+`)
+		} else if dbType == "nosql" {
+			rustDeps += "redis = \"0.25\"\n"
+			writeFile(filepath.Join(base, "src", "database.rs"), `use redis::Client;
+pub fn connect_nosql() -> Result<Client, redis::RedisError> {
+	Client::open("redis://127.0.0.1:6379")
+}
+`)
+		}
 		writeFile(filepath.Join(base, "Cargo.toml"), fmt.Sprintf(`[package]
 name = "%s"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-helix-rt = "0.1.0"
-tokio = { version = "1.0", features = ["full"] }
-serde_json = "1.0"
-serde = { version = "1.0", features = ["derive"] }
-`, name))
+%s`, name, rustDeps))
+
 		writeFile(filepath.Join(base, "src", "main.rs"), fmt.Sprintf(`use helix_rt::server::{HttpServiceHandler, RestRoute, HelixServer, ServerConfig};
 use helix_rt::config::{load_config, watch_config};
 use std::sync::Arc;
@@ -452,6 +499,64 @@ async fn main() {
     todo!("wire up generated handler")
 }
 `, name))
+
+	case "node", "typescript":
+		os.MkdirAll(filepath.Join(base, "src"), 0755)       //nolint:errcheck
+		os.MkdirAll(filepath.Join(base, "generated"), 0755) //nolint:errcheck
+		nodeDeps := `"helix-rt-node": "file:../../runtime-node"`
+		if dbType == "mysql" {
+			nodeDeps += ",\n    \"mysql2\": \"^3.9.0\""
+			writeFile(filepath.Join(base, "src", "database.ts"), `import mysql from 'mysql2/promise';
+export async function connectDB() {
+    return mysql.createPool({ host: '127.0.0.1', user: 'root', database: 'dbname' });
+}
+`)
+		} else if dbType == "nosql" {
+			nodeDeps += ",\n    \"ioredis\": \"^5.3.2\""
+			writeFile(filepath.Join(base, "src", "database.ts"), `import Redis from 'ioredis';
+export function connectNoSQL() {
+    return new Redis('redis://127.0.0.1:6379');
+}
+`)
+		}
+
+		writeFile(filepath.Join(base, "package.json"), fmt.Sprintf(`{
+  "name": "%s",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "test": "tsc && node dist/test.js",
+    "dev": "tsc && node dist/server.js"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3",
+    "@types/node": "^20.0.0"
+  },
+  "dependencies": {
+    %s
+  }
+}
+`, name, nodeDeps))
+
+		writeFile(filepath.Join(base, "tsconfig.json"), `{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "declaration": true,
+    "outDir": "./dist",
+    "strict": true,
+    "skipLibCheck": true
+  },
+  "include": ["src/**/*"]
+}
+`)
+
+		writeFile(filepath.Join(base, "src", "server.ts"), `import { HelixServer } from 'helix-rt-node';
+const server = new HelixServer('127.0.0.1:8080');
+console.log("Starting Node.js Helix server...");
+await server.start();
+`)
 	}
 
 	fmt.Printf("\n✅ Scaffolded %q (%s)\n\n", name, lang)
