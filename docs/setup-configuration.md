@@ -97,3 +97,29 @@ pip install torch transformers
 ./target/release/rust-ai-gateway
 ```
 Because the virtual environment is activated, `pyo3` will automatically locate your installed dependencies and seamlessly load them into the embedded interpreter!
+
+## 4. File-Based Configuration (helix.json)
+
+Helix supports configuring all operations via a central JSON file named `helix.json`. This file is generated automatically during project scaffolding (`helix-gen init`).
+
+### Configuration Schema
+```json
+{
+  "host": "127.0.0.1",
+  "port": 8080,
+  "disable_metrics": false,
+  "disable_health": false,
+  "disable_gzip": false,
+  "disable_deadline": false,
+  "rate_limit_rate": 100.0,
+  "rate_limit_burst": 10
+}
+```
+
+### Dynamic Hot-Reloading
+All runtimes support watching the `helix.json` file for changes and dynamically hot-reloading configurables on the fly without needing to restart the process.
+
+- **Go**: `runtime.WatchConfig("helix.json", callback)`
+- **Rust**: `watch_config("helix.json".to_string(), callback)`
+- **Python**: `watch_config("helix.json", callback)`
+

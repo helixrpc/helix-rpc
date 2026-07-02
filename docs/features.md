@@ -92,3 +92,34 @@ Unlike frameworks that force you to choose a protocol, Helix RPC multiplexes **g
 - **Server-Sent Events (SSE)**: Built-in `text/event-stream` streaming.
 
 **Available in:** Go (all four protocols)
+
+---
+
+## Prometheus Metrics
+Helix RPC runtimes gather and expose performance metrics at `/metrics` and `/__helix/metrics` in the standard Prometheus text exposition format:
+- `helix_requests_total`: Total number of RPC requests labeled by method, path, and HTTP status.
+- `helix_errors_total`: Total number of RPC errors labeled by method and path.
+- `helix_request_duration_seconds`: Histogram of request latencies.
+- `helix_backend_active_connections`: Current active connections to each backend target.
+
+**Available in:** Go, Rust, Python
+
+---
+
+## Developer Dashboard
+Go services embed a single-page reactive dashboard at `/__helix/ui`. It offers:
+- Real-time visualization of circuit breaker states (CLOSED, OPEN, HALF-OPEN).
+- Average latency, error rate, and request counters per RPC method.
+- Real-time active connection tracking for the backend server pool.
+- **Chaos Testing Override Controls**: Live buttons to manually **Trip** (Force Open) or **Reset** (Force Close) the circuit breaker for verifying client-side failover logic.
+
+**Available in:** Go (Dev UI)
+
+---
+
+## Schema Compatibility Engine
+The `helix-gen diff <old.proto> <new.proto>` command uses a semantic compatibility engine to verify that schema updates don't break downstream clients:
+- **`BACKWARD_COMPATIBLE` (Safe)**: Adding optional fields, new RPC services, new methods, or enum values.
+- **`BREAKING` (Fatal)**: Deleting fields, changing field types, altering field tag IDs, renaming methods, changing streaming configurations, or making optional fields required.
+
+**Available in:** Compiler CLI
