@@ -19,7 +19,7 @@ pub use metadata::get_metadata;
 pub use errors::{ErrorCode, HelixError};
 pub use client_pool::{ClientConnPool, Balancer, RoundRobinBalancer};
 pub mod resolver;
-pub use resolver::{Resolver, StaticResolver};
+pub use resolver::{Resolver, StaticResolver, DnsResolver};
 pub mod shm_transport;
 pub use shm_transport::ShmConn;
 pub use deadline::{parse_grpc_timeout, extract_deadline};
