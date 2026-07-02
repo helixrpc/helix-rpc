@@ -171,4 +171,37 @@ helix-gen diff <old-schema> <new-schema>
 
 Returns exit code `2` if breaking modifications are detected, allowing easy integration with CI/CD gates.
 
+## 6. Secure & High-Performance Containers
+
+Helix RPC provides optimized packaging blueprints for deployment into production clouds, microVM environments, and bare-metal environments.
+
+### Custom Docker Scratch Containers (`containers/`)
+These containers use multi-stage builds to compile statically linked binaries, running them on top of a bare `scratch` image (approx. 10MB) for maximum security and minimal latency.
+
+1. **Build & Run via Docker Compose:**
+   ```bash
+   docker-compose -f containers/docker-compose.yaml up --build
+   ```
+   This automatically:
+   - Configures optimized Linux TCP/IP network kernel parameters (sysctls).
+   - Mounts the host's `/dev/shm` shared memory partition inside the container to enable zero-copy POSIX shared-memory IPC.
+
+### Firecracker microVM Packaging (`firecracker/`)
+For multi-tenant systems requiring secure hardware-level isolation with fast spin-up times, you can compile and package the Helix service into a Firecracker microVM running directly as PID 1 (init) on the Linux kernel.
+
+1. **Build the RootFS Image:**
+   ```bash
+   # Compiles Go/Rust service statically and builds a minimal ext4 rootfs disk
+   ./firecracker/setup_microvm.sh <service-directory> [go|rust]
+   ```
+2. **Download Kernel & Launch VM:**
+   ```bash
+   # Download KVM-compatible vmlinux kernel
+   curl -fsSL -o firecracker/vmlinux https://s3.amazonaws.com/spec.ccfc.min/firecracker-kernels/vmlinux-5.10.0
+
+   # Run Firecracker microVM (boots in under 5ms)
+   firecracker --config-file firecracker/config.json
+   ```
+
+
 
