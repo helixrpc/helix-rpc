@@ -1,0 +1,21 @@
+# --- Multi-stage build for Rust Helix RPC service ---
+FROM rust:1.75-slim AS builder
+
+WORKDIR /app
+COPY . .
+
+# Add musl target for static compilation
+RUN rustup target add x86_64-unknown-linux-musl
+
+# Compile release static binary
+RUN cargo build --target x86_64-unknown-linux-musl --release
+
+# --- Final minimal secure stage ---
+FROM scratch
+
+# Copy statically compiled Rust binary and JSON config
+COPY --from=builder /app/target/x86_64-unknown-linux-musl/release/*-service /server
+COPY --from=builder /app/helix.json /helix.json
+
+EXPOSE 8080
+ENTRYPOINT ["/server"]

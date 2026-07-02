@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  helix-service:
+    build:
+      context: ../
+      dockerfile: containers/Dockerfile.go
+    ports:
+      - "8080:8080"
+    # Mount shared memory for high-throughput zero-copy IPC
+    volumes:
+      - /dev/shm:/dev/shm
+    # Kernel tuning sysctls for low-latency network performance
+    sysctls:
+      - net.core.somaxconn=65535
+      - net.ipv4.tcp_max_syn_backlog=65535
+      - net.ipv4.tcp_fastopen=3
+      - net.ipv4.tcp_slow_start_after_idle=0
+    # Enable CPU pinning/limits to prevent scheduling context switches
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 512M
