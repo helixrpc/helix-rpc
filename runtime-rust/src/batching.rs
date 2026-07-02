@@ -57,7 +57,7 @@ impl BatchScheduler {
 
                         match results {
                             Ok(Ok(resps)) if resps.len() == batch.len() => {
-                                for (req, resp) in batch.drain(..).zip(resps.into_iter()) {
+                                for (req, resp) in batch.drain(..).zip(resps) {
                                     let _ = req.tx.send(Ok((resp, if is_json { "application/json".to_string() } else { "application/grpc".to_string() })));
                                 }
                             }

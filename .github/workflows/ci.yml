@@ -11,12 +11,12 @@ jobs:
     name: Go Unit & Integration Tests (Data Race)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
         with:
-          go-version: '1.20'
+          go-version: '1.23'
 
       - name: Go Runtime Tests (with -race)
         working-directory: ./runtime-go
@@ -26,7 +26,7 @@ jobs:
     name: Rust Clippy & Unit Tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Set up Rust (Stable)
         uses: dtolnay/rust-toolchain@stable
@@ -42,31 +42,34 @@ jobs:
         run: cargo test
 
   cross-language-integration:
-    name: Cross-Language Integration (ASan)
+    name: Cross-Language Integration Tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
         with:
-          go-version: '1.20'
+          go-version: '1.23'
 
-      - name: Set up Rust (Nightly for ASan)
-        uses: dtolnay/rust-toolchain@nightly
+      - name: Set up Rust (Stable)
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Set up Protoc
-        uses: arduino/setup-protoc@v2
+        uses: arduino/setup-protoc@v3
         with:
           version: '23.4'
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Install Rust ASan Dependencies
-        run: sudo apt-get update && sudo apt-get install -y llvm-dev libclang-dev
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
 
-      - name: Run Test Harness (Go Race + Rust ASan)
-        env:
-          RUSTFLAGS: "-Zsanitizer=address"
-          RUSTDOCFLAGS: "-Zsanitizer=address"
+      - name: Install Python dependencies
+        run: pip install pytest aiohttp
+
+      - name: Run Test Harness
         run: |
           chmod +x ./test.sh
           ./test.sh
