@@ -252,7 +252,7 @@ service ModelService {
 	writeFile(filepath.Join(base, "Makefile"), fmt.Sprintf(`SERVICE := %s
 LANG    := %s
 
-.PHONY: gen build test dev
+.PHONY: gen build test dev docker-build deploy-aws deploy-gcp deploy-azure
 
 gen:
 	helix-gen generate -idl schema.proto -lang $(LANG) -out generated/generated.$(if $(filter go,$(LANG)),go,$(if $(filter rust,$(LANG)),rs,py))
@@ -269,6 +269,22 @@ test:
 dev: gen
 	@echo "🚀 Starting $(SERVICE) in dev mode..."
 	$(if $(filter go,$(LANG)),go run server/main.go,$(if $(filter rust,$(LANG)),cargo run,python server.py))
+
+docker-build:
+	@echo "🐳 Building optimized Docker container..."
+	docker build -t $(SERVICE):latest -f containers/Dockerfile.$(LANG) .
+
+deploy-aws:
+	@echo "☁️ Deploying to AWS Fargate..."
+	cd deployments && terraform init && terraform apply -target=aws_ecs_service.helix_service -auto-approve
+
+deploy-gcp:
+	@echo "☁️ Deploying to GCP Cloud Run..."
+	cd deployments && terraform init && terraform apply -target=google_cloud_run_service.helix_service -auto-approve
+
+deploy-azure:
+	@echo "☁️ Deploying to Azure Container Apps..."
+	cd deployments && terraform init && terraform apply -target=azurerm_container_app.helix_app -auto-approve
 `, name, lang))
 
 	// README
