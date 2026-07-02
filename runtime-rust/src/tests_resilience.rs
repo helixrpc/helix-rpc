@@ -338,5 +338,21 @@ mod resilience_tests {
         let (_, allowed3) = limiter.allow("client1");
         assert!(!allowed3);
     }
+
+    #[test]
+    fn test_metrics_collection() {
+        use crate::metrics::MetricsCollector;
+        use std::time::Duration;
+
+        let collector = MetricsCollector::new();
+        collector.record("POST", "/predict", 200, Duration::from_millis(50));
+        collector.record("POST", "/predict", 500, Duration::from_millis(150));
+
+        let formatted = collector.format_prometheus();
+        assert!(formatted.contains("helix_requests_total{method=\"POST\",path=\"/predict\",status=\"200\"} 1"));
+        assert!(formatted.contains("helix_requests_total{method=\"POST\",path=\"/predict\",status=\"500\"} 1"));
+        assert!(formatted.contains("helix_errors_total{method=\"POST\",path=\"/predict\"} 1"));
+        assert!(formatted.contains("helix_request_duration_seconds_count{method=\"POST\",path=\"/predict\"} 2"));
+    }
 }
 

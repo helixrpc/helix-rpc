@@ -182,30 +182,45 @@ where
         let streaming_handler = self.streaming_handler.clone();
         let sse_handler = self.sse_handler.clone();
         let health_checker = self.health_checker.clone();
+        let start_time = std::time::Instant::now();
         Box::pin(async move {
             let path = req.uri().path().to_string();
             let req_method = req.method().as_str().to_uppercase();
+
+            if path == "/metrics" || path == "/metrics/" || path == "/__helix/metrics" || path == "/__helix/metrics/" {
+                let metrics_data = crate::metrics::GLOBAL_METRICS.format_prometheus();
+                let response = Response::builder()
+                    .status(StatusCode::OK)
+                    .header("content-type", "text/plain; version=0.0.4")
+                    .body(Body::from(metrics_data))
+                    .unwrap();
+                return Ok(response);
+            }
 
             let span = tracing::info_span!("HTTP Request", method = %req_method, path = %path);
             crate::telemetry::attach_span_context(req.headers(), &span, crate::telemetry::SamplingStrategy::Probabilistic(0.01));
             let _enter = span.enter();
 
-            let content_type = req.headers()
-                .get("content-type")
-                .and_then(|v| v.to_str().ok())
-                .unwrap_or("");
+            let path_clone = path.clone();
+            let req_method_clone = req_method.clone();
 
-            // If REST endpoint call, default content_type to application/json if empty
-            let is_json = content_type == "application/json" || content_type.is_empty();
-            let is_grpc = content_type == "application/grpc";
+            let response_result = async move {
+                let content_type = req.headers()
+                    .get("content-type")
+                    .and_then(|v| v.to_str().ok())
+                    .unwrap_or("");
 
-            if !is_json && !is_grpc {
-                let response = Response::builder()
-                    .status(StatusCode::BAD_REQUEST)
-                    .body(Body::from("Unsupported Content-Type"))
-                    .unwrap();
-                return Ok(response);
-            }
+                // If REST endpoint call, default content_type to application/json if empty
+                let is_json = content_type == "application/json" || content_type.is_empty();
+                let is_grpc = content_type == "application/grpc";
+
+                if !is_json && !is_grpc {
+                    let response = Response::builder()
+                        .status(StatusCode::BAD_REQUEST)
+                        .body(Body::from("Unsupported Content-Type"))
+                        .unwrap();
+                    return Ok(response);
+                }
 
             // Get grpc-encoding header
             let grpc_encoding = req.headers()
@@ -587,6 +602,15 @@ where
                     }
                 }
             }
+        }.await;
+
+            if let Ok(ref response) = response_result {
+                let duration = start_time.elapsed();
+                let status_code = response.status().as_u16();
+                crate::metrics::GLOBAL_METRICS.record(&req_method_clone, &path_clone, status_code, duration);
+            }
+
+            response_result
         })
     }
 }

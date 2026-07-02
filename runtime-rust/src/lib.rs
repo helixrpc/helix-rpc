@@ -34,6 +34,9 @@ pub mod auth;
 pub use auth::{JwtValidator, get_jwt_claims, get_api_key_principal, validate_api_key};
 pub mod ratelimit;
 pub use ratelimit::RateLimiter;
+pub mod metrics;
+pub use metrics::{MetricsCollector, GLOBAL_METRICS};
+
 
 
 #[cfg(test)]

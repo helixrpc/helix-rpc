@@ -302,6 +302,7 @@ dependencies = [
  "flate2",
  "hyper",
  "jsonwebtoken",
+ "lazy_static",
  "libc",
  "opentelemetry",
  "opentelemetry_sdk",

@@ -147,11 +147,13 @@ type GRPCHandler struct {
 	restRoutes   []RESTRoute
 	interceptors []UnaryServerInterceptor
 	chained      UnaryServerInterceptor
+	debugMux     *http.ServeMux
 }
 
 func NewGRPCHandler() *GRPCHandler {
 	return &GRPCHandler{
-		methods: make(map[string]MethodInfo),
+		methods:  make(map[string]MethodInfo),
+		debugMux: http.NewServeMux(),
 	}
 }
 
@@ -196,6 +198,11 @@ func getChainHandler(interceptors []UnaryServerInterceptor, curr int, info *Unar
 
 func (h *GRPCHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Path
+
+	if strings.HasPrefix(path, "/__helix/") || path == "/metrics" || path == "/metrics/" {
+		h.debugMux.ServeHTTP(w, r)
+		return
+	}
 
 	methodPath := path
 	var pathParams map[string]string
@@ -536,11 +543,15 @@ func NewServer(addr string) *Server {
 	hc := NewHealthChecker()
 	handler := NewGRPCHandler()
 	RegisterHealthMethods(handler, hc)
-	return &Server{
+	s := &Server{
 		Addr:        addr,
 		Health:      hc,
 		grpcHandler: handler,
 	}
+	MountDebugHandler(handler.debugMux, s)
+	MountMetricsHandler(handler.debugMux)
+	MountDebugUI(handler.debugMux)
+	return s
 }
 
 func (s *Server) RegisterMethod(path string, methodInfo MethodInfo) {
