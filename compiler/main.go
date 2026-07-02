@@ -11,6 +11,7 @@ import (
 
 	"github.com/helix-rpc/helix/compiler/ast"
 	"github.com/helix-rpc/helix/compiler/codegen"
+	"github.com/helix-rpc/helix/compiler/compat"
 	"github.com/helix-rpc/helix/compiler/parser"
 )
 
@@ -373,129 +374,31 @@ func runDiff(args []string) {
 		os.Exit(1)
 	}
 
-	report := diffASTs(oldAST, newAST)
+	report := compat.DiffASTs(oldAST, newAST)
 	printCompatReport(report, oldPath, newPath)
-	if report.hasBreaking {
+	if report.HasBreaking {
 		os.Exit(2) // non-zero so CI pipelines fail on breaking changes
 	}
 }
 
-type compatReport struct {
-	breaking    []string
-	safe        []string
-	hasBreaking bool
-}
-
-func diffASTs(oldAST, newAST *ast.AST) compatReport {
-	r := compatReport{}
-
-	// Index old messages
-	oldMsgs := map[string]*ast.Message{}
-	for i := range oldAST.Messages {
-		oldMsgs[oldAST.Messages[i].Name] = &oldAST.Messages[i]
-	}
-	// Index new messages
-	newMsgs := map[string]*ast.Message{}
-	for i := range newAST.Messages {
-		newMsgs[newAST.Messages[i].Name] = &newAST.Messages[i]
-	}
-
-	// Check for removed or modified messages
-	for name, oldMsg := range oldMsgs {
-		newMsg, exists := newMsgs[name]
-		if !exists {
-			r.breaking = append(r.breaking, fmt.Sprintf("REMOVED message %q", name))
-			r.hasBreaking = true
-			continue
-		}
-		// Check removed fields
-		oldFields := map[string]ast.Field{}
-		for _, f := range oldMsg.Fields {
-			oldFields[f.Name] = f
-		}
-		for _, f := range newMsg.Fields {
-			if _, ok := oldFields[f.Name]; !ok {
-				r.safe = append(r.safe, fmt.Sprintf("ADDED field %q.%q (backward compatible)", name, f.Name))
-			}
-		}
-		newFields := map[string]ast.Field{}
-		for _, f := range newMsg.Fields {
-			newFields[f.Name] = f
-		}
-		for _, f := range oldMsg.Fields {
-			if _, ok := newFields[f.Name]; !ok {
-				r.breaking = append(r.breaking, fmt.Sprintf("REMOVED field %q.%q", name, f.Name))
-				r.hasBreaking = true
-			} else if newFields[f.Name].Type != f.Type {
-				r.breaking = append(r.breaking, fmt.Sprintf("CHANGED type of %q.%q: %q → %q", name, f.Name, f.Type, newFields[f.Name].Type))
-				r.hasBreaking = true
-			}
-		}
-	}
-	// New messages
-	for name := range newMsgs {
-		if _, ok := oldMsgs[name]; !ok {
-			r.safe = append(r.safe, fmt.Sprintf("ADDED message %q (backward compatible)", name))
-		}
-	}
-
-	// Check services / methods
-	oldSvcs := map[string]*ast.Service{}
-	for i := range oldAST.Services {
-		oldSvcs[oldAST.Services[i].Name] = &oldAST.Services[i]
-	}
-	newSvcs := map[string]*ast.Service{}
-	for i := range newAST.Services {
-		newSvcs[newAST.Services[i].Name] = &newAST.Services[i]
-	}
-	for name, oldSvc := range oldSvcs {
-		newSvc, exists := newSvcs[name]
-		if !exists {
-			r.breaking = append(r.breaking, fmt.Sprintf("REMOVED service %q", name))
-			r.hasBreaking = true
-			continue
-		}
-		oldMethods := map[string]ast.Method{}
-		for _, m := range oldSvc.Methods {
-			oldMethods[m.Name] = m
-		}
-		newMethods := map[string]ast.Method{}
-		for _, m := range newSvc.Methods {
-			newMethods[m.Name] = m
-		}
-		for mName := range oldMethods {
-			if _, ok := newMethods[mName]; !ok {
-				r.breaking = append(r.breaking, fmt.Sprintf("REMOVED method %q.%q", name, mName))
-				r.hasBreaking = true
-			}
-		}
-		for mName := range newMethods {
-			if _, ok := oldMethods[mName]; !ok {
-				r.safe = append(r.safe, fmt.Sprintf("ADDED method %q.%q (backward compatible)", name, mName))
-			}
-		}
-	}
-	return r
-}
-
-func printCompatReport(r compatReport, oldPath, newPath string) {
+func printCompatReport(r compat.CompatReport, oldPath, newPath string) {
 	fmt.Printf("\n📋 Helix Schema Compatibility Report\n")
 	fmt.Printf("   %s → %s\n\n", filepath.Base(oldPath), filepath.Base(newPath))
 
-	if len(r.safe) == 0 && len(r.breaking) == 0 {
+	if len(r.Safe) == 0 && len(r.Breaking) == 0 {
 		fmt.Println("  ✅ No schema changes detected.")
 		return
 	}
 
-	for _, s := range r.safe {
+	for _, s := range r.Safe {
 		fmt.Printf("  ✅ %s\n", s)
 	}
-	for _, b := range r.breaking {
+	for _, b := range r.Breaking {
 		fmt.Printf("  ✗  BREAKING: %s\n", b)
 	}
 	fmt.Println()
 
-	if r.hasBreaking {
+	if r.HasBreaking {
 		fmt.Println("  ⚠️  Schema has BREAKING changes. Clients must be updated before deploying.")
 	} else {
 		fmt.Println("  ✅ Schema is BACKWARD COMPATIBLE. Safe to deploy.")
