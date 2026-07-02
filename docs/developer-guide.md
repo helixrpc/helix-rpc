@@ -567,6 +567,30 @@ Helix configures generous HTTP/2 flow control windows by default:
 
 > [!TIP]
 > For production deployments, consider:
-> - Using the SHM transport for sidecar/proxy patterns on the same host
-> - Enabling interceptors for OpenTelemetry tracing propagation
-> - Using the `StaticResolver` as a starting point, then implement a custom `Resolver` for Consul/etcd/Kubernetes service discovery
+> 1. Setting `GOMAXPROCS` to match container CPU shares.
+> 2. Ensuring the client connection pools (`ClientPool`) match thread/goroutine counts.
+
+---
+
+## Publishing the Go Runtime
+
+Since the Go runtime is housed inside a subdirectory of the main repository, it must be versioned and published using a subdirectory tag prefix to be correctly recognized by the Go module proxy.
+
+To publish a new version of the Go runtime (e.g. `v0.1.0`):
+
+```bash
+# 1. Tag the repository with the runtime-go prefix
+git tag runtime-go/v0.1.0
+
+# 2. Push the tag to GitHub
+git push origin runtime-go/v0.1.0
+```
+
+Once pushed, the Go proxy will automatically index it at:
+`github.com/helix-rpc/helix/runtime-go@v0.1.0`
+
+> [!TIP]
+> For production deployments, consider:
+> - Using the SHM transport for sidecar/proxy patterns on the same host.
+> - Enabling interceptors for OpenTelemetry tracing propagation.
+> - Using the `StaticResolver` as a starting point, then implement a custom `Resolver` for Consul/etcd/Kubernetes service discovery.
