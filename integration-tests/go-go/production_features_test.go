@@ -325,10 +325,17 @@ func TestGoSecurityAndGracefulShutdown(t *testing.T) {
 		}
 
 		// Verify new requests are rejected/failed
-		client.CloseIdleConnections()
+		client2 := &http.Client{
+			Transport: &http2.Transport{
+				AllowHTTP: true,
+				DialTLSContext: func(ctx context.Context, network, addr string, cfg *tls.Config) (net.Conn, error) {
+					return tls.Dial(network, addr, clientTLSConfig)
+				},
+			},
+		}
 		httpReq2, _ := http.NewRequest("POST", url, bytes.NewReader(reqFrame))
 		httpReq2.Header.Set("Content-Type", "application/grpc")
-		_, err = client.Do(httpReq2)
+		_, err = client2.Do(httpReq2)
 		if err == nil {
 			t.Error("expected new request to fail after shutdown, but it succeeded")
 		}

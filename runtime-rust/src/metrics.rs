@@ -31,7 +31,7 @@ impl MetricsCollector {
         *reqs.entry((method.to_string(), path.to_string(), status)).or_insert(0) += 1;
 
         let mut durs = self.durations.write().unwrap();
-        durs.entry((method.to_string(), path.to_string())).or_insert_with(Vec::new).push(dur_secs);
+        durs.entry((method.to_string(), path.to_string())).or_default().push(dur_secs);
 
         if status >= 400 {
             let mut errs = self.errors.write().unwrap();

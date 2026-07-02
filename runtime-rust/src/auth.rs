@@ -107,11 +107,11 @@ pub fn validate_api_key(headers: &HeaderMap, valid_keys: &HashMap<String, String
         .or_else(|| {
             headers.get("authorization")
                 .and_then(|v| v.to_str().ok())
-                .and_then(|auth| {
+                .map(|auth| {
                     if auth.to_lowercase().starts_with("bearer ") {
-                        Some(auth[7..].trim().to_string())
+                        auth[7..].trim().to_string()
                     } else {
-                        Some(auth.trim().to_string())
+                        auth.trim().to_string()
                     }
                 })
         });

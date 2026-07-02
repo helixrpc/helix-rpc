@@ -403,7 +403,7 @@ where
                                             }
                                         }
                                     }
-                                    let _ = body_tx.send_data(hyper::body::Bytes::from("data: [DONE]\n\n"));
+                                    let _ = body_tx.send_data(hyper::body::Bytes::from("data: [DONE]\n\n")).await;
                                 });
 
                                 let response = Response::builder()
