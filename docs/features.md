@@ -123,3 +123,13 @@ The `helix-gen diff <old.proto> <new.proto>` command uses a semantic compatibili
 - **`BREAKING` (Fatal)**: Deleting fields, changing field types, altering field tag IDs, renaming methods, changing streaming configurations, or making optional fields required.
 
 **Available in:** Compiler CLI
+
+---
+
+## DNS Service Discovery
+Helix supports pluggable service discovery interfaces. Out of the box, all runtimes provide:
+- **`StaticResolver`**: A local registry mapping service names directly to static IP addresses.
+- **`DNSResolver`**: Resolves target endpoints dynamically using standard A/AAAA record queries or port-aware SRV records—making it ready for Kubernetes cluster-internal service discovery.
+
+**Available in:** Go, Rust, Python
+
