@@ -36,6 +36,9 @@ pub mod ratelimit;
 pub use ratelimit::RateLimiter;
 pub mod metrics;
 pub use metrics::{MetricsCollector, GLOBAL_METRICS};
+pub mod config;
+pub use config::{Config, load_config, watch_config};
+
 
 
 

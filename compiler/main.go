@@ -300,6 +300,19 @@ make watch   # regenerates on every schema.proto save
 Edit [schema.proto](./schema.proto) and run `+"`make gen`"+` to regenerate.
 `, name))
 
+	// helix.json
+	writeFile(filepath.Join(base, "helix.json"), fmt.Sprintf(`{
+  "host": "127.0.0.1",
+  "port": 8080,
+  "disable_metrics": %t,
+  "disable_health": %t,
+  "disable_gzip": %t,
+  "disable_deadline": %t,
+  "rate_limit_rate": 100.0,
+  "rate_limit_burst": 10
+}
+`, disableMetrics, disableHealth, disableGzip, disableDeadline))
+
 	// Language-specific server entrypoint
 	switch lang {
 	case "go":
@@ -317,9 +330,18 @@ import (
 )
 
 func main() {
-	server := runtime.NewServerWithConfig(":8080", runtime.ServerConfig{
-		DisableMetrics: %t,
-		DisableHealth:  %t,
+	cfg, err := runtime.LoadConfig("helix.json")
+	if err != nil {
+		log.Printf("⚠️  Could not load helix.json (using defaults): %%v", err)
+		cfg = &runtime.Config{
+			Host: "127.0.0.1",
+			Port: 8080,
+		}
+	}
+
+	server := runtime.NewServerWithConfig(fmt.Sprintf("%%s:%%d", cfg.Host, cfg.Port), runtime.ServerConfig{
+		DisableMetrics: cfg.DisableMetrics,
+		DisableHealth:  cfg.DisableHealth,
 	})
 
 	// Register your service methods here
@@ -330,25 +352,37 @@ func main() {
 	})
 	server.RegisterRESTRoute("POST", "/predict", "/v1.ModelService/Predict")
 
-	log.Println("🚀 %s listening on :8080")
+	runtime.WatchConfig("helix.json", func(newCfg *runtime.Config) {
+		log.Printf("🔄 [Helix] Loaded new configs: metrics_disabled=%%t", newCfg.DisableMetrics)
+	})
+
+	log.Printf("🚀 %s listening on %%s:%%d", cfg.Host, cfg.Port)
 	log.Fatal(server.Start())
 }
-`, disableMetrics, disableHealth, name, name))
+`, name, name))
 
 	case "python":
 		os.MkdirAll(filepath.Join(base, "generated"), 0755) //nolint:errcheck
 		writeFile(filepath.Join(base, "server.py"), fmt.Sprintf(`import sys
 sys.path.insert(0, ".")
 
+import logging
 from helix_rt.server import HelixServer
+from helix_rt.config import load_config, watch_config
+
+try:
+    cfg = load_config("helix.json")
+except Exception:
+    from helix_rt.config import Config
+    cfg = Config()
 
 server = HelixServer(
-    host="127.0.0.1",
-    port=8080,
-    disable_metrics=%s,
-    disable_health=%s,
-    disable_gzip=%s,
-    disable_deadline=%s,
+    host=cfg.host,
+    port=cfg.port,
+    disable_metrics=cfg.disable_metrics,
+    disable_health=cfg.disable_health,
+    disable_gzip=cfg.disable_gzip,
+    disable_deadline=cfg.disable_deadline,
 )
 
 async def predict(body: dict) -> dict:
@@ -356,8 +390,14 @@ async def predict(body: dict) -> dict:
     return {"completion": f"Hello from %s! You said: {prompt}"}
 
 server.register_route("POST", "/predict", predict)
+
+def handle_reload(new_cfg):
+    logging.info("🧬 [Helix] Config reloaded dynamically.")
+
+watch_config("helix.json", handle_reload)
+
 server.start()
-`, pyBool(disableMetrics), pyBool(disableHealth), pyBool(disableGzip), pyBool(disableDeadline), name))
+`, name))
 
 	case "rust":
 		os.MkdirAll(filepath.Join(base, "src"), 0755)       //nolint:errcheck
@@ -371,21 +411,25 @@ edition = "2021"
 helix-rt = "0.1.0"
 tokio = { version = "1.0", features = ["full"] }
 serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
 `, name))
 		writeFile(filepath.Join(base, "src", "main.rs"), fmt.Sprintf(`use helix_rt::server::{HttpServiceHandler, RestRoute, HelixServer, ServerConfig};
+use helix_rt::config::{load_config, watch_config};
 use std::sync::Arc;
 
 #[tokio::main]
 async fn main() {
-    println!("🚀 %s listening on :8080");
-    // To configure custom options:
-    // let mut config = ServerConfig::default();
-    // config.disable_metrics = %t;
-    // config.disable_health = %t;
-    // ...
+    let cfg = load_config("helix.json").unwrap_or_default();
+    println!("🚀 %s listening on {}:{}", cfg.host, cfg.port);
+    
+    // Dynamic config reloader registration
+    watch_config("helix.json".to_string(), |new_cfg| {
+        println!("🧬 [Helix] Dynamic config changed: metrics_disabled={}", new_cfg.disable_metrics);
+    });
+
     todo!("wire up generated handler")
 }
-`, name, disableMetrics, disableHealth))
+`, name))
 	}
 
 	fmt.Printf("\n✅ Scaffolded %q (%s)\n\n", name, lang)
