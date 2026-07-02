@@ -192,6 +192,9 @@ async fn main() {
         run_grpc_compression_test(addr).await;
         run_grpc_tls_test(addr).await;
         
+        // Run FlatBuffers local codec tests
+        run_flatbuffers_codec_test().await;
+        
         // Test graceful shutdown
         println!("Testing Graceful Shutdown...");
         server_arc.shutdown();
@@ -608,3 +611,22 @@ async fn run_grpc_tls_test(addr: SocketAddr) {
 
     println!("Rust gRPC TLS test passed!");
 }
+
+async fn run_flatbuffers_codec_test() {
+    let original = UserProfile {
+        user_id: 123456,
+        username: "rust_flatbuffer_user".to_string(),
+        email: "rust_flat@test.com".to_string(),
+    };
+
+    let buf = original.marshal_flatbuffers();
+    assert!(!buf.is_empty(), "flatbuffers: marshal returned empty buffer");
+
+    let decoded = UserProfile::unmarshal_flatbuffers(&buf).unwrap();
+    assert_eq!(decoded.user_id, original.user_id);
+    assert_eq!(decoded.username, original.username);
+    assert_eq!(decoded.email, original.email);
+
+    println!("Rust FlatBuffers local codec test passed!");
+}
+

@@ -215,6 +215,141 @@ func readVarint(buf []byte, offset int) (uint64, int, error) {
 		sb.WriteString("\treturn nil\n")
 		sb.WriteString("}\n\n")
 
+		// FlatBuffers Marshal implementation
+		// Calculate fixed offsets
+		offsets := make([]int, len(str.Fields))
+		currentOffset := 4 // starts after vtable_offset (4 bytes)
+		for idx, f := range str.Fields {
+			size := 4
+			switch f.Type.Kind {
+			case ast.TypeInt32, ast.TypeBool:
+				size = 4
+			case ast.TypeInt64, ast.TypeDouble:
+				size = 8
+			case ast.TypeString, ast.TypeBinary:
+				size = 4
+			}
+			rem := currentOffset % size
+			if rem != 0 {
+				currentOffset += size - rem
+			}
+			offsets[idx] = currentOffset
+			currentOffset += size
+		}
+		tableSize := currentOffset
+		vtableSize := 4 + 2*len(str.Fields)
+
+		sb.WriteString(fmt.Sprintf("func (x *%s) MarshalFlatBuffers() []byte {\n", str.Name))
+		sb.WriteString("\tdynamicSize := 0\n")
+		for _, f := range str.Fields {
+			if f.Type.Kind == ast.TypeString || f.Type.Kind == ast.TypeBinary {
+				capName := toCamelCase(f.Name)
+				sb.WriteString(fmt.Sprintf("\tif len(x.%s) > 0 {\n", capName))
+				sb.WriteString(fmt.Sprintf("\t\tdynamicSize += 4 + len(x.%s)\n", capName))
+				sb.WriteString("\t}\n")
+			}
+		}
+		sb.WriteString(fmt.Sprintf("\ttotalSize := 4 + %d + dynamicSize + %d\n", tableSize, vtableSize))
+		sb.WriteString("\tbuf := make([]byte, totalSize)\n")
+		sb.WriteString("\t// Root offset pointing to the root table (always 4)\n")
+		sb.WriteString("\tbuf[0] = 4\n")
+		sb.WriteString("\t// Table starts at offset 4\n")
+		sb.WriteString("\t// Write vtable offset at buf[4:8]\n")
+		sb.WriteString(fmt.Sprintf("\tvtableStart := 4 + %d + dynamicSize\n", tableSize))
+		sb.WriteString("\tvtableOffset := int32(vtableStart - 4)\n")
+		sb.WriteString("\tfor j := 0; j < 4; j++ {\n")
+		sb.WriteString("\t\tbuf[4+j] = byte(vtableOffset >> (j * 8))\n")
+		sb.WriteString("\t}\n")
+
+		// Write fields
+		sb.WriteString("\tcurrentStringOffset := 4 + " + fmt.Sprintf("%d\n", tableSize))
+		for idx, f := range str.Fields {
+			capName := toCamelCase(f.Name)
+			off := offsets[idx]
+			switch f.Type.Kind {
+			case ast.TypeInt32:
+				sb.WriteString(fmt.Sprintf("\t{\n\t\tv := uint32(x.%s)\n", capName))
+				sb.WriteString(fmt.Sprintf("\t\tfor j := 0; j < 4; j++ {\n\t\t\tbuf[4+%d+j] = byte(v >> (j * 8))\n\t\t}\n\t}\n", off))
+			case ast.TypeInt64:
+				sb.WriteString(fmt.Sprintf("\t{\n\t\tv := uint64(x.%s)\n", capName))
+				sb.WriteString(fmt.Sprintf("\t\tfor j := 0; j < 8; j++ {\n\t\t\tbuf[4+%d+j] = byte(v >> (j * 8))\n\t\t}\n\t}\n", off))
+			case ast.TypeBool:
+				sb.WriteString(fmt.Sprintf("\tif x.%s {\n", capName))
+				sb.WriteString(fmt.Sprintf("\t\tbuf[4+%d] = 1\n\t}\n", off))
+			case ast.TypeString:
+				sb.WriteString(fmt.Sprintf("\tif len(x.%s) > 0 {\n", capName))
+				sb.WriteString(fmt.Sprintf("\t\trelOffset := uint32(currentStringOffset - (4 + %d))\n", off))
+				sb.WriteString(fmt.Sprintf("\t\tfor j := 0; j < 4; j++ {\n\t\t\tbuf[4+%d+j] = byte(relOffset >> (j * 8))\n\t\t}\n", off))
+				sb.WriteString(fmt.Sprintf("\t\tstrLen := uint32(len(x.%s))\n", capName))
+				sb.WriteString("\t\tfor j := 0; j < 4; j++ {\n\t\t\tbuf[currentStringOffset+j] = byte(strLen >> (j * 8))\n\t\t}\n")
+				sb.WriteString(fmt.Sprintf("\t\tcopy(buf[currentStringOffset+4:], x.%s)\n", capName))
+				sb.WriteString(fmt.Sprintf("\t\tcurrentStringOffset += 4 + len(x.%s)\n", capName))
+				sb.WriteString("\t}\n")
+			}
+		}
+
+		// Write vtable
+		sb.WriteString("\t// Write vtable header\n")
+		sb.WriteString(fmt.Sprintf("\tbuf[vtableStart] = byte(%d)\n", vtableSize))
+		sb.WriteString(fmt.Sprintf("\tbuf[vtableStart+1] = byte(%d >> 8)\n", vtableSize))
+		sb.WriteString(fmt.Sprintf("\tbuf[vtableStart+2] = byte(%d)\n", tableSize))
+		sb.WriteString(fmt.Sprintf("\tbuf[vtableStart+3] = byte(%d >> 8)\n", tableSize))
+		for idx := range str.Fields {
+			off := offsets[idx]
+			sb.WriteString(fmt.Sprintf("\tbuf[vtableStart+4+%d] = byte(%d)\n", 2*idx, off))
+			sb.WriteString(fmt.Sprintf("\tbuf[vtableStart+4+%d+1] = byte(%d >> 8)\n", 2*idx, off))
+		}
+		sb.WriteString("\treturn buf\n")
+		sb.WriteString("}\n\n")
+
+		// FlatBuffers Unmarshal implementation
+		sb.WriteString(fmt.Sprintf("func (x *%s) UnmarshalFlatBuffers(buf []byte) error {\n", str.Name))
+		sb.WriteString("\tif len(buf) < 8 {\n\t\treturn fmt.Errorf(\"flatbuffers: buffer too small\")\n\t}\n")
+		sb.WriteString("\trootOffset := uint32(buf[0]) | uint32(buf[1])<<8 | uint32(buf[2])<<16 | uint32(buf[3])<<24\n")
+		sb.WriteString("\tif int(rootOffset)+4 > len(buf) {\n\t\treturn fmt.Errorf(\"flatbuffers: invalid root offset\")\n\t}\n")
+		sb.WriteString("\tvtableOffset := int32(uint32(buf[rootOffset]) | uint32(buf[rootOffset+1])<<8 | uint32(buf[rootOffset+2])<<16 | uint32(buf[rootOffset+3])<<24)\n")
+		sb.WriteString("\tvtableStart := int(rootOffset) + int(vtableOffset)\n")
+		sb.WriteString("\tif vtableStart < 0 || vtableStart+4 > len(buf) {\n\t\treturn fmt.Errorf(\"flatbuffers: invalid vtable offset\")\n\t}\n")
+		sb.WriteString("\tvtableSize := uint16(buf[vtableStart]) | uint16(buf[vtableStart+1])<<8\n")
+		// Read fields
+		for idx, f := range str.Fields {
+			capName := toCamelCase(f.Name)
+			voff := 4 + 2*idx
+			sb.WriteString(fmt.Sprintf("\tif %d+2 <= int(vtableSize) {\n", voff))
+			sb.WriteString(fmt.Sprintf("\t\tfoffset := uint16(buf[vtableStart+%d]) | uint16(buf[vtableStart+%d+1])<<8\n", voff, voff))
+			sb.WriteString("\t\tif foffset > 0 {\n")
+			sb.WriteString("\t\t\tabsOffset := int(rootOffset) + int(foffset)\n")
+			switch f.Type.Kind {
+			case ast.TypeInt32:
+				sb.WriteString("\t\t\tif absOffset+4 <= len(buf) {\n")
+				sb.WriteString(fmt.Sprintf("\t\t\t\tx.%s = int32(uint32(buf[absOffset]) | uint32(buf[absOffset+1])<<8 | uint32(buf[absOffset+2])<<16 | uint32(buf[absOffset+3])<<24)\n", capName))
+				sb.WriteString("\t\t\t}\n")
+			case ast.TypeInt64:
+				sb.WriteString("\t\t\tif absOffset+8 <= len(buf) {\n")
+				sb.WriteString(fmt.Sprintf("\t\t\t\tx.%s = int64(uint64(buf[absOffset]) | uint64(buf[absOffset+1])<<8 | uint64(buf[absOffset+2])<<16 | uint64(buf[absOffset+3])<<24 | uint64(buf[absOffset+4])<<32 | uint64(buf[absOffset+5])<<40 | uint64(buf[absOffset+6])<<48 | uint64(buf[absOffset+7])<<56)\n", capName))
+				sb.WriteString("\t\t\t}\n")
+			case ast.TypeBool:
+				sb.WriteString("\t\t\tif absOffset < len(buf) {\n")
+				sb.WriteString(fmt.Sprintf("\t\t\t\tx.%s = buf[absOffset] != 0\n", capName))
+				sb.WriteString("\t\t\t}\n")
+			case ast.TypeString:
+				sb.WriteString("\t\t\tif absOffset+4 <= len(buf) {\n")
+				sb.WriteString("\t\t\t\trelOffset := uint32(buf[absOffset]) | uint32(buf[absOffset+1])<<8 | uint32(buf[absOffset+2])<<16 | uint32(buf[absOffset+3])<<24\n")
+				sb.WriteString("\t\t\t\tstrStart := absOffset + int(relOffset)\n")
+				sb.WriteString("\t\t\t\tif strStart+4 <= len(buf) {\n")
+				sb.WriteString("\t\t\t\t\tstrLen := uint32(buf[strStart]) | uint32(buf[strStart+1])<<8 | uint32(buf[strStart+2])<<16 | uint32(buf[strStart+3])<<24\n")
+				sb.WriteString("\t\t\t\t\tif strStart+4+int(strLen) <= len(buf) {\n")
+				sb.WriteString(fmt.Sprintf("\t\t\t\t\t\tx.%s = string(buf[strStart+4 : strStart+4+int(strLen)])\n", capName))
+				sb.WriteString("\t\t\t\t\t}\n")
+				sb.WriteString("\t\t\t\t}\n")
+				sb.WriteString("\t\t\t}\n")
+			}
+			sb.WriteString("\t\t}\n")
+			sb.WriteString("\t}\n")
+		}
+		sb.WriteString("\treturn nil\n")
+		sb.WriteString("}\n\n")
+
 		// Write satisfies thrift.TStruct
 		sb.WriteString(fmt.Sprintf("func (x *%s) Write(ctx context.Context, oprot thrift.TProtocol) error {\n", str.Name))
 		sb.WriteString(fmt.Sprintf("\tif err := oprot.WriteStructBegin(ctx, \"%s\"); err != nil {\n", str.Name))

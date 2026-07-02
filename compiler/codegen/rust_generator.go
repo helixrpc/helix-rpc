@@ -93,6 +93,149 @@ func GenerateRust(parsed *ast.AST) (string, error) {
 		sb.WriteString("        Ok(())\n")
 		sb.WriteString("    }\n")
 		sb.WriteString("}\n\n")
+
+		// FlatBuffers offsets calculation
+		offsets := make([]int, len(str.Fields))
+		currentOffset := 4 // starts after vtable_offset (4 bytes)
+		for idx, f := range str.Fields {
+			size := 4
+			switch f.Type.Kind {
+			case ast.TypeInt32, ast.TypeBool:
+				size = 4
+			case ast.TypeInt64, ast.TypeDouble:
+				size = 8
+			case ast.TypeString, ast.TypeBinary:
+				size = 4
+			}
+			rem := currentOffset % size
+			if rem != 0 {
+				currentOffset += size - rem
+			}
+			offsets[idx] = currentOffset
+			currentOffset += size
+		}
+		tableSize := currentOffset
+		vtableSize := 4 + 2*len(str.Fields)
+
+		sb.WriteString(fmt.Sprintf("impl %s {\n", str.Name))
+		sb.WriteString("    pub fn marshal_flatbuffers(&self) -> Vec<u8> {\n")
+		sb.WriteString("        let mut dynamic_size = 0;\n")
+		for _, f := range str.Fields {
+			if f.Type.Kind == ast.TypeString || f.Type.Kind == ast.TypeBinary {
+				sb.WriteString(fmt.Sprintf("        if !self.%s.is_empty() {\n", f.Name))
+				sb.WriteString(fmt.Sprintf("            dynamic_size += 4 + self.%s.len();\n", f.Name))
+				sb.WriteString("        }\n")
+			}
+		}
+		sb.WriteString(fmt.Sprintf("        let table_size = %d;\n", tableSize))
+		sb.WriteString(fmt.Sprintf("        let vtable_size = %d;\n", vtableSize))
+		sb.WriteString("        let total_size = 4 + table_size + dynamic_size + vtable_size;\n")
+		sb.WriteString("        let mut buf = vec![0; total_size];\n")
+		sb.WriteString("        buf[0] = 4; // root offset pointing to the root table (always 4)\n")
+		sb.WriteString("        let vtable_start = 4 + table_size + dynamic_size;\n")
+		sb.WriteString("        let vtable_offset = (vtable_start - 4) as i32;\n")
+		sb.WriteString("        for j in 0..4 { buf[4 + j] = (vtable_offset >> (j * 8)) as u8; }\n")
+		sb.WriteString("        let mut current_string_offset = 4 + table_size;\n")
+
+		for idx, f := range str.Fields {
+			off := offsets[idx]
+			switch f.Type.Kind {
+			case ast.TypeInt32:
+				sb.WriteString(fmt.Sprintf("        {\n            let v = self.%s as u32;\n", f.Name))
+				sb.WriteString(fmt.Sprintf("            for j in 0..4 { buf[4 + %d + j] = (v >> (j * 8)) as u8; }\n        }\n", off))
+			case ast.TypeInt64:
+				sb.WriteString(fmt.Sprintf("        {\n            let v = self.%s as u64;\n", f.Name))
+				sb.WriteString(fmt.Sprintf("            for j in 0..8 { buf[4 + %d + j] = (v >> (j * 8)) as u8; }\n        }\n", off))
+			case ast.TypeBool:
+				sb.WriteString(fmt.Sprintf("        if self.%s { buf[4 + %d] = 1; }\n", f.Name, off))
+			case ast.TypeString:
+				sb.WriteString(fmt.Sprintf("        if !self.%s.is_empty() {\n", f.Name))
+				sb.WriteString(fmt.Sprintf("            let rel_offset = (current_string_offset - (4 + %d)) as u32;\n", off))
+				sb.WriteString(fmt.Sprintf("            for j in 0..4 { buf[4 + %d + j] = (rel_offset >> (j * 8)) as u8; }\n", off))
+				sb.WriteString(fmt.Sprintf("            let str_len = self.%s.len() as u32;\n", f.Name))
+				sb.WriteString("            for j in 0..4 { buf[current_string_offset + j] = (str_len >> (j * 8)) as u8; }\n")
+				sb.WriteString(fmt.Sprintf("            buf[current_string_offset + 4 .. current_string_offset + 4 + self.%s.len()].copy_from_slice(self.%s.as_bytes());\n", f.Name, f.Name))
+				sb.WriteString(fmt.Sprintf("            current_string_offset += 4 + self.%s.len();\n", f.Name))
+				sb.WriteString("        }\n")
+			}
+		}
+
+		// Write vtable
+		sb.WriteString("        buf[vtable_start] = vtable_size as u8;\n")
+		sb.WriteString("        buf[vtable_start+1] = (vtable_size >> 8) as u8;\n")
+		sb.WriteString("        buf[vtable_start+2] = table_size as u8;\n")
+		sb.WriteString("        buf[vtable_start+3] = (table_size >> 8) as u8;\n")
+		for idx := range str.Fields {
+			off := offsets[idx]
+			sb.WriteString(fmt.Sprintf("        buf[vtable_start + 4 + %d] = %d as u8;\n", 2*idx, off))
+			sb.WriteString(fmt.Sprintf("        buf[vtable_start + 4 + %d + 1] = (%d >> 8) as u8;\n", 2*idx, off))
+		}
+		sb.WriteString("        buf\n")
+		sb.WriteString("    }\n\n")
+
+		// unmarshal_flatbuffers
+		sb.WriteString("    pub fn unmarshal_flatbuffers(buf: &[u8]) -> Result<Self, String> {\n")
+		sb.WriteString("        if buf.len() < 8 {\n            return Err(\"flatbuffers: buffer too small\".to_string());\n        }\n")
+		sb.WriteString("        let root_offset = (buf[0] as u32) | (buf[1] as u32) << 8 | (buf[2] as u32) << 16 | (buf[3] as u32) << 24;\n")
+		sb.WriteString("        if root_offset as usize + 4 > buf.len() {\n            return Err(\"flatbuffers: invalid root offset\".to_string());\n        }\n")
+		sb.WriteString("        let vtable_offset = (buf[root_offset as usize] as u32) |\n")
+		sb.WriteString("                            (buf[root_offset as usize + 1] as u32) << 8 |\n")
+		sb.WriteString("                            (buf[root_offset as usize + 2] as u32) << 16 |\n")
+		sb.WriteString("                            (buf[root_offset as usize + 3] as u32) << 24;\n")
+		sb.WriteString("        let vtable_start = root_offset as i32 + vtable_offset as i32;\n")
+		sb.WriteString("        if vtable_start < 0 || vtable_start as usize + 4 > buf.len() {\n            return Err(\"flatbuffers: invalid vtable offset\".to_string());\n        }\n")
+		sb.WriteString("        let vtable_size = (buf[vtable_start as usize] as u16) | (buf[vtable_start as usize + 1] as u16) << 8;\n")
+
+		for _, f := range str.Fields {
+			rustType := mapRustType(f.Type)
+			sb.WriteString(fmt.Sprintf("        let mut var_%s: %s = Default::default();\n", f.Name, rustType))
+		}
+
+		for idx, f := range str.Fields {
+			voff := 4 + 2*idx
+			sb.WriteString(fmt.Sprintf("        if %d + 2 <= vtable_size as usize {\n", voff))
+			sb.WriteString(fmt.Sprintf("            let foffset = (buf[vtable_start as usize + %d] as u16) | (buf[vtable_start as usize + %d + 1] as u16) << 8;\n", voff, voff))
+			sb.WriteString("            if foffset > 0 {\n")
+			sb.WriteString("                let abs_offset = root_offset as usize + foffset as usize;\n")
+			switch f.Type.Kind {
+			case ast.TypeInt32:
+				sb.WriteString("                if abs_offset + 4 <= buf.len() {\n")
+				sb.WriteString(fmt.Sprintf("                    var_%s = (buf[abs_offset] as u32 | (buf[abs_offset+1] as u32) << 8 | (buf[abs_offset+2] as u32) << 16 | (buf[abs_offset+3] as u32) << 24) as i32;\n", f.Name))
+				sb.WriteString("                }\n")
+			case ast.TypeInt64:
+				sb.WriteString("                if abs_offset + 8 <= buf.len() {\n")
+				sb.WriteString(fmt.Sprintf("                    var_%s = (buf[abs_offset] as u64 | (buf[abs_offset+1] as u64) << 8 | (buf[abs_offset+2] as u64) << 16 | (buf[abs_offset+3] as u64) << 24 |\n", f.Name))
+				sb.WriteString(fmt.Sprintf("                              (buf[abs_offset+4] as u64) << 32 | (buf[abs_offset+5] as u64) << 40 | (buf[abs_offset+6] as u64) << 48 | (buf[abs_offset+7] as u64) << 56) as i64;\n"))
+				sb.WriteString("                }\n")
+			case ast.TypeBool:
+				sb.WriteString("                if abs_offset < buf.len() {\n")
+				sb.WriteString(fmt.Sprintf("                    var_%s = buf[abs_offset] != 0;\n", f.Name))
+				sb.WriteString("                }\n")
+			case ast.TypeString:
+				sb.WriteString("                if abs_offset + 4 <= buf.len() {\n")
+				sb.WriteString("                    let rel_offset = (buf[abs_offset] as u32) | (buf[abs_offset+1] as u32) << 8 | (buf[abs_offset+2] as u32) << 16 | (buf[abs_offset+3] as u32) << 24;\n")
+				sb.WriteString("                    let str_start = abs_offset + rel_offset as usize;\n")
+				sb.WriteString("                    if str_start + 4 <= buf.len() {\n")
+				sb.WriteString("                        let str_len = (buf[str_start] as u32) | (buf[str_start+1] as u32) << 8 | (buf[str_start+2] as u32) << 16 | (buf[str_start+3] as u32) << 24;\n")
+				sb.WriteString("                        if str_start + 4 + str_len as usize <= buf.len() {\n")
+				sb.WriteString(fmt.Sprintf("                            if let Ok(s) = std::str::from_utf8(&buf[str_start+4 .. str_start+4+str_len as usize]) {\n"))
+				sb.WriteString(fmt.Sprintf("                                var_%s = s.to_string();\n", f.Name))
+				sb.WriteString("                            }\n")
+				sb.WriteString("                        }\n")
+				sb.WriteString("                    }\n")
+				sb.WriteString("                }\n")
+			}
+			sb.WriteString("            }\n")
+			sb.WriteString("        }\n")
+		}
+
+		sb.WriteString("        Ok(Self {\n")
+		for _, f := range str.Fields {
+			sb.WriteString(fmt.Sprintf("            %s: var_%s,\n", f.Name, f.Name))
+		}
+		sb.WriteString("        })\n")
+		sb.WriteString("    }\n")
+		sb.WriteString("}\n\n")
 	}
 
 	// Generate Service Traits

@@ -70,6 +70,131 @@ impl TSerializable for UserProfile {
     }
 }
 
+impl UserProfile {
+    pub fn marshal_flatbuffers(&self) -> Vec<u8> {
+        let mut dynamic_size = 0;
+        if !self.username.is_empty() {
+            dynamic_size += 4 + self.username.len();
+        }
+        if !self.email.is_empty() {
+            dynamic_size += 4 + self.email.len();
+        }
+        let table_size = 24;
+        let vtable_size = 10;
+        let total_size = 4 + table_size + dynamic_size + vtable_size;
+        let mut buf = vec![0; total_size];
+        buf[0] = 4; // root offset pointing to the root table (always 4)
+        let vtable_start = 4 + table_size + dynamic_size;
+        let vtable_offset = (vtable_start - 4) as i32;
+        for j in 0..4 { buf[4 + j] = (vtable_offset >> (j * 8)) as u8; }
+        let mut current_string_offset = 4 + table_size;
+        {
+            let v = self.user_id as u64;
+            for j in 0..8 { buf[4 + 8 + j] = (v >> (j * 8)) as u8; }
+        }
+        if !self.username.is_empty() {
+            let rel_offset = (current_string_offset - (4 + 16)) as u32;
+            for j in 0..4 { buf[4 + 16 + j] = (rel_offset >> (j * 8)) as u8; }
+            let str_len = self.username.len() as u32;
+            for j in 0..4 { buf[current_string_offset + j] = (str_len >> (j * 8)) as u8; }
+            buf[current_string_offset + 4 .. current_string_offset + 4 + self.username.len()].copy_from_slice(self.username.as_bytes());
+            current_string_offset += 4 + self.username.len();
+        }
+        if !self.email.is_empty() {
+            let rel_offset = (current_string_offset - (4 + 20)) as u32;
+            for j in 0..4 { buf[4 + 20 + j] = (rel_offset >> (j * 8)) as u8; }
+            let str_len = self.email.len() as u32;
+            for j in 0..4 { buf[current_string_offset + j] = (str_len >> (j * 8)) as u8; }
+            buf[current_string_offset + 4 .. current_string_offset + 4 + self.email.len()].copy_from_slice(self.email.as_bytes());
+            current_string_offset += 4 + self.email.len();
+        }
+        buf[vtable_start] = vtable_size as u8;
+        buf[vtable_start+1] = (vtable_size >> 8) as u8;
+        buf[vtable_start+2] = table_size as u8;
+        buf[vtable_start+3] = (table_size >> 8) as u8;
+        buf[vtable_start + 4 + 0] = 8 as u8;
+        buf[vtable_start + 4 + 0 + 1] = (8 >> 8) as u8;
+        buf[vtable_start + 4 + 2] = 16 as u8;
+        buf[vtable_start + 4 + 2 + 1] = (16 >> 8) as u8;
+        buf[vtable_start + 4 + 4] = 20 as u8;
+        buf[vtable_start + 4 + 4 + 1] = (20 >> 8) as u8;
+        buf
+    }
+
+    pub fn unmarshal_flatbuffers(buf: &[u8]) -> Result<Self, String> {
+        if buf.len() < 8 {
+            return Err("flatbuffers: buffer too small".to_string());
+        }
+        let root_offset = (buf[0] as u32) | (buf[1] as u32) << 8 | (buf[2] as u32) << 16 | (buf[3] as u32) << 24;
+        if root_offset as usize + 4 > buf.len() {
+            return Err("flatbuffers: invalid root offset".to_string());
+        }
+        let vtable_offset = (buf[root_offset as usize] as u32) |
+                            (buf[root_offset as usize + 1] as u32) << 8 |
+                            (buf[root_offset as usize + 2] as u32) << 16 |
+                            (buf[root_offset as usize + 3] as u32) << 24;
+        let vtable_start = root_offset as i32 + vtable_offset as i32;
+        if vtable_start < 0 || vtable_start as usize + 4 > buf.len() {
+            return Err("flatbuffers: invalid vtable offset".to_string());
+        }
+        let vtable_size = (buf[vtable_start as usize] as u16) | (buf[vtable_start as usize + 1] as u16) << 8;
+        let mut var_user_id: i64 = Default::default();
+        let mut var_username: String = Default::default();
+        let mut var_email: String = Default::default();
+        if 4 + 2 <= vtable_size as usize {
+            let foffset = (buf[vtable_start as usize + 4] as u16) | (buf[vtable_start as usize + 4 + 1] as u16) << 8;
+            if foffset > 0 {
+                let abs_offset = root_offset as usize + foffset as usize;
+                if abs_offset + 8 <= buf.len() {
+                    var_user_id = (buf[abs_offset] as u64 | (buf[abs_offset+1] as u64) << 8 | (buf[abs_offset+2] as u64) << 16 | (buf[abs_offset+3] as u64) << 24 |
+                              (buf[abs_offset+4] as u64) << 32 | (buf[abs_offset+5] as u64) << 40 | (buf[abs_offset+6] as u64) << 48 | (buf[abs_offset+7] as u64) << 56) as i64;
+                }
+            }
+        }
+        if 6 + 2 <= vtable_size as usize {
+            let foffset = (buf[vtable_start as usize + 6] as u16) | (buf[vtable_start as usize + 6 + 1] as u16) << 8;
+            if foffset > 0 {
+                let abs_offset = root_offset as usize + foffset as usize;
+                if abs_offset + 4 <= buf.len() {
+                    let rel_offset = (buf[abs_offset] as u32) | (buf[abs_offset+1] as u32) << 8 | (buf[abs_offset+2] as u32) << 16 | (buf[abs_offset+3] as u32) << 24;
+                    let str_start = abs_offset + rel_offset as usize;
+                    if str_start + 4 <= buf.len() {
+                        let str_len = (buf[str_start] as u32) | (buf[str_start+1] as u32) << 8 | (buf[str_start+2] as u32) << 16 | (buf[str_start+3] as u32) << 24;
+                        if str_start + 4 + str_len as usize <= buf.len() {
+                            if let Ok(s) = std::str::from_utf8(&buf[str_start+4 .. str_start+4+str_len as usize]) {
+                                var_username = s.to_string();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if 8 + 2 <= vtable_size as usize {
+            let foffset = (buf[vtable_start as usize + 8] as u16) | (buf[vtable_start as usize + 8 + 1] as u16) << 8;
+            if foffset > 0 {
+                let abs_offset = root_offset as usize + foffset as usize;
+                if abs_offset + 4 <= buf.len() {
+                    let rel_offset = (buf[abs_offset] as u32) | (buf[abs_offset+1] as u32) << 8 | (buf[abs_offset+2] as u32) << 16 | (buf[abs_offset+3] as u32) << 24;
+                    let str_start = abs_offset + rel_offset as usize;
+                    if str_start + 4 <= buf.len() {
+                        let str_len = (buf[str_start] as u32) | (buf[str_start+1] as u32) << 8 | (buf[str_start+2] as u32) << 16 | (buf[str_start+3] as u32) << 24;
+                        if str_start + 4 + str_len as usize <= buf.len() {
+                            if let Ok(s) = std::str::from_utf8(&buf[str_start+4 .. str_start+4+str_len as usize]) {
+                                var_email = s.to_string();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Ok(Self {
+            user_id: var_user_id,
+            username: var_username,
+            email: var_email,
+        })
+    }
+}
+
 #[async_trait::async_trait]
 pub trait UserProfileService: Send + Sync + 'static {
     async fn get_user_profile(&self, req: UserProfile) -> Result<UserProfile, ThriftError>;

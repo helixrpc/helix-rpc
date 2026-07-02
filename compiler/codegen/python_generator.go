@@ -62,6 +62,131 @@ func GeneratePython(parsed *ast.AST) (string, error) {
 			sb.WriteString(fmt.Sprintf("    %s: %s\n", f.Name, pyType))
 		}
 		sb.WriteString("\n")
+
+		// FlatBuffers offsets calculation
+		offsets := make([]int, len(str.Fields))
+		currentOffset := 4 // starts after vtable_offset (4 bytes)
+		for idx, f := range str.Fields {
+			size := 4
+			switch f.Type.Kind {
+			case ast.TypeInt32, ast.TypeBool:
+				size = 4
+			case ast.TypeInt64, ast.TypeDouble:
+				size = 8
+			case ast.TypeString, ast.TypeBinary:
+				size = 4
+			}
+			rem := currentOffset % size
+			if rem != 0 {
+				currentOffset += size - rem
+			}
+			offsets[idx] = currentOffset
+			currentOffset += size
+		}
+		tableSize := currentOffset
+		vtableSize := 4 + 2*len(str.Fields)
+
+		sb.WriteString("    def marshal_flatbuffers(self) -> bytes:\n")
+		sb.WriteString("        import struct\n")
+		sb.WriteString("        dynamic_size = 0\n")
+		for _, f := range str.Fields {
+			if f.Type.Kind == ast.TypeString || f.Type.Kind == ast.TypeBinary {
+				sb.WriteString(fmt.Sprintf("        str_%s = self.%s.encode('utf-8') if self.%s else b''\n", f.Name, f.Name, f.Name))
+				sb.WriteString(fmt.Sprintf("        if str_%s:\n", f.Name))
+				sb.WriteString(fmt.Sprintf("            dynamic_size += 4 + len(str_%s)\n", f.Name))
+			}
+		}
+		sb.WriteString(fmt.Sprintf("        table_size = %d\n", tableSize))
+		sb.WriteString(fmt.Sprintf("        vtable_size = %d\n", vtableSize))
+		sb.WriteString("        total_size = 4 + table_size + dynamic_size + vtable_size\n")
+		sb.WriteString("        buf = bytearray(total_size)\n")
+		sb.WriteString("        struct.pack_into('<I', buf, 0, 4) # root offset\n")
+		sb.WriteString("        vtable_start = 4 + table_size + dynamic_size\n")
+		sb.WriteString("        vtable_offset = vtable_start - 4\n")
+		sb.WriteString("        struct.pack_into('<i', buf, 4, vtable_offset)\n")
+		sb.WriteString("        current_string_offset = 4 + table_size\n")
+
+		for idx, f := range str.Fields {
+			off := offsets[idx]
+			switch f.Type.Kind {
+			case ast.TypeInt32:
+				sb.WriteString(fmt.Sprintf("        struct.pack_into('<i', buf, 4 + %d, self.%s or 0)\n", off, f.Name))
+			case ast.TypeInt64:
+				sb.WriteString(fmt.Sprintf("        struct.pack_into('<q', buf, 4 + %d, self.%s or 0)\n", off, f.Name))
+			case ast.TypeBool:
+				sb.WriteString(fmt.Sprintf("        struct.pack_into('<?', buf, 4 + %d, bool(self.%s))\n", off, f.Name))
+			case ast.TypeString:
+				sb.WriteString(fmt.Sprintf("        if str_%s:\n", f.Name))
+				sb.WriteString(fmt.Sprintf("            rel_offset = current_string_offset - (4 + %d)\n", off))
+				sb.WriteString(fmt.Sprintf("            struct.pack_into('<I', buf, 4 + %d, rel_offset)\n", off))
+				sb.WriteString(fmt.Sprintf("            struct.pack_into('<I', buf, current_string_offset, len(str_%s))\n", f.Name))
+				sb.WriteString(fmt.Sprintf("            buf[current_string_offset+4 : current_string_offset+4+len(str_%s)] = str_%s\n", f.Name, f.Name))
+				sb.WriteString(fmt.Sprintf("            current_string_offset += 4 + len(str_%s)\n", f.Name))
+			}
+		}
+
+		// Write vtable
+		sb.WriteString("        struct.pack_into('<HH', buf, vtable_start, vtable_size, table_size)\n")
+		for idx := range str.Fields {
+			off := offsets[idx]
+			sb.WriteString(fmt.Sprintf("        struct.pack_into('<H', buf, vtable_start + 4 + %d, %d)\n", 2*idx, off))
+		}
+		sb.WriteString("        return bytes(buf)\n\n")
+
+		// unmarshal_flatbuffers
+		sb.WriteString("    @classmethod\n")
+		sb.WriteString(fmt.Sprintf("    def unmarshal_flatbuffers(cls, buf: bytes) -> '%s':\n", str.Name))
+		sb.WriteString("        import struct\n")
+		sb.WriteString("        if len(buf) < 8:\n            raise ValueError('flatbuffers: buffer too small')\n")
+		sb.WriteString("        root_offset = struct.unpack_from('<I', buf, 0)[0]\n")
+		sb.WriteString("        if root_offset + 4 > len(buf):\n            raise ValueError('flatbuffers: invalid root offset')\n")
+		sb.WriteString("        vtable_offset = struct.unpack_from('<i', buf, root_offset)[0]\n")
+		sb.WriteString("        vtable_start = root_offset + vtable_offset\n")
+		sb.WriteString("        if vtable_start < 0 or vtable_start + 4 > len(buf):\n            raise ValueError('flatbuffers: invalid vtable offset')\n")
+		sb.WriteString("        vtable_size = struct.unpack_from('<H', buf, vtable_start)[0]\n")
+
+		for _, f := range str.Fields {
+			defaultValue := "0"
+			if f.Type.Kind == ast.TypeString {
+				defaultValue = "\"\""
+			} else if f.Type.Kind == ast.TypeBool {
+				defaultValue = "False"
+			}
+			sb.WriteString(fmt.Sprintf("        val_%s = %s\n", f.Name, defaultValue))
+		}
+
+		for idx, f := range str.Fields {
+			voff := 4 + 2*idx
+			sb.WriteString(fmt.Sprintf("        if %d + 2 <= vtable_size:\n", voff))
+			sb.WriteString(fmt.Sprintf("            foffset = struct.unpack_from('<H', buf, vtable_start + %d)[0]\n", voff))
+			sb.WriteString("            if foffset > 0:\n")
+			sb.WriteString("                abs_offset = root_offset + foffset\n")
+			switch f.Type.Kind {
+			case ast.TypeInt32:
+				sb.WriteString("                if abs_offset + 4 <= len(buf):\n")
+				sb.WriteString(fmt.Sprintf("                    val_%s = struct.unpack_from('<i', buf, abs_offset)[0]\n", f.Name))
+			case ast.TypeInt64:
+				sb.WriteString("                if abs_offset + 8 <= len(buf):\n")
+				sb.WriteString(fmt.Sprintf("                    val_%s = struct.unpack_from('<q', buf, abs_offset)[0]\n", f.Name))
+			case ast.TypeBool:
+				sb.WriteString("                if abs_offset < len(buf):\n")
+				sb.WriteString(fmt.Sprintf("                    val_%s = struct.unpack_from('<?', buf, abs_offset)[0]\n", f.Name))
+			case ast.TypeString:
+				sb.WriteString("                if abs_offset + 4 <= len(buf):\n")
+				sb.WriteString("                    rel_offset = struct.unpack_from('<I', buf, abs_offset)[0]\n")
+				sb.WriteString("                    str_start = abs_offset + rel_offset\n")
+				sb.WriteString("                    if str_start + 4 <= len(buf):\n")
+				sb.WriteString("                        str_len = struct.unpack_from('<I', buf, str_start)[0]\n")
+				sb.WriteString("                        if str_start + 4 + str_len <= len(buf):\n")
+				sb.WriteString(fmt.Sprintf("                            val_%s = buf[str_start+4 : str_start+4+str_len].decode('utf-8')\n", f.Name))
+			}
+		}
+
+		sb.WriteString(fmt.Sprintf("        return cls(\n"))
+		for _, f := range str.Fields {
+			sb.WriteString(fmt.Sprintf("            %s=val_%s,\n", f.Name, f.Name))
+		}
+		sb.WriteString("        )\n\n")
 	}
 
 	// Generate Service ABCs

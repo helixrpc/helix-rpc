@@ -176,6 +176,128 @@ func (x *UserProfile) Unmarshal(dAtA []byte) error {
 	return nil
 }
 
+func (x *UserProfile) MarshalFlatBuffers() []byte {
+	dynamicSize := 0
+	if len(x.Username) > 0 {
+		dynamicSize += 4 + len(x.Username)
+	}
+	if len(x.Email) > 0 {
+		dynamicSize += 4 + len(x.Email)
+	}
+	totalSize := 4 + 24 + dynamicSize + 10
+	buf := make([]byte, totalSize)
+	// Root offset pointing to the root table (always 4)
+	buf[0] = 4
+	// Table starts at offset 4
+	// Write vtable offset at buf[4:8]
+	vtableStart := 4 + 24 + dynamicSize
+	vtableOffset := int32(vtableStart - 4)
+	for j := 0; j < 4; j++ {
+		buf[4+j] = byte(vtableOffset >> (j * 8))
+	}
+	currentStringOffset := 4 + 24
+	{
+		v := uint64(x.UserID)
+		for j := 0; j < 8; j++ {
+			buf[4+8+j] = byte(v >> (j * 8))
+		}
+	}
+	if len(x.Username) > 0 {
+		relOffset := uint32(currentStringOffset - (4 + 16))
+		for j := 0; j < 4; j++ {
+			buf[4+16+j] = byte(relOffset >> (j * 8))
+		}
+		strLen := uint32(len(x.Username))
+		for j := 0; j < 4; j++ {
+			buf[currentStringOffset+j] = byte(strLen >> (j * 8))
+		}
+		copy(buf[currentStringOffset+4:], x.Username)
+		currentStringOffset += 4 + len(x.Username)
+	}
+	if len(x.Email) > 0 {
+		relOffset := uint32(currentStringOffset - (4 + 20))
+		for j := 0; j < 4; j++ {
+			buf[4+20+j] = byte(relOffset >> (j * 8))
+		}
+		strLen := uint32(len(x.Email))
+		for j := 0; j < 4; j++ {
+			buf[currentStringOffset+j] = byte(strLen >> (j * 8))
+		}
+		copy(buf[currentStringOffset+4:], x.Email)
+		currentStringOffset += 4 + len(x.Email)
+	}
+	// Write vtable header
+	buf[vtableStart] = byte(10)
+	buf[vtableStart+1] = byte(10 >> 8)
+	buf[vtableStart+2] = byte(24)
+	buf[vtableStart+3] = byte(24 >> 8)
+	buf[vtableStart+4+0] = byte(8)
+	buf[vtableStart+4+0+1] = byte(8 >> 8)
+	buf[vtableStart+4+2] = byte(16)
+	buf[vtableStart+4+2+1] = byte(16 >> 8)
+	buf[vtableStart+4+4] = byte(20)
+	buf[vtableStart+4+4+1] = byte(20 >> 8)
+	return buf
+}
+
+func (x *UserProfile) UnmarshalFlatBuffers(buf []byte) error {
+	if len(buf) < 8 {
+		return fmt.Errorf("flatbuffers: buffer too small")
+	}
+	rootOffset := uint32(buf[0]) | uint32(buf[1])<<8 | uint32(buf[2])<<16 | uint32(buf[3])<<24
+	if int(rootOffset)+4 > len(buf) {
+		return fmt.Errorf("flatbuffers: invalid root offset")
+	}
+	vtableOffset := int32(uint32(buf[rootOffset]) | uint32(buf[rootOffset+1])<<8 | uint32(buf[rootOffset+2])<<16 | uint32(buf[rootOffset+3])<<24)
+	vtableStart := int(rootOffset) + int(vtableOffset)
+	if vtableStart < 0 || vtableStart+4 > len(buf) {
+		return fmt.Errorf("flatbuffers: invalid vtable offset")
+	}
+	vtableSize := uint16(buf[vtableStart]) | uint16(buf[vtableStart+1])<<8
+	if 4+2 <= int(vtableSize) {
+		foffset := uint16(buf[vtableStart+4]) | uint16(buf[vtableStart+4+1])<<8
+		if foffset > 0 {
+			absOffset := int(rootOffset) + int(foffset)
+			if absOffset+8 <= len(buf) {
+				x.UserID = int64(uint64(buf[absOffset]) | uint64(buf[absOffset+1])<<8 | uint64(buf[absOffset+2])<<16 | uint64(buf[absOffset+3])<<24 | uint64(buf[absOffset+4])<<32 | uint64(buf[absOffset+5])<<40 | uint64(buf[absOffset+6])<<48 | uint64(buf[absOffset+7])<<56)
+			}
+		}
+	}
+	if 6+2 <= int(vtableSize) {
+		foffset := uint16(buf[vtableStart+6]) | uint16(buf[vtableStart+6+1])<<8
+		if foffset > 0 {
+			absOffset := int(rootOffset) + int(foffset)
+			if absOffset+4 <= len(buf) {
+				relOffset := uint32(buf[absOffset]) | uint32(buf[absOffset+1])<<8 | uint32(buf[absOffset+2])<<16 | uint32(buf[absOffset+3])<<24
+				strStart := absOffset + int(relOffset)
+				if strStart+4 <= len(buf) {
+					strLen := uint32(buf[strStart]) | uint32(buf[strStart+1])<<8 | uint32(buf[strStart+2])<<16 | uint32(buf[strStart+3])<<24
+					if strStart+4+int(strLen) <= len(buf) {
+						x.Username = string(buf[strStart+4 : strStart+4+int(strLen)])
+					}
+				}
+			}
+		}
+	}
+	if 8+2 <= int(vtableSize) {
+		foffset := uint16(buf[vtableStart+8]) | uint16(buf[vtableStart+8+1])<<8
+		if foffset > 0 {
+			absOffset := int(rootOffset) + int(foffset)
+			if absOffset+4 <= len(buf) {
+				relOffset := uint32(buf[absOffset]) | uint32(buf[absOffset+1])<<8 | uint32(buf[absOffset+2])<<16 | uint32(buf[absOffset+3])<<24
+				strStart := absOffset + int(relOffset)
+				if strStart+4 <= len(buf) {
+					strLen := uint32(buf[strStart]) | uint32(buf[strStart+1])<<8 | uint32(buf[strStart+2])<<16 | uint32(buf[strStart+3])<<24
+					if strStart+4+int(strLen) <= len(buf) {
+						x.Email = string(buf[strStart+4 : strStart+4+int(strLen)])
+					}
+				}
+			}
+		}
+	}
+	return nil
+}
+
 func (x *UserProfile) Write(ctx context.Context, oprot thrift.TProtocol) error {
 	if err := oprot.WriteStructBegin(ctx, "UserProfile"); err != nil {
 		return err
