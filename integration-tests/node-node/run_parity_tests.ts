@@ -1,0 +1,134 @@
+import { HelixServer, TokenBucketRateLimiter, BatchScheduler, decodeAndVerifyJWT, withRetries } from 'helix-rt-node';
+import { UserProfile } from './generated.js';
+import * as http from 'http';
+
+function assert(condition: boolean, message?: string) {
+    if (!condition) {
+        throw new Error(message || "Assertion failed");
+    }
+}
+
+async function runParityTests() {
+    console.log("--- 1. Testing JWT Token Verification ---");
+    const secret = "supersecret";
+    const payload = { sub: "1234", exp: Math.floor(Date.now() / 1000) + 10 };
+    // Build a simple mock JWT
+    const headerB64 = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString('base64url');
+    const payloadB64 = Buffer.from(JSON.stringify(payload)).toString('base64url');
+    const crypto = await import('crypto');
+    const signature = crypto
+        .createHmac('sha256', secret)
+        .update(`${headerB64}.${payloadB64}`)
+        .digest('base64url');
+    const token = `${headerB64}.${payloadB64}.${signature}`;
+
+    const verified = decodeAndVerifyJWT(token, secret);
+    assert(verified !== null, "JWT should be verified successfully");
+    assert(verified.sub === "1234", "Subject claim should match");
+
+    const failedVerified = decodeAndVerifyJWT(token, "wrongsecret");
+    assert(failedVerified === null, "JWT should fail verification with wrong secret");
+    console.log("✅ JWT tests passed!");
+
+    console.log("--- 2. Testing Token Bucket Rate Limiter ---");
+    const limiter = new TokenBucketRateLimiter(2, 10); // 2 capacity, 10 refills per sec
+    assert(limiter.allow() === true, "First request allowed");
+    assert(limiter.allow() === true, "Second request allowed");
+    assert(limiter.allow() === false, "Third request should be rate-limited");
+    console.log("✅ Rate limiter tests passed!");
+
+    console.log("--- 3. Testing Dynamic Batch Scheduler ---");
+    const mockBatchHandler = async (reqs: number[]) => {
+        return reqs.map(r => r * 2);
+    };
+    const scheduler = new BatchScheduler<number, number>(mockBatchHandler, 3, 5);
+    const p1 = scheduler.submit(1);
+    const p2 = scheduler.submit(2);
+    const p3 = scheduler.submit(3);
+    const results = await Promise.all([p1, p2, p3]);
+    assert(results[0] === 2 && results[1] === 4 && results[2] === 6, "Batch items processed correctly");
+    console.log("✅ Batching scheduler tests passed!");
+
+    console.log("--- 4. Testing Exponential Backoff Retry ---");
+    let attempts = 0;
+    const failingFn = async () => {
+        attempts++;
+        if (attempts < 3) {
+            throw new Error("Temporary failure");
+        }
+        return "success";
+    };
+    const finalResult = await withRetries(failingFn, {
+        maxAttempts: 4,
+        initialBackoffMs: 10,
+        maxBackoffMs: 100,
+        multiplier: 2
+    });
+    assert(finalResult === "success", "Fn should eventually succeed");
+    assert(attempts === 3, "Fn should be called 3 times");
+    console.log("✅ Retry tests passed!");
+
+    console.log("--- 5. Testing Sniffing Server ---");
+    const server = new HelixServer("127.0.0.1:0");
+
+    // Register a mock method path
+    server.registerMethod("/helix_example.UserProfileService/GetUserProfile", {
+        Decoder: (dec) => {
+            const req = new UserProfile();
+            dec(req);
+            return req;
+        },
+        Handler: async (ctx, req) => {
+            return new UserProfile({
+                userId: req.userId,
+                username: req.username + "-node-response",
+                email: req.email
+            });
+        }
+    });
+
+    // Register a REST route
+    server.registerRESTRoute("POST", "/v1/users", "/helix_example.UserProfileService/GetUserProfile");
+
+    await server.start();
+    const addrStr = server.getAddr();
+    const [host, port] = addrStr.split(':');
+
+    // Make an HTTP/1.1 POST request to trigger the sniffer + router
+    const postData = JSON.stringify({ userId: 777, username: "node_user", email: "node@test.com" });
+    const reqOptions = {
+        hostname: host,
+        port: parseInt(port),
+        path: '/v1/users',
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(postData)
+        }
+    };
+
+    const responseBody = await new Promise<string>((resolve, reject) => {
+        const req = http.request(reqOptions, (res) => {
+            let data = '';
+            res.on('data', chunk => data += chunk);
+            res.on('end', () => resolve(data));
+        });
+        req.on('error', reject);
+        req.write(postData);
+        req.end();
+    });
+
+    const parsedResponse = JSON.parse(responseBody);
+    assert(parsedResponse.userId === 777, "Response userId should be 777");
+    assert(parsedResponse.username === "node_user-node-response", "Response username should be node_user-node-response");
+
+    server.shutdown();
+    console.log("✅ Sniffing server tests passed!");
+
+    console.log("🎉 ALL PARITY TESTS COMPLETED SUCCESSFULLY!");
+}
+
+runParityTests().catch(err => {
+    console.error("❌ Test run failed:", err);
+    process.exit(1);
+});

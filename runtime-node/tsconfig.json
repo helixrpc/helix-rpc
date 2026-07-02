@@ -3,9 +3,10 @@
     "target": "ES2022",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "esModuleInterop": true,
+    "declaration": true,
+    "outDir": "./dist",
     "strict": true,
     "skipLibCheck": true
   },
-  "include": ["test.ts", "run_parity_tests.ts", "generated.ts"]
+  "include": ["src/**/*"]
 }
