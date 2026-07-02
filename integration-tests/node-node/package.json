@@ -1,0 +1,12 @@
+{
+  "name": "node-transcoding-test",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "test": "tsc && node test.js"
+  },
+  "devDependencies": {
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
+  }
+}

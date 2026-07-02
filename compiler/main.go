@@ -146,9 +146,11 @@ func generate(idlPath, lang, outPath string) error {
 		generated, err = codegen.GenerateRust(parsed)
 	case "python":
 		generated, err = codegen.GeneratePython(parsed)
+	case "node", "typescript":
+		generated, err = codegen.GenerateNode(parsed)
 	default:
 		printError(fmt.Sprintf("unsupported language %q", lang))
-		fmt.Fprintln(os.Stderr, "  Supported languages: go, rust, python")
+		fmt.Fprintln(os.Stderr, "  Supported languages: go, rust, python, node")
 		return fmt.Errorf("unsupported language")
 	}
 
