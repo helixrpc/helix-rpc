@@ -123,3 +123,52 @@ All runtimes support watching the `helix.json` file for changes and dynamically 
 - **Rust**: `watch_config("helix.json".to_string(), callback)`
 - **Python**: `watch_config("helix.json", callback)`
 
+## 5. Command-Line Interface (helix-gen)
+
+The `helix-gen` CLI manages scaffolding, code generation, and compatibility checks.
+
+### Scaffolding a New Service (`init`)
+Creates a complete boilerplate directory structure, configuration file, and Makefile for a new service.
+
+```bash
+helix-gen init <service-name> [flags]
+```
+
+**Flags:**
+- `--lang <go|rust|python>`: Primary service language (default: `go`).
+- `--disable-metrics`: Disable Prometheus metrics reporting.
+- `--disable-health`: Disable standard gRPC health checks.
+- `--disable-gzip`: Disable default response gzip compression.
+- `--disable-deadline`: Disable automatic deadline propagation.
+
+**Example:**
+```bash
+# Scaffold a python service with metrics and health checks disabled
+helix-gen init my-model-service --lang python --disable-metrics --disable-health
+```
+
+### Code Generation (`generate`)
+Compiles a Protobuf (`.proto`) or Apache Thrift (`.thrift`) IDL file into statically typed client and server stubs.
+
+```bash
+helix-gen generate -idl <schema-path> -lang <go|rust|python> -out <output-path> [flags]
+```
+
+**Flags:**
+- `--watch`: Watch the IDL file and automatically regenerate code on save.
+
+**Example:**
+```bash
+helix-gen generate -idl schema.proto -lang go -out generated/generated.go --watch
+```
+
+### Schema Compatibility Checking (`diff`)
+Validates that changes between two schema definitions do not introduce breaking client modifications.
+
+```bash
+helix-gen diff <old-schema> <new-schema>
+```
+
+Returns exit code `2` if breaking modifications are detected, allowing easy integration with CI/CD gates.
+
+
