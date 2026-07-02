@@ -116,3 +116,37 @@ server.RegisterRESTRoute(
 server.Start()
 ```
 Your server can now seamlessly handle standard HTTP `POST /v1/models/predict` requests with JSON, as well as high-performance `HTTP/2` Protobuf frames sent by gRPC clients!
+
+---
+
+## Setting up Node.js / TypeScript Server
+
+Here is a quick-start guide to setting up a TypeScript-based Helix server using the Node.js runtime.
+
+```typescript
+import { HelixServer } from 'helix-rt-node';
+
+const server = new HelixServer('127.0.0.1:8080');
+
+// Register the underlying method handler
+server.registerMethod('/helix.example.UserProfileService/GetUserProfile', {
+    Decoder: (dec) => {
+        const req = { userId: 0, username: '' };
+        dec(req);
+        return req;
+    },
+    Handler: async (ctx, req) => {
+        return {
+            userId: req.userId,
+            username: req.username + '-response',
+            email: 'verified@example.com'
+        };
+    }
+});
+
+// Map REST HTTP/1.1 endpoint route to the same method
+server.registerRESTRoute('POST', '/v1/users', '/helix.example.UserProfileService/GetUserProfile');
+
+console.log('Starting Node.js Helix Server...');
+await server.start();
+```

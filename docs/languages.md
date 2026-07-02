@@ -6,31 +6,31 @@ Helix RPC is designed around a multi-language philosophy, recognising that diffe
 
 ## Feature Parity Matrix
 
-| Feature | Go | Rust | Python |
-|---|:---:|:---:|:---:|
-| Dynamic Batching | ✅ | ✅ | ✅ |
-| Graceful Shutdown | ✅ | ✅ | ✅ |
-| gRPC / HTTP/2 | ✅ | ✅ | ✅ |
-| REST / JSON Transcoding | ✅ | ✅ | ✅ |
-| Server-Sent Events (SSE) | ✅ | ✅ | ✅ |
-| Deadline Propagation (`grpc-timeout`) | ✅ | ✅ | ✅ (all 6 units) |
-| Per-Message Compression (`gzip`) | ✅ | ✅ | ✅ |
-| Health Checking (`grpc.health.v1`) | ✅ | ✅ | — |
-| mTLS Transport Security | ✅ | ✅ | — |
-| OpenTelemetry Tracing | ✅ | ✅ | ✅ |
-| Probabilistic Trace Sampling | ✅ | ✅ | ✅ |
-| Circuit Breaker | ✅ | ✅ | ✅ |
-| Exponential Backoff Retry | ✅ | ✅ | ✅ |
-| P99 Hedging (with Token Bucket) | ✅ | ✅ | ✅ |
-| Least-Connections Load Balancing | ✅ | ✅ | — |
-| Round-Robin Load Balancing | ✅ | ✅ | — |
-| Structured Errors (`HelixError`) | ✅ | ✅ | ✅ |
-| Shared Memory Transport (SHM) | ✅ | ✅ | — |
-| PyO3 Zero-Serialization Embedding | — | ✅ | — |
-| Thrift Protocol Support | ✅ | — | — |
-| Code Generation | ✅ | — | ✅ |
+| Feature | Go | Rust | Python | Node.js |
+|---|:---:|:---:|:---:|:---:|
+| Dynamic Batching | ✅ | ✅ | ✅ | ✅ |
+| Graceful Shutdown | ✅ | ✅ | ✅ | ✅ |
+| gRPC / HTTP/2 | ✅ | ✅ | ✅ | ✅ |
+| REST / JSON Transcoding | ✅ | ✅ | ✅ | ✅ |
+| Server-Sent Events (SSE) | ✅ | ✅ | ✅ | — |
+| Deadline Propagation (`grpc-timeout`) | ✅ | ✅ | ✅ (all 6 units) | ✅ |
+| Per-Message Compression (`gzip`) | ✅ | ✅ | ✅ | ✅ |
+| Health Checking (`grpc.health.v1`) | ✅ | ✅ | — | — |
+| mTLS Transport Security | ✅ | ✅ | — | — |
+| OpenTelemetry Tracing | ✅ | ✅ | ✅ | ✅ |
+| Probabilistic Trace Sampling | ✅ | ✅ | ✅ | ✅ |
+| Circuit Breaker | ✅ | ✅ | ✅ | — |
+| Exponential Backoff Retry | ✅ | ✅ | ✅ | ✅ |
+| P99 Hedging (with Token Bucket) | ✅ | ✅ | ✅ | ✅ |
+| Least-Connections Load Balancing | ✅ | ✅ | — | — |
+| Round-Robin Load Balancing | ✅ | ✅ | — | — |
+| Structured Errors (`HelixError`) | ✅ | ✅ | ✅ | ✅ |
+| Shared Memory Transport (SHM) | ✅ | ✅ | — | — |
+| PyO3 Zero-Serialization Embedding | — | ✅ | — | — |
+| Thrift Protocol Support | ✅ | — | — | — |
+| Code Generation | ✅ | — | ✅ | ✅ |
 
-> **Note:** `—` means the feature is not applicable to that runtime's role (e.g. SHM is not relevant to Python as a standalone server; PyO3 is a Rust-only capability).
+> **Note:** `—` means the feature is not applicable to that runtime's role (e.g. SHM is not relevant to Python/Node.js as a standalone server; PyO3 is a Rust-only capability).
 
 ---
 
@@ -74,3 +74,17 @@ Python is the king of AI modeling (PyTorch, Transformers, vLLM). While Helix RPC
 - **Probabilistic OpenTelemetry Sampling** — 1% default sampling rate prevents collector overload in production.
 
 *Use Python when writing a pure-Python model server that still needs enterprise-grade batching, retries, and observability.*
+
+---
+
+## Node.js (`runtime-node`)
+
+Node.js is the king of asynchronous, lightweight backend APIs. Node.js is fully supported as a **first-class standalone runtime** for building microservices, AI orchestrators, or middleware wrappers.
+
+**Key Strengths:**
+- **Zero-Dependency Sniffing Server** — Implements an efficient connection-sniffing engine mapping TCP/HTTP/gRPC/FlatBuffers requests on a single port.
+- **Dynamic BatchScheduler** — Transparently batches parallel incoming requests into unified callback runs.
+- **Built-in JWT & API Key Middlewares** — Standard cryptographic authorization helpers native in TypeScript.
+- **Resilience Helpers** — Token Bucket rate limiter and Exponential Backoff retry policies.
+
+*Use Node.js when writing serverless APIs or microservice routers inside the JavaScript/TypeScript ecosystem.*
