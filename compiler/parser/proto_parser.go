@@ -381,15 +381,62 @@ func (p *protoParser) parseService() (*ast.ServiceNode, error) {
 			}
 			p.nextToken() // consume ')'
 
-			// Allow optional semicolon or empty blocks { }
+			// Allow optional semicolon or options blocks { }
+			restMethod := ""
+			restPath := ""
 			if p.tok.kind == tokPunct && p.tok.val == ";" {
 				p.nextToken() // consume ';'
 			} else if p.tok.kind == tokPunct && p.tok.val == "{" {
 				p.nextToken() // consume '{'
+				for p.tok.kind != tokEOF && !(p.tok.kind == tokPunct && p.tok.val == "}") {
+					if p.tok.kind == tokIdent && p.tok.val == "option" {
+						p.nextToken() // consume 'option'
+						if p.tok.kind == tokPunct && p.tok.val == "(" {
+							p.nextToken()
+							if p.tok.kind == tokIdent && p.tok.val == "google.api.http" {
+								p.nextToken()
+								if p.tok.kind == tokPunct && p.tok.val == ")" {
+									p.nextToken()
+									if p.tok.kind == tokPunct && p.tok.val == "=" {
+										p.nextToken()
+										if p.tok.kind == tokPunct && p.tok.val == "{" {
+											p.nextToken()
+											for p.tok.kind != tokEOF && !(p.tok.kind == tokPunct && p.tok.val == "}") {
+												if p.tok.kind == tokIdent {
+													verb := p.tok.val
+													p.nextToken()
+													if p.tok.kind == tokPunct && p.tok.val == ":" {
+														p.nextToken()
+														if p.tok.kind == tokString {
+															pathVal := p.tok.val
+															p.nextToken()
+															restMethod = strings.ToUpper(verb)
+															restPath = pathVal
+														}
+													}
+												} else {
+													p.nextToken()
+												}
+											}
+											if p.tok.kind == tokPunct && p.tok.val == "}" {
+												p.nextToken() // consume '}"
+											}
+										}
+									}
+								}
+							}
+						}
+						if p.tok.kind == tokPunct && p.tok.val == ";" {
+							p.nextToken()
+						}
+					} else {
+						p.nextToken()
+					}
+				}
 				if p.tok.kind == tokPunct && p.tok.val == "}" {
 					p.nextToken() // consume '}'
 				} else {
-					return nil, fmt.Errorf("expected empty body '}' for method %s", methodName)
+					return nil, fmt.Errorf("expected closing brace '}' for method %s", methodName)
 				}
 			}
 
@@ -399,6 +446,8 @@ func (p *protoParser) parseService() (*ast.ServiceNode, error) {
 				OutputType:      outputType,
 				ClientStreaming: clientStreaming,
 				ServerStreaming: serverStreaming,
+				RESTMethod:      restMethod,
+				RESTPath:        restPath,
 			})
 		} else {
 			p.nextToken()

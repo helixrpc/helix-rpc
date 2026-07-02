@@ -485,6 +485,10 @@ func readVarint(buf []byte, offset int) (uint64, int, error) {
 			pathDot := fmt.Sprintf("/%s.%s/%s", packagePrefix, srv.Name, m.Name)
 			pathUnderscore := fmt.Sprintf("/%s.%s/%s", strings.ReplaceAll(packagePrefix, ".", "_"), srv.Name, m.Name)
 
+			if m.RESTMethod != "" && m.RESTPath != "" {
+				sb.WriteString(fmt.Sprintf("\tserver.RegisterRESTRoute(\"%s\", \"%s\", \"%s\")\n", m.RESTMethod, m.RESTPath, pathDot))
+			}
+
 			// Register dot path
 			sb.WriteString(fmt.Sprintf("\tserver.RegisterMethod(\"%s\", runtime.MethodInfo{\n", pathDot))
 			sb.WriteString(fmt.Sprintf("\t\tDecoder: func(dec func(interface{}) error) (interface{}, error) {\n"))

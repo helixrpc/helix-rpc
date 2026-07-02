@@ -53,6 +53,8 @@ type MethodNode struct {
 	OutputType      string
 	ClientStreaming bool
 	ServerStreaming bool
+	RESTMethod      string
+	RESTPath        string
 }
 
 // ServiceNode represents an RPC service contract.

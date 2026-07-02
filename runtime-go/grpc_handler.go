@@ -210,6 +210,14 @@ func (h *GRPCHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if route, params := matchREST(r.Method, path, h.restRoutes); route != nil {
 		methodPath = route.HandlerPath
 		pathParams = params
+		if pathParams == nil {
+			pathParams = make(map[string]string)
+		}
+		for qKey, qVals := range r.URL.Query() {
+			if len(qVals) > 0 {
+				pathParams[qKey] = qVals[0]
+			}
+		}
 	}
 
 	methodInfo, ok := h.methods[methodPath]
