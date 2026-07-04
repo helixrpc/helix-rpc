@@ -1,4 +1,4 @@
-module github.com/helix-rpc/helix/tests/go-go
+module github.com/helix-rpc/helix/tests/go
 
 go 1.25.8
 

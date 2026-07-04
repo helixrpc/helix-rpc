@@ -10,7 +10,7 @@ import (
 	"syscall"
 	"time"
 
-	chat "github.com/helix-rpc/helix/tests/go-python-ai/schema"
+	chat "github.com/helix-rpc/helix/tests/python/ai/schema"
 	"github.com/helix-rpc/helix/runtime-go"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"

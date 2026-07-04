@@ -1,7 +1,7 @@
 package go_go
 
 import (
-	generated "github.com/helix-rpc/helix/tests/go-go/generated"
+	generated "github.com/helix-rpc/helix/tests/go/generated"
 	"testing"
 )
 

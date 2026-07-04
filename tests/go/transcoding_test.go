@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	transcoding "github.com/helix-rpc/helix/tests/go-go/generated/transcoding"
+	transcoding "github.com/helix-rpc/helix/tests/go/generated/transcoding"
 	"github.com/helix-rpc/helix/runtime-go"
 )
 

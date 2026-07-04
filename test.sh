@@ -28,12 +28,12 @@ echo "✅ Python codegen succeeded!"
 cd ..
 
 echo "[4/4] Running Go-Go & Cross-Language Matrix Tests (with -race)..."
-cd tests/go-go
+cd tests/go
 go test -v -race ./...
 cd ../..
 
 echo "[4/4] Running Rust-Rust Matrix Tests..."
-cd tests/rust-rust
+cd tests/rust
 cargo test
 cd ../..
 

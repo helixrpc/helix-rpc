@@ -3,7 +3,7 @@ package userprofileservice
 
 import (
 	server "github.com/cloudwego/kitex/server"
-	example "github.com/helix-rpc/helix/tests/go-go/kitex_gen/helix/example"
+	example "github.com/helix-rpc/helix/tests/go/kitex_gen/helix/example"
 )
 
 // NewServer creates a server.Server with the given handler and options.

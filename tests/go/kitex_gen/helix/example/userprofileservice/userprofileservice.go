@@ -7,7 +7,7 @@ import (
 	"errors"
 	client "github.com/cloudwego/kitex/client"
 	kitex "github.com/cloudwego/kitex/pkg/serviceinfo"
-	example "github.com/helix-rpc/helix/tests/go-go/kitex_gen/helix/example"
+	example "github.com/helix-rpc/helix/tests/go/kitex_gen/helix/example"
 )
 
 var errInvalidMessageType = errors.New("invalid message type for service method handler")

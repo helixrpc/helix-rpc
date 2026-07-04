@@ -12,21 +12,21 @@ import (
 	"testing"
 	"time"
 
-	generated "github.com/helix-rpc/helix/tests/go-go/generated"
+	generated "github.com/helix-rpc/helix/tests/go/generated"
 	"github.com/helix-rpc/helix/runtime-go"
 )
 
 func TestCrossLangGoClientRustServer(t *testing.T) {
 	// 1. Build the Rust server
 	buildCmd := exec.Command("cargo", "build")
-	buildCmd.Dir = "../rust-rust"
+	buildCmd.Dir = "../rust"
 	if err := buildCmd.Run(); err != nil {
 		t.Fatalf("failed to build Rust server: %v", err)
 	}
 
 	// 2. Start the Rust server
 	runCmd := exec.Command("cargo", "run", "--", "--server")
-	runCmd.Dir = "../rust-rust"
+	runCmd.Dir = "../rust"
 	stdout, err := runCmd.StdoutPipe()
 	if err != nil {
 		t.Fatalf("failed to get stdout pipe: %v", err)
@@ -176,7 +176,7 @@ func TestCrossLangRustClientGoServer(t *testing.T) {
 
 	// Execute Rust client against the Go server
 	cmd := exec.Command("cargo", "run", "--", "--client", addr)
-	cmd.Dir = "../rust-rust"
+	cmd.Dir = "../rust"
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("Rust client E2E test failed: %v\nOutput: %s", err, string(output))

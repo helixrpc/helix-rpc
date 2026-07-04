@@ -6,7 +6,7 @@ import (
 	"context"
 	client "github.com/cloudwego/kitex/client"
 	callopt "github.com/cloudwego/kitex/client/callopt"
-	example "github.com/helix-rpc/helix/tests/go-go/kitex_gen/helix/example"
+	example "github.com/helix-rpc/helix/tests/go/kitex_gen/helix/example"
 )
 
 // Client is designed to provide IDL-compatible methods with call-option parameter for kitex framework.

@@ -1,4 +1,4 @@
-module github.com/helix-rpc/helix/tests/go-python-ai
+module github.com/helix-rpc/helix/tests/python/ai
 
 go 1.25.0
 
@@ -31,4 +31,4 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260414002931-afd174a4e478 // indirect
 )
 
-replace github.com/helix-rpc/helix/runtime-go => ../../runtimes/go
+replace github.com/helix-rpc/helix/runtime-go => ../../../runtimes/go

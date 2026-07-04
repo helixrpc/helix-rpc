@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/apache/thrift/lib/go/thrift"
-	generated "github.com/helix-rpc/helix/tests/go-go/generated"
+	generated "github.com/helix-rpc/helix/tests/go/generated"
 	"github.com/helix-rpc/helix/runtime-go"
 	"golang.org/x/net/http2"
 	"google.golang.org/grpc"
@@ -23,8 +23,8 @@ import (
 
 	kitexclient "github.com/cloudwego/kitex/client"
 	kitexserver "github.com/cloudwego/kitex/server"
-	"github.com/helix-rpc/helix/tests/go-go/kitex_gen/helix/example"
-	"github.com/helix-rpc/helix/tests/go-go/kitex_gen/helix/example/userprofileservice"
+	"github.com/helix-rpc/helix/tests/go/kitex_gen/helix/example"
+	"github.com/helix-rpc/helix/tests/go/kitex_gen/helix/example/userprofileservice"
 )
 
 var (

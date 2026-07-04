@@ -18,7 +18,7 @@ import (
 	"github.com/apache/thrift/lib/go/thrift"
 	"golang.org/x/net/http2"
 
-	generated "github.com/helix-rpc/helix/tests/go-go/generated"
+	generated "github.com/helix-rpc/helix/tests/go/generated"
 	"github.com/helix-rpc/helix/runtime-go"
 )
 
