@@ -24,6 +24,6 @@ A high-performance Go API Gateway that demonstrates the power of the `BatchSched
 A pure-Python equivalent to the Go Dynamic Batcher, using the `helix_rt` Python SDK. It leverages `asyncio` to natively bundle concurrent `await` calls into batch arrays. It also demonstrates native SSE streaming and strict execution deadlines using the built-in middlewares.
 
 ## 5. Node.js Parity Suite
-**Path:** `tests/node-node`
+**Path:** `tests/node`
 
 A TypeScript test suite demonstrating the full `helix-rt-node` runtime package. It boots a protocol-sniffing server, registers JSON REST transcoding routes, and executes requests passing through built-in JWT authorization middlewares, Token Bucket rate-limiters, dynamic batch schedulers, and exponential retry policies.
