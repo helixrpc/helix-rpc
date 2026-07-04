@@ -19,7 +19,7 @@ cd ../..
 echo "[3/4] Testing Compiler & Python Code Generation..."
 cd compiler
 go build -o helix-gen .
-./helix-gen -idl ../integration-tests/schema/chat_completion.proto -lang python -out ../integration-tests/schema/generated.py
+./helix-gen -idl ../tests/schema/chat_completion.proto -lang python -out ../tests/schema/generated.py
 if [ $? -ne 0 ]; then
     echo "❌ Python Code Generation Failed"
     exit 1
@@ -28,12 +28,12 @@ echo "✅ Python codegen succeeded!"
 cd ..
 
 echo "[4/4] Running Go-Go & Cross-Language Matrix Tests (with -race)..."
-cd integration-tests/go-go
+cd tests/go-go
 go test -v -race ./...
 cd ../..
 
 echo "[4/4] Running Rust-Rust Matrix Tests..."
-cd integration-tests/rust-rust
+cd tests/rust-rust
 cargo test
 cd ../..
 
