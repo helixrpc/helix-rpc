@@ -1,4 +1,4 @@
-import { HelixServer, TokenBucketRateLimiter, BatchScheduler, decodeAndVerifyJWT, withRetries } from 'helix-rt-node';
+import { HelixServer, TokenBucketRateLimiter, BatchScheduler, decodeAndVerifyJWT, withRetries, CircuitBreaker, RoundRobinBalancer } from 'helix-rt-node';
 import { UserProfile } from './generated.js';
 import * as http from 'http';
 
@@ -124,6 +124,75 @@ async function runParityTests() {
 
     server.shutdown();
     console.log("✅ Sniffing server tests passed!");
+
+    console.log("--- 6. Testing Circuit Breaker ---");
+    const cb = new CircuitBreaker(2, 50); // 2 failures, 50ms timeout
+    let count = 0;
+    const task = async () => {
+        count++;
+        if (count <= 2) throw new Error("fail");
+        return "ok";
+    };
+    try { await cb.execute(task); } catch (e) {}
+    try { await cb.execute(task); } catch (e) {}
+    // Now circuit should be open
+    try {
+        await cb.execute(task);
+        assert(false, "Should have failed on open circuit");
+    } catch (e: any) {
+        assert(e.message === "circuit breaker is open", "Should be open circuit error");
+    }
+    console.log("✅ Circuit breaker tests passed!");
+
+    console.log("--- 7. Testing Round-Robin Balancer ---");
+    const mockClient = (val: string) => ({
+        invoke: async () => val
+    });
+    const balancer = new RoundRobinBalancer([mockClient("A"), mockClient("B")]);
+    assert(await balancer.next().invoke("", {}) === "A");
+    assert(await balancer.next().invoke("", {}) === "B");
+    assert(await balancer.next().invoke("", {}) === "A");
+    console.log("✅ Round-Robin balancer tests passed!");
+
+    console.log("--- 8. Testing Health Checking & SSE Streaming Server ---");
+    const sseServer = new HelixServer("127.0.0.1:0");
+    sseServer.registerMethod("/stream", {
+        Decoder: (d) => d({}),
+        Handler: async () => {
+            return (async function* () {
+                yield "hello";
+                yield "world";
+            })();
+        }
+    });
+    sseServer.registerRESTRoute("POST", "/stream", "/stream");
+    await sseServer.start();
+    const sseAddr = sseServer.getAddr();
+    const ssePort = parseInt(sseAddr.split(':')[1]);
+
+    // Test health check endpoint
+    const healthResp = await new Promise<string>((resolve) => {
+        http.request({ hostname: "127.0.0.1", port: ssePort, path: "/grpc.health.v1.Health/Check", method: "POST" }, (res) => {
+            let data = "";
+            res.on("data", chunk => data += chunk);
+            res.on("end", () => resolve(data));
+        }).end("{}");
+    });
+    console.log("Health check response:", healthResp);
+    assert(JSON.parse(healthResp).status === 1, "Health check should return status 1 (SERVING)");
+    console.log("✅ Health check endpoint verified!");
+
+    // Test SSE Stream endpoint
+    const sseStream = await new Promise<string>((resolve) => {
+        http.request({ hostname: "127.0.0.1", port: ssePort, path: "/stream", method: "POST" }, (res) => {
+            let data = "";
+            res.on("data", chunk => data += chunk);
+            res.on("end", () => resolve(data));
+        }).end("{}");
+    });
+    assert(sseStream.includes("hello") && sseStream.includes("world"), "SSE stream should contain chunk outputs");
+    sseServer.shutdown();
+    console.log("✅ Health check & SSE stream server tests passed!");
 
     console.log("🎉 ALL PARITY TESTS COMPLETED SUCCESSFULLY!");
 }
