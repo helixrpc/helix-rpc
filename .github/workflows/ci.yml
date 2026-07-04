@@ -19,7 +19,7 @@ jobs:
           go-version: '1.24'
 
       - name: Go Runtime Tests (with -race)
-        working-directory: ./runtime-go
+        working-directory: ./runtimes/go
         run: go test -v -race ./...
 
   rust-tests:
@@ -34,11 +34,11 @@ jobs:
           components: clippy
 
       - name: Rust Runtime Clippy Check
-        working-directory: ./runtime-rust
+        working-directory: ./runtimes/rust
         run: cargo clippy -- -D warnings
 
       - name: Rust Runtime Tests
-        working-directory: ./runtime-rust
+        working-directory: ./runtimes/rust
         run: cargo test
 
   cross-language-integration:

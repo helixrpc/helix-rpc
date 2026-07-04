@@ -10,7 +10,7 @@ thrift = "0.17"
 async-trait = "0.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-helix-rt = { path = "../../runtime-rust" }
+helix-rt = { path = "../../runtimes/rust" }
 hyper = { version = "0.14", features = ["full"] }
 bytes = "1.4"
 rcgen = "0.11"

@@ -27,4 +27,4 @@ require (
 	google.golang.org/protobuf v1.36.8 // indirect
 )
 
-replace github.com/helix-rpc/helix/runtime-go => ../../runtime-go
+replace github.com/helix-rpc/helix/runtime-go => ../../runtimes/go

@@ -6,15 +6,15 @@ echo "   Helix RPC - Integration Test Harness  "
 echo "========================================="
 
 echo "[1/4] Running Go Runtime Unit Tests (with -race)..."
-cd runtime-go
+cd runtimes/go
 go test -v -race ./...
-cd ..
+cd ../..
 
 echo "[2/4] Running Rust Runtime Checks (Clippy & Tests)..."
-cd runtime-rust
+cd runtimes/rust
 cargo clippy -- -D warnings
 cargo test
-cd ..
+cd ../..
 
 echo "[3/4] Testing Compiler & Python Code Generation..."
 cd compiler

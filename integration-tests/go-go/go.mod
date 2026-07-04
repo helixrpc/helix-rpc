@@ -65,4 +65,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/helix-rpc/helix/runtime-go => ../../runtime-go
+replace github.com/helix-rpc/helix/runtime-go => ../../runtimes/go

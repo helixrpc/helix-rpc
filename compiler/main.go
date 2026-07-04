@@ -503,7 +503,7 @@ async fn main() {
 	case "node", "typescript":
 		os.MkdirAll(filepath.Join(base, "src"), 0755)       //nolint:errcheck
 		os.MkdirAll(filepath.Join(base, "generated"), 0755) //nolint:errcheck
-		nodeDeps := `"helix-rt-node": "file:../../runtime-node"`
+		nodeDeps := `"helix-rt-node": "file:../../runtimes/node"`
 		if dbType == "mysql" {
 			nodeDeps += ",\n    \"mysql2\": \"^3.9.0\""
 			writeFile(filepath.Join(base, "src", "database.ts"), `import mysql from 'mysql2/promise';
