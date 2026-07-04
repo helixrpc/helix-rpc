@@ -14,6 +14,7 @@ import (
 	"github.com/helix-rpc/helix/compiler/ast"
 	"github.com/helix-rpc/helix/compiler/codegen"
 	"github.com/helix-rpc/helix/compiler/compat"
+	"github.com/helix-rpc/helix/compiler/linter"
 	"github.com/helix-rpc/helix/compiler/parser"
 )
 
@@ -34,6 +35,7 @@ SUBCOMMANDS:
   helix-gen generate  Generate code from an IDL schema
   helix-gen init      Scaffold a new Helix RPC service
   helix-gen diff      Compare two schema versions for compatibility
+  helix-gen lint      Lint a schema for Helix style compliance
 
 Run 'helix-gen <subcommand> --help' for detailed usage.
 `
@@ -51,6 +53,8 @@ func main() {
 		runInit(os.Args[2:])
 	case "diff":
 		runDiff(os.Args[2:])
+	case "lint":
+		runLint(os.Args[2:])
 	case "version", "--version", "-v":
 		fmt.Printf("helix-gen %s\n", version)
 	case "help", "--help", "-h":
@@ -693,4 +697,34 @@ func writeFile(path, content string) {
 
 func printError(msg string) {
 	fmt.Fprintf(os.Stderr, "\n✗ helix-gen: %s\n\n", msg)
+}
+
+// ---------------------------------------------------------------------------
+// lint subcommand
+// ---------------------------------------------------------------------------
+
+func runLint(args []string) {
+	if len(args) < 1 {
+		fmt.Fprintln(os.Stderr, "Usage: helix-gen lint <schema.proto|schema.thrift>")
+		os.Exit(1)
+	}
+	path := args[0]
+
+	parsed, err := parseIDL(path)
+	if err != nil {
+		printError(fmt.Sprintf("cannot parse %s: %v", path, err))
+		os.Exit(1)
+	}
+
+	errors := linter.Lint(parsed)
+	if len(errors) > 0 {
+		fmt.Printf("\n📋 Helix Linter Style Violations in %s:\n", filepath.Base(path))
+		for _, e := range errors {
+			fmt.Printf("  ✗  %s\n", e)
+		}
+		fmt.Println()
+		os.Exit(1)
+	}
+
+	fmt.Printf("✅ Schema %s matches Helix style guidelines!\n", filepath.Base(path))
 }
