@@ -42,9 +42,34 @@ Many modern architectures deploy related services in the same Kubernetes pod or 
 
 ---
 
+## Operational Tradeoffs and Migration Strategies
+
+### Migration Path: From REST to Helix RPC
+Migrating an existing microservices topology from JSON/REST to a binary protocol is traditionally a high-risk operation. You have to migrate all clients and servers simultaneously, or run dual-stack deployments.
+
+Helix RPC simplifies this transition:
+1. **Step 1**: Compile your new Protobuf IDL with Helix compiler.
+2. **Step 2**: Replace your server implementation with the Helix stub. Because the Helix server accepts JSON/HTTP/1.1 directly on the same port, your existing frontend clients can continue calling your service without any code changes.
+3. **Step 3**: Upgrade internal microservice clients to use the binary Helix client stub. They will automatically switch to high-speed binary protocols (like gRPC or Thrift) using the same socket connection.
+
+```
+[Phase 1]: Web Client (JSON) --------> [ Helix Server ]
+[Phase 2]: Go Client (gRPC binary) ---> [ Helix Server ] (Same Port!)
+```
+
+### Operational Cost of Mesh Sidecars
+In a typical gRPC environment, calling co-located containers or translating formats (e.g. JSON to Protobuf) requires routing traffic through sidecars like Envoy. This adds:
+- **CPU Overhead**: Parsing headers twice at each hop.
+- **Memory Cost**: Envoy sidecars typically consume 50MB–150MB of RAM per pod, which adds up to gigabytes across large clusters.
+- **Network Latency**: Adding 0.5ms–1.5ms per hop due to loopback traversal.
+
+Helix RPC removes the sidecar requirement entirely. It performs direct transcoding inside the application process using zero-allocation transpilers, and routes local traffic using kernel-level eBPF Sockmaps.
+
+---
+
 ## When to Choose What
 
-*   **Choose REST/JSON** if you are building simple internal internal tools or low-traffic static websites where speed and type guarantees are not constraints.
+*   **Choose REST/JSON** if you are building simple internal tools or low-traffic static websites where speed and type guarantees are not constraints.
 *   **Choose gRPC** if your entire stack is purely built on static Go/C++ pipelines and you already have deep infrastructure investments in complex Service Meshes.
 *   **Choose Helix RPC** if:
     - You serve heterogeneous environments (browsers requiring REST, microservices requiring high-performance binary protocols).
