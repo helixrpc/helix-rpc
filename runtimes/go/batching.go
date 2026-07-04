@@ -38,6 +38,7 @@ func NewBatchScheduler(maxBatchSize int, waitWindow time.Duration, handler Batch
 func (s *BatchScheduler) run(handler BatchHandler) {
 	var batch []*batchRequest
 	var timer *time.Timer
+	var timerChan <-chan time.Time
 
 	flush := func() {
 		if len(batch) == 0 {
@@ -67,8 +68,13 @@ func (s *BatchScheduler) run(handler BatchHandler) {
 
 		batch = nil
 		if timer != nil {
-			timer.Stop()
-			timer = nil
+			if !timer.Stop() {
+				select {
+				case <-timer.C:
+				default:
+				}
+			}
+			timerChan = nil
 		}
 	}
 
@@ -76,7 +82,18 @@ func (s *BatchScheduler) run(handler BatchHandler) {
 		if len(batch) == 0 {
 			req := <-s.reqCh
 			batch = append(batch, req)
-			timer = time.NewTimer(s.waitWindow)
+			if timer == nil {
+				timer = time.NewTimer(s.waitWindow)
+			} else {
+				if !timer.Stop() {
+					select {
+					case <-timer.C:
+					default:
+					}
+				}
+				timer.Reset(s.waitWindow)
+			}
+			timerChan = timer.C
 		}
 
 		if len(batch) >= s.maxBatchSize {
@@ -90,7 +107,7 @@ func (s *BatchScheduler) run(handler BatchHandler) {
 			if len(batch) >= s.maxBatchSize {
 				flush()
 			}
-		case <-timer.C:
+		case <-timerChan:
 			flush()
 		}
 	}
