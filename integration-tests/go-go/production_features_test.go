@@ -141,7 +141,7 @@ func TestGoProductionFeatures(t *testing.T) {
 	t.Run("Gzip-Compression", func(t *testing.T) {
 		req := &generated.UserProfile{UserID: 2, Username: "compressed"}
 		marshaled, _ := req.Marshal()
-		
+
 		// Compress using gzip
 		w := runtime.GzipCompressor{}
 		compressedBytes, err := w.Compress(marshaled)
@@ -177,7 +177,7 @@ func TestGoProductionFeatures(t *testing.T) {
 		if _, err := io.ReadFull(resp.Body, frameHeader); err != nil {
 			t.Fatalf("failed to read frame header: %v", err)
 		}
-		
+
 		compressedFlag := frameHeader[0]
 		if compressedFlag != 1 {
 			t.Errorf("expected response frame to be compressed (flag=1), got %d", compressedFlag)

@@ -339,8 +339,8 @@ Edit [schema.proto](./schema.proto) and run `+"`make gen`"+` to regenerate.
 	// Language-specific server entrypoint
 	switch lang {
 	case "go":
-		os.MkdirAll(filepath.Join(base, "server"), 0755)     //nolint:errcheck
-		os.MkdirAll(filepath.Join(base, "generated"), 0755)  //nolint:errcheck
+		os.MkdirAll(filepath.Join(base, "server"), 0755)    //nolint:errcheck
+		os.MkdirAll(filepath.Join(base, "generated"), 0755) //nolint:errcheck
 		goModDeps := "require github.com/helix-rpc/helix/runtime-go v0.2.0\n"
 		if dbType == "mysql" {
 			goModDeps += "require github.com/go-sql-driver/mysql v1.8.1\n"

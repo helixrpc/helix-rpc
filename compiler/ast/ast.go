@@ -4,25 +4,25 @@ package ast
 type Type string
 
 const (
-	TypeInt32   Type = "T_INT32"
-	TypeInt64   Type = "T_INT64"
-	TypeString  Type = "T_STRING"
-	TypeBinary  Type = "T_BINARY"
-	TypeBool    Type = "T_BOOL"
-	TypeDouble  Type = "T_DOUBLE"
-	TypeVoid    Type = "T_VOID"
-	TypeMap     Type = "T_MAP"
-	TypeList    Type = "T_LIST"
-	TypeStruct  Type = "T_STRUCT"
-	TypeEnum    Type = "T_ENUM"
+	TypeInt32  Type = "T_INT32"
+	TypeInt64  Type = "T_INT64"
+	TypeString Type = "T_STRING"
+	TypeBinary Type = "T_BINARY"
+	TypeBool   Type = "T_BOOL"
+	TypeDouble Type = "T_DOUBLE"
+	TypeVoid   Type = "T_VOID"
+	TypeMap    Type = "T_MAP"
+	TypeList   Type = "T_LIST"
+	TypeStruct Type = "T_STRUCT"
+	TypeEnum   Type = "T_ENUM"
 )
 
 // TypeNode represents a type in the AST.
 type TypeNode struct {
 	Kind      Type
-	Name      string     // Used when Kind is T_STRUCT or T_ENUM
-	KeyType   *TypeNode  // Used when Kind is T_MAP
-	ValueType *TypeNode  // Used when Kind is T_MAP or T_LIST
+	Name      string    // Used when Kind is T_STRUCT or T_ENUM
+	KeyType   *TypeNode // Used when Kind is T_MAP
+	ValueType *TypeNode // Used when Kind is T_MAP or T_LIST
 }
 
 // FieldNode represents a field in a struct.

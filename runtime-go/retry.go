@@ -37,15 +37,15 @@ func (cs CircuitState) String() string {
 // CircuitBreaker is a thread-safe, atomic state machine that prevents cascading
 // failures by fast-failing requests when the error rate exceeds a threshold.
 type CircuitBreaker struct {
-	state        int32  // CircuitState stored atomically
-	failures     int64  // rolling failure count (atomic)
-	successes    int64  // rolling success count in HalfOpen (atomic)
-	lastOpenTime int64  // UnixNano of when circuit opened (atomic)
+	state        int32 // CircuitState stored atomically
+	failures     int64 // rolling failure count (atomic)
+	successes    int64 // rolling success count in HalfOpen (atomic)
+	lastOpenTime int64 // UnixNano of when circuit opened (atomic)
 
 	// Config
-	MaxFailures      int64         // failures before tripping (e.g. 5)
-	OpenTimeout      time.Duration // how long to stay Open before probing
-	HalfOpenProbes   int64         // successes required in HalfOpen to re-close
+	MaxFailures    int64         // failures before tripping (e.g. 5)
+	OpenTimeout    time.Duration // how long to stay Open before probing
+	HalfOpenProbes int64         // successes required in HalfOpen to re-close
 }
 
 // NewCircuitBreaker returns a production-ready circuit breaker.
@@ -130,8 +130,8 @@ func (cb *CircuitBreaker) RecordFailure() {
 // requests. Tokens refill continuously at a fixed rate using atomic CAS.
 type TokenBucket struct {
 	// tokens is stored as a fixed-point integer: actual tokens = tokens / 1e9
-	tokens    int64 // scaled by 1e9 (nano-tokens)
-	capacity  int64 // max nano-tokens
+	tokens     int64 // scaled by 1e9 (nano-tokens)
+	capacity   int64 // max nano-tokens
 	refillRate int64 // nano-tokens added per nanosecond
 	lastRefill int64 // UnixNano of last refill (atomic)
 }
@@ -152,8 +152,6 @@ func NewTokenBucket(capacity float64, ratePerSecond float64) *TokenBucket {
 		lastRefill: time.Now().UnixNano(),
 	}
 }
-
-
 
 // NewHedgingTokenBucket returns a bucket that allows `hedgesPerSecond` hedged
 // requests per second with a burst capacity of `burstCapacity`.

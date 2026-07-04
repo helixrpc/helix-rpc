@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
-use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 use tokio::net::TcpStream;
 
 pub struct ClientConnPool {

@@ -1,9 +1,9 @@
 use std::fs::OpenOptions;
 use std::os::unix::io::AsRawFd;
 use std::sync::Arc;
-use tokio::sync::Mutex;
-use tokio::net::TcpStream;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::TcpStream;
+use tokio::sync::Mutex;
 
 pub struct ShmConn {
     pub signal: TcpStream,
@@ -17,7 +17,12 @@ unsafe impl Send for ShmConn {}
 unsafe impl Sync for ShmConn {}
 
 impl ShmConn {
-    pub fn new(signal: TcpStream, shm_path: &str, size: usize, is_owner: bool) -> Result<Self, std::io::Error> {
+    pub fn new(
+        signal: TcpStream,
+        shm_path: &str,
+        size: usize,
+        is_owner: bool,
+    ) -> Result<Self, std::io::Error> {
         let file = if is_owner {
             let f = OpenOptions::new()
                 .read(true)
@@ -28,10 +33,7 @@ impl ShmConn {
             f.set_len(size as u64)?;
             f
         } else {
-            OpenOptions::new()
-                .read(true)
-                .write(true)
-                .open(shm_path)?
+            OpenOptions::new().read(true).write(true).open(shm_path)?
         };
 
         let mmap_ptr = unsafe {
@@ -65,7 +67,10 @@ impl ShmConn {
         let length = u32::from_be_bytes([header[4], header[5], header[6], header[7]]) as usize;
 
         if offset + length > self.size {
-            return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "shm read out of bounds"));
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "shm read out of bounds",
+            ));
         }
 
         let mut data = vec![0u8; length];
@@ -82,7 +87,10 @@ impl ShmConn {
 
         let length = payload.len();
         if length > self.size {
-            return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "payload size exceeds shm capacity"));
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "payload size exceeds shm capacity",
+            ));
         }
 
         let offset = 0; // ping-pong model

@@ -114,7 +114,7 @@ func TestTokenBucket_Consume(t *testing.T) {
 // TestExecuteWithRetry_CircuitOpen ensures fast-fail when circuit is open.
 func TestExecuteWithRetry_CircuitOpen(t *testing.T) {
 	cb := NewCircuitBreaker(1, 60_000_000_000, 1) // 1 failure trips, 60s timeout
-	cb.RecordFailure()                              // trip immediately
+	cb.RecordFailure()                            // trip immediately
 
 	policy := DefaultRetryPolicy()
 	policy.Breaker = cb

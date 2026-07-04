@@ -21,7 +21,11 @@ pub struct HelixError {
 
 impl fmt::Display for HelixError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "helix error: code={:?} message={}", self.code, self.message)
+        write!(
+            f,
+            "helix error: code={:?} message={}",
+            self.code, self.message
+        )
     }
 }
 
@@ -37,24 +41,20 @@ impl HelixError {
 
     pub fn to_thrift_error(&self) -> thrift::Error {
         match self.code {
-            ErrorCode::Unimplemented => {
-                thrift::Error::Application(thrift::ApplicationError::new(
-                    thrift::ApplicationErrorKind::UnknownMethod,
-                    self.message.clone(),
-                ))
-            }
+            ErrorCode::Unimplemented => thrift::Error::Application(thrift::ApplicationError::new(
+                thrift::ApplicationErrorKind::UnknownMethod,
+                self.message.clone(),
+            )),
             ErrorCode::InvalidArgument => {
                 thrift::Error::Application(thrift::ApplicationError::new(
                     thrift::ApplicationErrorKind::ProtocolError,
                     self.message.clone(),
                 ))
             }
-            _ => {
-                thrift::Error::Application(thrift::ApplicationError::new(
-                    thrift::ApplicationErrorKind::InternalError,
-                    self.message.clone(),
-                ))
-            }
+            _ => thrift::Error::Application(thrift::ApplicationError::new(
+                thrift::ApplicationErrorKind::InternalError,
+                self.message.clone(),
+            )),
         }
     }
 }

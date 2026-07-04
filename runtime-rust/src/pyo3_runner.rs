@@ -24,17 +24,19 @@ impl PyModelHandler {
     pub fn generate_batch(&self, prompts: Vec<String>) -> PyResult<Vec<String>> {
         Python::with_gil(|py| -> PyResult<Vec<String>> {
             let py_prompts = PyList::new(py, prompts)?;
-            
-            let result = self.model.call_method1(py, "generate_batch", (py_prompts,))?;
-            
+
+            let result = self
+                .model
+                .call_method1(py, "generate_batch", (py_prompts,))?;
+
             let result_list = result.downcast_bound::<PyList>(py)?;
-            
+
             let mut out = Vec::with_capacity(result_list.len());
             for item in result_list.iter() {
                 let s = item.downcast::<PyString>()?;
                 out.push(s.to_str()?.to_owned());
             }
-            
+
             Ok(out)
         })
     }
@@ -48,11 +50,13 @@ impl PyModelHandler {
         tokio::task::spawn_blocking(move || {
             let res = Python::with_gil(|py| -> PyResult<()> {
                 let py_prompt = pyo3::types::PyString::new(py, &prompt);
-                
-                let result = self.model.call_method1(py, "generate_stream", (py_prompt,))?;
-                
+
+                let result = self
+                    .model
+                    .call_method1(py, "generate_stream", (py_prompt,))?;
+
                 let iter = result.downcast_bound::<pyo3::types::PyIterator>(py)?;
-                
+
                 for item in iter {
                     match item {
                         Ok(it) => {

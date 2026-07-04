@@ -1,8 +1,8 @@
 use hyper::HeaderMap;
 use opentelemetry::global;
 use opentelemetry::propagation::Extractor;
-use tracing_opentelemetry::OpenTelemetrySpanExt;
 use tracing::Span;
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 struct HeaderExtractor<'a>(&'a HeaderMap);
 

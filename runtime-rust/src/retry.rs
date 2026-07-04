@@ -1,7 +1,7 @@
+use rand::random;
 use std::sync::atomic::{AtomicI32, AtomicI64, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
-use rand::random;
 
 // ---------------------------------------------------------------------------
 // Circuit Breaker
@@ -10,19 +10,19 @@ use rand::random;
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[repr(i32)]
 pub enum CircuitState {
-    Closed   = 0,
-    Open     = 1,
+    Closed = 0,
+    Open = 1,
     HalfOpen = 2,
 }
 
 /// Thread-safe atomic circuit breaker matching the Go implementation.
 pub struct CircuitBreaker {
-    state:          AtomicI32,
-    failures:       AtomicI64,
-    successes:      AtomicI64,
-    last_open_ns:   AtomicU64,
-    max_failures:   i64,
-    open_timeout:   Duration,
+    state: AtomicI32,
+    failures: AtomicI64,
+    successes: AtomicI64,
+    last_open_ns: AtomicU64,
+    max_failures: i64,
+    open_timeout: Duration,
     half_open_probes: i64,
 }
 
@@ -76,7 +76,8 @@ impl CircuitBreaker {
             CircuitState::HalfOpen => {
                 let probes = self.successes.fetch_add(1, Ordering::SeqCst) + 1;
                 if probes >= self.half_open_probes {
-                    self.state.store(CircuitState::Closed as i32, Ordering::SeqCst);
+                    self.state
+                        .store(CircuitState::Closed as i32, Ordering::SeqCst);
                     self.failures.store(0, Ordering::SeqCst);
                 }
             }
@@ -113,10 +114,10 @@ impl CircuitBreaker {
 
 /// A simple atomic token bucket for hedging rate-limiting.
 pub struct TokenBucket {
-    tokens:      AtomicI64,  // nano-tokens (1 token = 1_000_000_000 nano-tokens)
-    capacity:    i64,
-    refill_rate: i64,        // nano-tokens per nanosecond
-    last_refill: AtomicU64,  // nanosecond timestamp
+    tokens: AtomicI64, // nano-tokens (1 token = 1_000_000_000 nano-tokens)
+    capacity: i64,
+    refill_rate: i64,       // nano-tokens per nanosecond
+    last_refill: AtomicU64, // nanosecond timestamp
 }
 
 impl TokenBucket {
@@ -149,8 +150,17 @@ impl TokenBucket {
                 loop {
                     let cur = self.tokens.load(Ordering::Relaxed);
                     let next = (cur + refill).min(self.capacity);
-                    if self.tokens.compare_exchange(cur, next, Ordering::Relaxed, Ordering::Relaxed).is_ok() {
-                        let _ = self.last_refill.compare_exchange(last, now_ns, Ordering::Relaxed, Ordering::Relaxed);
+                    if self
+                        .tokens
+                        .compare_exchange(cur, next, Ordering::Relaxed, Ordering::Relaxed)
+                        .is_ok()
+                    {
+                        let _ = self.last_refill.compare_exchange(
+                            last,
+                            now_ns,
+                            Ordering::Relaxed,
+                            Ordering::Relaxed,
+                        );
                         break;
                     }
                 }
@@ -163,7 +173,11 @@ impl TokenBucket {
             if cur < ONE_TOKEN {
                 return false;
             }
-            if self.tokens.compare_exchange(cur, cur - ONE_TOKEN, Ordering::Relaxed, Ordering::Relaxed).is_ok() {
+            if self
+                .tokens
+                .compare_exchange(cur, cur - ONE_TOKEN, Ordering::Relaxed, Ordering::Relaxed)
+                .is_ok()
+            {
                 return true;
             }
         }
@@ -175,25 +189,25 @@ impl TokenBucket {
 // ---------------------------------------------------------------------------
 
 pub struct RetryPolicy {
-    pub max_attempts:        usize,
-    pub initial_backoff:     Duration,
-    pub max_backoff:         Duration,
-    pub backoff_multiplier:  f64,
-    pub hedge_delay:         Option<Duration>,
-    pub hedge_bucket:        Option<Arc<TokenBucket>>,
-    pub breaker:             Option<Arc<CircuitBreaker>>,
+    pub max_attempts: usize,
+    pub initial_backoff: Duration,
+    pub max_backoff: Duration,
+    pub backoff_multiplier: f64,
+    pub hedge_delay: Option<Duration>,
+    pub hedge_bucket: Option<Arc<TokenBucket>>,
+    pub breaker: Option<Arc<CircuitBreaker>>,
 }
 
 impl Default for RetryPolicy {
     fn default() -> Self {
         Self {
-            max_attempts:       3,
-            initial_backoff:    Duration::from_millis(100),
-            max_backoff:        Duration::from_secs(2),
+            max_attempts: 3,
+            initial_backoff: Duration::from_millis(100),
+            max_backoff: Duration::from_secs(2),
             backoff_multiplier: 2.0,
-            hedge_delay:        None,
-            hedge_bucket:       None,
-            breaker:            None,
+            hedge_delay: None,
+            hedge_bucket: None,
+            breaker: None,
         }
     }
 }
@@ -257,8 +271,9 @@ where
                 // Full-jitter: sleep rand[0, backoff)
                 let jitter_secs = random::<f64>() * backoff.as_secs_f64();
                 tokio::time::sleep(Duration::from_secs_f64(jitter_secs)).await;
-                backoff = (Duration::from_secs_f64(backoff.as_secs_f64() * policy.backoff_multiplier))
-                    .min(policy.max_backoff);
+                backoff =
+                    (Duration::from_secs_f64(backoff.as_secs_f64() * policy.backoff_multiplier))
+                        .min(policy.max_backoff);
             }
         }
     }
@@ -266,7 +281,11 @@ where
     Err(last_err)
 }
 
-async fn execute_with_hedging<T, F, Fut>(policy: &RetryPolicy, operation: F, hedge_delay: Duration) -> Result<T, String>
+async fn execute_with_hedging<T, F, Fut>(
+    policy: &RetryPolicy,
+    operation: F,
+    hedge_delay: Duration,
+) -> Result<T, String>
 where
     F: Fn() -> Fut + Send + Sync + Clone + 'static,
     Fut: std::future::Future<Output = Result<T, String>> + Send,
@@ -289,7 +308,11 @@ where
     }
 
     // Check token bucket before firing hedge
-    let can_hedge = policy.hedge_bucket.as_ref().map(|b| b.consume()).unwrap_or(true);
+    let can_hedge = policy
+        .hedge_bucket
+        .as_ref()
+        .map(|b| b.consume())
+        .unwrap_or(true);
     if can_hedge {
         let op2 = operation.clone();
         let tx2 = tx.clone();
@@ -300,7 +323,10 @@ where
     }
 
     // Return whichever succeeds first
-    let r1 = rx.recv().await.unwrap_or_else(|| Err("channel closed".to_string()));
+    let r1 = rx
+        .recv()
+        .await
+        .unwrap_or_else(|| Err("channel closed".to_string()));
     if r1.is_ok() {
         return r1;
     }

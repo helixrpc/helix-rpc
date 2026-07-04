@@ -38,10 +38,10 @@ type RateLimiter struct {
 }
 
 type clientBucket struct {
-	tokens    atomic.Int64  // stored as nano-tokens (1 token = 1e9 nano-tokens)
-	lastSeen  atomic.Int64  // Unix nanoseconds
-	capacity  int64         // nano-tokens
-	refillNs  int64         // nano-tokens per nanosecond (= tokens/s)
+	tokens   atomic.Int64 // stored as nano-tokens (1 token = 1e9 nano-tokens)
+	lastSeen atomic.Int64 // Unix nanoseconds
+	capacity int64        // nano-tokens
+	refillNs int64        // nano-tokens per nanosecond (= tokens/s)
 }
 
 const nanoToken = int64(1e9)

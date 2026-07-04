@@ -203,12 +203,12 @@ func GeneratePython(parsed *ast.AST) (string, error) {
 			} else {
 				retType = fmt.Sprintf("'%s'", m.OutputType)
 			}
-			
+
 			inputType := fmt.Sprintf("'%s'", m.InputType)
 			if m.ClientStreaming {
 				inputType = fmt.Sprintf("AsyncIterator['%s']", m.InputType)
 			}
-			
+
 			sb.WriteString(fmt.Sprintf("    async def %s(self, request: %s) -> %s:\n", m.Name, inputType, retType))
 			sb.WriteString("        pass\n\n")
 		}

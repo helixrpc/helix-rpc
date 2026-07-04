@@ -1,7 +1,6 @@
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
 use std::net::ToSocketAddrs;
-
+use std::sync::{Arc, Mutex};
 
 pub trait Resolver: Send + Sync + 'static {
     fn resolve(&self, service_name: &str) -> Result<Vec<String>, String>;
@@ -76,4 +75,3 @@ impl Resolver for DnsResolver {
         }
     }
 }
-

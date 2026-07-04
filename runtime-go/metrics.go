@@ -99,7 +99,7 @@ func HTTPMetricsMiddleware(next http.Handler) http.Handler {
 		start := time.Now()
 		// Wrap ResponseWriter to capture status code
 		rw := &statusResponseWriter{ResponseWriter: w, status: http.StatusOK}
-		
+
 		defer func() {
 			duration := time.Since(start)
 			RecordRequestMetrics(r.Method, r.URL.Path, rw.status, duration)

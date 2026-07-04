@@ -7,5 +7,8 @@ task_local! {
 
 /// Retrieves a value from the task-local metadata context.
 pub fn get_metadata(key: &str) -> Option<Vec<String>> {
-    METADATA.try_with(|m| m.get(&key.to_lowercase()).cloned()).ok().flatten()
+    METADATA
+        .try_with(|m| m.get(&key.to_lowercase()).cloned())
+        .ok()
+        .flatten()
 }

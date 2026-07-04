@@ -65,19 +65,19 @@ func RecordRequest(method string, latency time.Duration, err error) {
 // ---------------------------------------------------------------------------
 
 type debugSnapshot struct {
-	Version    string                    `json:"helix_version"`
-	Uptime     string                    `json:"uptime"`
-	GoVersion  string                    `json:"go_version"`
-	Methods    []methodSnapshot          `json:"methods"`
-	Backends   []backendSnapshot         `json:"backends,omitempty"`
-	Circuit    *circuitSnapshot          `json:"circuit_breaker,omitempty"`
+	Version   string            `json:"helix_version"`
+	Uptime    string            `json:"uptime"`
+	GoVersion string            `json:"go_version"`
+	Methods   []methodSnapshot  `json:"methods"`
+	Backends  []backendSnapshot `json:"backends,omitempty"`
+	Circuit   *circuitSnapshot  `json:"circuit_breaker,omitempty"`
 }
 
 type methodSnapshot struct {
-	Method     string  `json:"method"`
-	Requests   int64   `json:"requests_total"`
-	Errors     int64   `json:"errors_total"`
-	AvgLatency string  `json:"avg_latency_ms"`
+	Method     string `json:"method"`
+	Requests   int64  `json:"requests_total"`
+	Errors     int64  `json:"errors_total"`
+	AvgLatency string `json:"avg_latency_ms"`
 }
 
 type backendSnapshot struct {

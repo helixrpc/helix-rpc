@@ -3,12 +3,12 @@ use proxy_wasm::traits::*;
 use proxy_wasm::types::*;
 use std::time::SystemTime;
 
-proxy_wasm::main!({{
-    proxy_wasm::set_log_level(LogLevel::Info);
-    proxy_wasm::set_root_context(|_| -> Box<dyn RootContext> {
-        Box::new(HelixRootContext)
-    });
-}});
+proxy_wasm::main!({
+    {
+        proxy_wasm::set_log_level(LogLevel::Info);
+        proxy_wasm::set_root_context(|_| -> Box<dyn RootContext> { Box::new(HelixRootContext) });
+    }
+});
 
 struct HelixRootContext;
 
@@ -48,20 +48,27 @@ impl HttpContext for HelixHttpContext {
 
         // 2. Deadline Propagation Header Check
         if let Some(timeout) = self.get_http_request_header("grpc-timeout") {
-            info!("Helix Filter: Extracted incoming request deadline: {}", timeout);
+            info!(
+                "Helix Filter: Extracted incoming request deadline: {}",
+                timeout
+            );
         }
 
         // 3. Trace Context Propagation
         let trace_id = match self.get_http_request_header("x-trace-id") {
             Some(tid) => tid,
             None => {
-                let now = self.get_current_time()
+                let now = self
+                    .get_current_time()
                     .duration_since(SystemTime::UNIX_EPOCH)
                     .map(|d| d.as_nanos())
                     .unwrap_or(0);
                 let generated = format!("trace-{}", now);
                 self.set_http_request_header("x-trace-id", Some(&generated));
-                info!("Helix Filter: Generated and injected x-trace-id: {}", generated);
+                info!(
+                    "Helix Filter: Generated and injected x-trace-id: {}",
+                    generated
+                );
                 generated
             }
         };

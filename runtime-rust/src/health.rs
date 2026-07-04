@@ -91,8 +91,7 @@ impl HealthChecker {
                     HealthStatus::NotServing => "NOT_SERVING",
                 };
                 let resp = serde_json::json!({ "status": status_str });
-                let bytes = serde_json::to_vec(&resp)
-                    .map_err(|e| format!("json encode: {}", e))?;
+                let bytes = serde_json::to_vec(&resp).map_err(|e| format!("json encode: {}", e))?;
                 Ok((bytes, "application/json".to_string()))
             }
             None => Err(format!("unknown service: {}", service)),
@@ -205,7 +204,8 @@ mod tests {
     #[tokio::test]
     async fn test_set_and_check() {
         let hc = HealthChecker::new();
-        hc.set_serving_status("my.Service", HealthStatus::NotServing).await;
+        hc.set_serving_status("my.Service", HealthStatus::NotServing)
+            .await;
         assert_eq!(hc.check("my.Service").await, Some(HealthStatus::NotServing));
     }
 

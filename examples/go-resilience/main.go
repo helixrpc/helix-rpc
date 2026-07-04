@@ -8,11 +8,13 @@
 //   - P99 Hedging with TokenBucket rate limiter
 //
 // Run:
-//   go run .
+//
+//	go run .
 //
 // Test:
-//   curl -s http://localhost:8085/route    (shows least-conn routing)
-//   curl -s http://localhost:8085/resilient (shows retry + circuit breaker)
+//
+//	curl -s http://localhost:8085/route    (shows least-conn routing)
+//	curl -s http://localhost:8085/resilient (shows retry + circuit breaker)
 package main
 
 import (
@@ -145,13 +147,13 @@ func main() {
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/route",     routeHandler)
+	mux.HandleFunc("/route", routeHandler)
 
 	// Wrap /resilient with JWT auth and rate limiting middlewares
 	resilientHandlerWithMiddleware := runtime.NewJWTMiddleware(authCfg, limiter.HTTPMiddleware(http.HandlerFunc(resilientHandler)))
 	mux.Handle("/resilient", resilientHandlerWithMiddleware)
 
-	mux.HandleFunc("/status",    statusHandler)
+	mux.HandleFunc("/status", statusHandler)
 
 	log.Println("📋 Routes:")
 	log.Println("  GET /route     — least-conn routed backend call")

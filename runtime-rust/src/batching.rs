@@ -1,7 +1,7 @@
-use std::sync::Arc;
-use std::sync::atomic::{AtomicI64, Ordering};
 use std::collections::HashMap;
-use tokio::sync::{RwLock, oneshot};
+use std::sync::atomic::{AtomicI64, Ordering};
+use std::sync::Arc;
+use tokio::sync::{oneshot, RwLock};
 
 /// Dynamic batch request
 struct BatchRequest {
@@ -51,19 +51,31 @@ impl BatchScheduler {
                         }
 
                         // Dispatch the batch
-                        let payloads: Vec<Vec<u8>> = batch.iter().map(|r| r.payload.clone()).collect();
+                        let payloads: Vec<Vec<u8>> =
+                            batch.iter().map(|r| r.payload.clone()).collect();
                         let h = handler.clone();
-                        let results = tokio::task::spawn_blocking(move || h(payloads, is_json)).await;
+                        let results =
+                            tokio::task::spawn_blocking(move || h(payloads, is_json)).await;
 
                         match results {
                             Ok(Ok(resps)) if resps.len() == batch.len() => {
                                 for (req, resp) in batch.drain(..).zip(resps) {
-                                    let _ = req.tx.send(Ok((resp, if is_json { "application/json".to_string() } else { "application/grpc".to_string() })));
+                                    let _ = req.tx.send(Ok((
+                                        resp,
+                                        if is_json {
+                                            "application/json".to_string()
+                                        } else {
+                                            "application/grpc".to_string()
+                                        },
+                                    )));
                                 }
                             }
                             Ok(Ok(_)) => {
                                 for req in batch.drain(..) {
-                                    let _ = req.tx.send(Err("batch handler returned mismatched response count".to_string()));
+                                    let _ = req.tx.send(Err(
+                                        "batch handler returned mismatched response count"
+                                            .to_string(),
+                                    ));
                                 }
                             }
                             Ok(Err(e)) => {
@@ -86,9 +98,19 @@ impl BatchScheduler {
         BatchScheduler { tx }
     }
 
-    pub async fn invoke(&self, payload: Vec<u8>, is_json: bool) -> Result<(Vec<u8>, String), String> {
+    pub async fn invoke(
+        &self,
+        payload: Vec<u8>,
+        is_json: bool,
+    ) -> Result<(Vec<u8>, String), String> {
         let (tx, rx) = oneshot::channel();
-        self.tx.send(BatchRequest { payload, is_json, tx }).await
+        self.tx
+            .send(BatchRequest {
+                payload,
+                is_json,
+                tx,
+            })
+            .await
             .map_err(|e| e.to_string())?;
         rx.await.map_err(|e| e.to_string())?
     }
@@ -110,7 +132,8 @@ impl LeastConnBalancer {
     pub async fn register(&self, targets: &[&str]) {
         let mut map = self.endpoints.write().await;
         for t in targets {
-            map.entry(t.to_string()).or_insert_with(|| Arc::new(AtomicI64::new(0)));
+            map.entry(t.to_string())
+                .or_insert_with(|| Arc::new(AtomicI64::new(0)));
         }
     }
 

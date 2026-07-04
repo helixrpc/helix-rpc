@@ -109,7 +109,7 @@ func TestTokenBucket_BasicConsume(t *testing.T) {
 
 func TestTokenBucket_Refills(t *testing.T) {
 	tb := NewHedgingTokenBucket(1, 100) // 100 tokens/sec
-	tb.Consume()                         // drain it
+	tb.Consume()                        // drain it
 	time.Sleep(20 * time.Millisecond)   // wait for ~2 tokens to refill
 	if !tb.Consume() {
 		t.Fatal("bucket should have refilled at least one token")
@@ -275,9 +275,9 @@ func TestLeastConnBalancer_ActiveConnsObservability(t *testing.T) {
 func TestHedging_ReturnsFastestResult(t *testing.T) {
 	calls := int64(0)
 	policy := RetryPolicy{
-		MaxAttempts:   1,
-		HedgeDelay:    5 * time.Millisecond,
-		HedgeBucket:   NewHedgingTokenBucket(10, 100),
+		MaxAttempts: 1,
+		HedgeDelay:  5 * time.Millisecond,
+		HedgeBucket: NewHedgingTokenBucket(10, 100),
 	}
 
 	start := time.Now()

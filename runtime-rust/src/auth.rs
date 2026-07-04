@@ -1,9 +1,9 @@
-use std::collections::HashMap;
+use crate::errors::{ErrorCode, HelixError};
 use hyper::{header::HeaderMap, Request};
-use jsonwebtoken::{decode, DecodingKey, Validation, Algorithm};
+use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 use serde_json::Value;
+use std::collections::HashMap;
 use tokio::task_local;
-use crate::errors::{HelixError, ErrorCode};
 
 task_local! {
     pub static JWT_CLAIMS: HashMap<String, Value>;
@@ -45,7 +45,7 @@ impl JwtValidator {
         validation.required_spec_claims.insert("exp".to_string());
         // Add ES256 to valid algorithms too
         validation.algorithms = vec![Algorithm::RS256, Algorithm::ES256];
-        
+
         JwtValidator {
             decoding_key: DecodingKey::from_rsa_pem(pem)
                 .or_else(|_| DecodingKey::from_ec_pem(pem))
@@ -55,8 +55,12 @@ impl JwtValidator {
         }
     }
 
-    pub fn validate_request<B>(&self, req: &Request<B>) -> Result<HashMap<String, Value>, HelixError> {
-        let auth_header = req.headers()
+    pub fn validate_request<B>(
+        &self,
+        req: &Request<B>,
+    ) -> Result<HashMap<String, Value>, HelixError> {
+        let auth_header = req
+            .headers()
             .get("authorization")
             .and_then(|v| v.to_str().ok());
 
@@ -73,18 +77,19 @@ impl JwtValidator {
                 if let Some(key) = req.headers().get("x-api-key").and_then(|v| v.to_str().ok()) {
                     key.trim().to_string()
                 } else {
-                    return Err(HelixError::new(ErrorCode::Unauthenticated, "missing authorization header"));
+                    return Err(HelixError::new(
+                        ErrorCode::Unauthenticated,
+                        "missing authorization header",
+                    ));
                 }
             }
         };
 
-        let token_data = decode::<HashMap<String, Value>>(
-            &token,
-            &self.decoding_key,
-            &self.validation,
-        ).map_err(|e| {
-            HelixError::new(ErrorCode::Unauthenticated, &format!("invalid token: {}", e))
-        })?;
+        let token_data =
+            decode::<HashMap<String, Value>>(&token, &self.decoding_key, &self.validation)
+                .map_err(|e| {
+                    HelixError::new(ErrorCode::Unauthenticated, &format!("invalid token: {}", e))
+                })?;
 
         // Check required claims
         for claim in &self.required_claims {
@@ -100,12 +105,17 @@ impl JwtValidator {
     }
 }
 
-pub fn validate_api_key(headers: &HeaderMap, valid_keys: &HashMap<String, String>) -> Result<String, HelixError> {
-    let key = headers.get("x-api-key")
+pub fn validate_api_key(
+    headers: &HeaderMap,
+    valid_keys: &HashMap<String, String>,
+) -> Result<String, HelixError> {
+    let key = headers
+        .get("x-api-key")
         .and_then(|v| v.to_str().ok())
         .map(|s| s.to_string())
         .or_else(|| {
-            headers.get("authorization")
+            headers
+                .get("authorization")
                 .and_then(|v| v.to_str().ok())
                 .map(|auth| {
                     if auth.to_lowercase().starts_with("bearer ") {
@@ -118,11 +128,19 @@ pub fn validate_api_key(headers: &HeaderMap, valid_keys: &HashMap<String, String
 
     let key = match key {
         Some(k) if !k.is_empty() => k,
-        _ => return Err(HelixError::new(ErrorCode::Unauthenticated, "missing API key")),
+        _ => {
+            return Err(HelixError::new(
+                ErrorCode::Unauthenticated,
+                "missing API key",
+            ))
+        }
     };
 
     match valid_keys.get(&key) {
         Some(principal) => Ok(principal.clone()),
-        None => Err(HelixError::new(ErrorCode::Unauthenticated, "invalid API key")),
+        None => Err(HelixError::new(
+            ErrorCode::Unauthenticated,
+            "invalid API key",
+        )),
     }
 }

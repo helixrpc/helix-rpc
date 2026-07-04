@@ -52,7 +52,7 @@ func TestE2EMultiProtocol(t *testing.T) {
 
 	server.Addr = addr
 	serviceImpl := &myUserProfileService{}
-	
+
 	// Register both gRPC and Thrift handler
 	generated.RegisterUserProfileService(server, serviceImpl)
 	server.RegisterThriftProcessor(generated.NewUserProfileServiceProcessor(serviceImpl))
@@ -115,7 +115,7 @@ func TestE2EMultiProtocol(t *testing.T) {
 	t.Run("HTTP-JSON-Protocol", func(t *testing.T) {
 		reqJSON := []byte(`{"user_id": 555, "username": "david", "email": "david@example.com"}`)
 		url := fmt.Sprintf("http://%s/helix_example.UserProfileService/GetUserProfile", addr)
-		
+
 		httpReq, err := http.NewRequest("POST", url, bytes.NewReader(reqJSON))
 		if err != nil {
 			t.Fatalf("failed to create http request: %v", err)
@@ -334,7 +334,6 @@ func TestE2EInterceptor(t *testing.T) {
 		t.Errorf("expected username %s, got %s", expectedUsername, resp.Username)
 	}
 }
-
 
 func callGRPCWithHeader(addr string, req *generated.UserProfile, hk, hv string) (*generated.UserProfile, error) {
 	client := &http.Client{
@@ -761,6 +760,3 @@ func TestBidirectionalStreaming(t *testing.T) {
 		}
 	}
 }
-
-
-

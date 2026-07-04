@@ -27,7 +27,7 @@ type MockBatchAIModel struct{}
 
 func (m *MockBatchAIModel) PredictBatch(ctx context.Context, reqs []interface{}) ([]interface{}, error) {
 	fmt.Printf("[MockAI] 🚀 Executing batch of %d prompts simultaneously on virtual GPU...\n", len(reqs))
-	
+
 	// Simulate heavy AI computation
 	time.Sleep(100 * time.Millisecond)
 
@@ -41,13 +41,13 @@ func (m *MockBatchAIModel) PredictBatch(ctx context.Context, reqs []interface{})
 		} else {
 			prompt = fmt.Sprintf("%v", r)
 		}
-		
+
 		fmt.Printf("  -> [Batch Index %d] Processing prompt: %q\n", i, prompt)
 		resps = append(resps, &PredictResponse{
 			Completion: fmt.Sprintf("AI Response to: %s", prompt),
 		})
 	}
-	
+
 	fmt.Printf("[MockAI] ✅ Batch execution complete!\n")
 	return resps, nil
 }
@@ -83,7 +83,7 @@ func main() {
 			return resp, nil
 		},
 	})
-	
+
 	// Expose as REST
 	server.RegisterRESTRoute("POST", "/v1/models/predict", "/v1/models/predict")
 

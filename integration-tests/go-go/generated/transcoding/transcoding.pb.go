@@ -4,8 +4,8 @@ package helix_transcoding
 import (
 	"context"
 	"fmt"
-	"github.com/golang/protobuf/proto"
 	"github.com/apache/thrift/lib/go/thrift"
+	"github.com/golang/protobuf/proto"
 	runtime "github.com/helix-rpc/helix/runtime-go"
 )
 
@@ -38,9 +38,9 @@ func readVarint(buf []byte, offset int) (uint64, int, error) {
 }
 
 type UserProfile struct {
-	UserID int64 `thrift:"user_id,1" json:"user_id" proto:"int64,1"`
+	UserID   int64  `thrift:"user_id,1" json:"user_id" proto:"int64,1"`
 	Username string `thrift:"username,2" json:"username" proto:"string,2"`
-	Email string `thrift:"email,3" json:"email" proto:"string,3"`
+	Email    string `thrift:"email,3" json:"email" proto:"string,3"`
 }
 
 func (x *UserProfile) Reset()         { *x = UserProfile{} }
@@ -496,4 +496,3 @@ func RegisterTranscodingService(server *runtime.Server, impl TranscodingService)
 		},
 	})
 }
-

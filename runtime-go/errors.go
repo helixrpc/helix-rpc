@@ -10,15 +10,15 @@ import (
 type ErrorCode int
 
 const (
-	CodeOK                 ErrorCode = 0
-	CodeInvalidArgument    ErrorCode = 3
-	CodeNotFound           ErrorCode = 5
-	CodeAlreadyExists      ErrorCode = 6
-	CodePermissionDenied   ErrorCode = 7
-	CodeUnimplemented      ErrorCode = 12
-	CodeInternal           ErrorCode = 13
-	CodeUnavailable        ErrorCode = 14
-	CodeUnauthenticated    ErrorCode = 16
+	CodeOK               ErrorCode = 0
+	CodeInvalidArgument  ErrorCode = 3
+	CodeNotFound         ErrorCode = 5
+	CodeAlreadyExists    ErrorCode = 6
+	CodePermissionDenied ErrorCode = 7
+	CodeUnimplemented    ErrorCode = 12
+	CodeInternal         ErrorCode = 13
+	CodeUnavailable      ErrorCode = 14
+	CodeUnauthenticated  ErrorCode = 16
 )
 
 type HelixError struct {

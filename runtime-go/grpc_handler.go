@@ -564,11 +564,11 @@ func NewServerWithConfig(addr string, config ServerConfig) *Server {
 	}
 
 	s := &Server{
-		Addr:            addr,
-		SniffTimeout:    config.SniffTimeout,
-		Health:          hc,
-		TLSConfig:       config.TLSConfig,
-		grpcHandler:     handler,
+		Addr:         addr,
+		SniffTimeout: config.SniffTimeout,
+		Health:       hc,
+		TLSConfig:    config.TLSConfig,
+		grpcHandler:  handler,
 	}
 
 	if !config.DisableDebugUI || !config.DisableMetrics {

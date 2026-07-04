@@ -21,7 +21,7 @@ type endpoint struct {
 // (Next/Done) never acquires a mutex.
 type LeastConnBalancer struct {
 	// mu guards only the slow path: registering a new target.
-	mu    sync.Mutex
+	mu sync.Mutex
 	// index is an immutable snapshot (*indexMap) swapped atomically.
 	index unsafe.Pointer // *indexMap
 	// eps is the backing array; its elements are aligned to cache lines.

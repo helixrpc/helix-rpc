@@ -119,7 +119,7 @@ func TestCrossLangGoClientRustServer(t *testing.T) {
 	t.Run("HTTP-JSON", func(t *testing.T) {
 		reqJSON := []byte(`{"user_id": 555, "username": "go-caller-json", "email": "caller-json@go.com"}`)
 		url := fmt.Sprintf("http://%s/helix_example.UserProfileService/GetUserProfile", addr)
-		
+
 		httpReq, err := http.NewRequest("POST", url, bytes.NewReader(reqJSON))
 		if err != nil {
 			t.Fatalf("failed to create http request: %v", err)

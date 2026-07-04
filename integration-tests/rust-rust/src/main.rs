@@ -1,14 +1,14 @@
 pub mod generated;
 
+use generated::{UserProfile, UserProfileService};
+use helix_rt::{sniff_protocol, Compressor, Protocol};
 use std::net::SocketAddr;
-use tokio::net::{TcpListener, TcpStream};
 use thrift::protocol::{
     TBinaryInputProtocol, TBinaryOutputProtocol, TCompactInputProtocol, TCompactOutputProtocol,
-    TInputProtocol, TOutputProtocol, TMessageIdentifier, TMessageType, TSerializable
+    TInputProtocol, TMessageIdentifier, TMessageType, TOutputProtocol, TSerializable,
 };
-use thrift::transport::{ReadHalf, WriteHalf, TFramedReadTransport, TFramedWriteTransport};
-use generated::{UserProfile, UserProfileService};
-use helix_rt::{sniff_protocol, Protocol, Compressor};
+use thrift::transport::{ReadHalf, TFramedReadTransport, TFramedWriteTransport, WriteHalf};
+use tokio::net::{TcpListener, TcpStream};
 
 // --- Streaming handler ---
 struct StreamingEchoHandler;
@@ -19,7 +19,11 @@ impl helix_rt::HttpStreamingHandler for StreamingEchoHandler {
         path == "/helix_example.UserProfileService/StreamUserProfiles"
     }
 
-    async fn handle_stream(&self, _path: &str, mut stream: Box<dyn helix_rt::ServerStream>) -> Result<(), String> {
+    async fn handle_stream(
+        &self,
+        _path: &str,
+        mut stream: Box<dyn helix_rt::ServerStream>,
+    ) -> Result<(), String> {
         loop {
             match stream.recv().await? {
                 None => return Ok(()),
@@ -64,20 +68,29 @@ impl UserProfileService for ServiceImpl {
 
 #[async_trait::async_trait]
 impl helix_rt::HttpServiceHandler for ServiceImpl {
-    async fn handle_request(&self, path: &str, body: Vec<u8>, is_json: bool) -> Result<(Vec<u8>, String), String> {
+    async fn handle_request(
+        &self,
+        path: &str,
+        body: Vec<u8>,
+        is_json: bool,
+    ) -> Result<(Vec<u8>, String), String> {
         if path == "/helix_example.UserProfileService/GetUserProfile" {
             if is_json {
-                let req: UserProfile = serde_json::from_slice(&body)
-                    .map_err(|e| format!("invalid json: {}", e))?;
-                let resp = self.get_user_profile(req).await
+                let req: UserProfile =
+                    serde_json::from_slice(&body).map_err(|e| format!("invalid json: {}", e))?;
+                let resp = self
+                    .get_user_profile(req)
+                    .await
                     .map_err(|e| format!("execution error: {}", e))?;
-                let resp_bytes = serde_json::to_vec(&resp)
-                    .map_err(|e| format!("serialization error: {}", e))?;
+                let resp_bytes =
+                    serde_json::to_vec(&resp).map_err(|e| format!("serialization error: {}", e))?;
                 return Ok((resp_bytes, "application/json".to_string()));
             } else {
                 let req = <UserProfile as prost::Message>::decode(&body[..])
                     .map_err(|e| format!("invalid protobuf: {}", e))?;
-                let resp = self.get_user_profile(req).await
+                let resp = self
+                    .get_user_profile(req)
+                    .await
                     .map_err(|e| format!("execution error: {}", e))?;
                 let mut resp_bytes = Vec::new();
                 <UserProfile as prost::Message>::encode(&resp, &mut resp_bytes)
@@ -88,15 +101,15 @@ impl helix_rt::HttpServiceHandler for ServiceImpl {
         if path == "/helix_example.UserProfileService/GetSlowProfile" {
             tokio::time::sleep(std::time::Duration::from_millis(50)).await;
             if is_json {
-                let req: UserProfile = serde_json::from_slice(&body)
-                    .map_err(|e| format!("invalid json: {}", e))?;
+                let req: UserProfile =
+                    serde_json::from_slice(&body).map_err(|e| format!("invalid json: {}", e))?;
                 let resp = UserProfile {
                     user_id: req.user_id,
                     username: format!("{}-slow-response", req.username),
                     email: req.email,
                 };
-                let resp_bytes = serde_json::to_vec(&resp)
-                    .map_err(|e| format!("serialization error: {}", e))?;
+                let resp_bytes =
+                    serde_json::to_vec(&resp).map_err(|e| format!("serialization error: {}", e))?;
                 return Ok((resp_bytes, "application/json".to_string()));
             } else {
                 let req = <UserProfile as prost::Message>::decode(&body[..])
@@ -121,16 +134,24 @@ fn generate_test_cert() -> (Vec<rustls::Certificate>, rustls::PrivateKey) {
     let cert = rcgen::generate_simple_self_signed(subject_alt_names).unwrap();
     let cert_der = cert.serialize_der().unwrap();
     let key_der = cert.serialize_private_key_der();
-    (vec![rustls::Certificate(cert_der)], rustls::PrivateKey(key_der))
+    (
+        vec![rustls::Certificate(cert_der)],
+        rustls::PrivateKey(key_der),
+    )
 }
 
 #[tokio::main]
 async fn main() {
     let args: Vec<String> = std::env::args().collect();
     let server_only = args.contains(&"--server".to_string());
-    let client_addr = args.iter().position(|r| r == "--client")
+    let client_addr = args
+        .iter()
+        .position(|r| r == "--client")
         .and_then(|idx| args.get(idx + 1))
-        .map(|s| s.parse::<SocketAddr>().expect("invalid client socket address"));
+        .map(|s| {
+            s.parse::<SocketAddr>()
+                .expect("invalid client socket address")
+        });
 
     if let Some(addr) = client_addr {
         run_thrift_compact_client(addr).await;
@@ -158,9 +179,17 @@ async fn main() {
         &addr.to_string(),
         std::sync::Arc::new(ServiceImpl),
         vec![
-            helix_rt::RestRoute::new("POST", "/v1/users", "/helix_example.UserProfileService/GetUserProfile"),
-            helix_rt::RestRoute::new("GET", "/v1/users/{user_id}", "/helix_example.UserProfileService/GetUserProfile"),
-        ]
+            helix_rt::RestRoute::new(
+                "POST",
+                "/v1/users",
+                "/helix_example.UserProfileService/GetUserProfile",
+            ),
+            helix_rt::RestRoute::new(
+                "GET",
+                "/v1/users/{user_id}",
+                "/helix_example.UserProfileService/GetUserProfile",
+            ),
+        ],
     );
     server.set_streaming_handler(std::sync::Arc::new(StreamingEchoHandler));
     server.set_protocol_fallback(handle_thrift_fallback);
@@ -168,7 +197,7 @@ async fn main() {
 
     let server_arc = std::sync::Arc::new(server);
     let srv_clone = server_arc.clone();
-    
+
     // Spawn server accept loop
     tokio::spawn(async move {
         srv_clone.start().await.unwrap();
@@ -191,18 +220,21 @@ async fn main() {
         run_grpc_health_test(addr).await;
         run_grpc_compression_test(addr).await;
         run_grpc_tls_test(addr).await;
-        
+
         // Run FlatBuffers local codec tests
         run_flatbuffers_codec_test().await;
-        
+
         // Test graceful shutdown
         println!("Testing Graceful Shutdown...");
         server_arc.shutdown();
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-        
+
         // Try to connect, it should fail
         let res = TcpStream::connect(addr).await;
-        assert!(res.is_err(), "Server should have stopped accepting connections");
+        assert!(
+            res.is_err(),
+            "Server should have stopped accepting connections"
+        );
         println!("Graceful Shutdown test passed!");
 
         println!("All Rust E2E tests passed successfully!");
@@ -210,7 +242,9 @@ async fn main() {
 }
 
 fn handle_thrift_fallback(stream: TcpStream, protocol: helix_rt::sniffer::Protocol) {
-    if protocol == helix_rt::sniffer::Protocol::ThriftCompact || protocol == helix_rt::sniffer::Protocol::ThriftBinary {
+    if protocol == helix_rt::sniffer::Protocol::ThriftCompact
+        || protocol == helix_rt::sniffer::Protocol::ThriftBinary
+    {
         let rt = tokio::runtime::Handle::current();
         std::thread::spawn(move || {
             let std_stream = stream.into_std().unwrap();
@@ -254,7 +288,11 @@ fn process_thrift_request<I: TInputProtocol, O: TOutputProtocol>(
     let handler = ServiceImpl;
     let resp = rt.block_on(handler.get_user_profile(req))?;
 
-    oprot.write_message_begin(&TMessageIdentifier::new("GetUserProfile", TMessageType::Reply, msg_ident.sequence_number))?;
+    oprot.write_message_begin(&TMessageIdentifier::new(
+        "GetUserProfile",
+        TMessageType::Reply,
+        msg_ident.sequence_number,
+    ))?;
     resp.write_to_out_protocol(oprot)?;
     oprot.write_message_end()?;
     oprot.flush()?;
@@ -276,7 +314,13 @@ async fn run_thrift_compact_client(addr: SocketAddr) {
     };
 
     // Write message
-    oprot.write_message_begin(&TMessageIdentifier::new("GetUserProfile", TMessageType::Call, 1)).unwrap();
+    oprot
+        .write_message_begin(&TMessageIdentifier::new(
+            "GetUserProfile",
+            TMessageType::Call,
+            1,
+        ))
+        .unwrap();
     req.write_to_out_protocol(&mut oprot).unwrap();
     oprot.write_message_end().unwrap();
     oprot.flush().unwrap();
@@ -307,7 +351,13 @@ async fn run_thrift_binary_client(addr: SocketAddr) {
     };
 
     // Write message
-    oprot.write_message_begin(&TMessageIdentifier::new("GetUserProfile", TMessageType::Call, 2)).unwrap();
+    oprot
+        .write_message_begin(&TMessageIdentifier::new(
+            "GetUserProfile",
+            TMessageType::Call,
+            2,
+        ))
+        .unwrap();
     req.write_to_out_protocol(&mut oprot).unwrap();
     oprot.write_message_end().unwrap();
     oprot.flush().unwrap();
@@ -325,18 +375,19 @@ async fn run_thrift_binary_client(addr: SocketAddr) {
 }
 
 async fn run_grpc_streaming_test(addr: std::net::SocketAddr) {
-    use hyper::{Body, Client, Request};
     use hyper::body::HttpBody;
+    use hyper::{Body, Client, Request};
 
     // Build an HTTP/2 client (h2c / prior-knowledge)
-    let client = Client::builder()
-        .http2_only(true)
-        .build_http::<Body>();
+    let client = Client::builder().http2_only(true).build_http::<Body>();
 
     // Create a streaming body using a channel
     let (mut body_tx, body_rx) = Body::channel();
 
-    let uri = format!("http://{}/helix_example.UserProfileService/StreamUserProfiles", addr);
+    let uri = format!(
+        "http://{}/helix_example.UserProfileService/StreamUserProfiles",
+        addr
+    );
     let req = Request::builder()
         .method("POST")
         .uri(uri)
@@ -346,9 +397,7 @@ async fn run_grpc_streaming_test(addr: std::net::SocketAddr) {
 
     // Send the request in the background; the response will arrive once
     // the server starts sending frames back.
-    let resp_fut = tokio::spawn(async move {
-        client.request(req).await
-    });
+    let resp_fut = tokio::spawn(async move { client.request(req).await });
 
     // Send 3 gRPC frames
     for i in 1..=3i64 {
@@ -365,7 +414,10 @@ async fn run_grpc_streaming_test(addr: std::net::SocketAddr) {
         frame.extend_from_slice(&(payload.len() as u32).to_be_bytes());
         frame.extend_from_slice(&payload);
 
-        body_tx.send_data(hyper::body::Bytes::from(frame)).await.unwrap();
+        body_tx
+            .send_data(hyper::body::Bytes::from(frame))
+            .await
+            .unwrap();
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
     }
     // Signal end of client stream
@@ -385,19 +437,34 @@ async fn run_grpc_streaming_test(addr: std::net::SocketAddr) {
     // Parse 3 response frames from the collected buffer
     let mut offset = 0;
     for i in 1..=3i64 {
-        assert!(buf.len() >= offset + 5, "not enough data for frame {} header", i);
+        assert!(
+            buf.len() >= offset + 5,
+            "not enough data for frame {} header",
+            i
+        );
         let length = u32::from_be_bytes([
-            buf[offset + 1], buf[offset + 2], buf[offset + 3], buf[offset + 4],
+            buf[offset + 1],
+            buf[offset + 2],
+            buf[offset + 3],
+            buf[offset + 4],
         ]) as usize;
         offset += 5;
-        assert!(buf.len() >= offset + length, "not enough data for frame {} payload", i);
+        assert!(
+            buf.len() >= offset + length,
+            "not enough data for frame {} payload",
+            i
+        );
         let payload = &buf[offset..offset + length];
         offset += length;
 
         let resp_profile = <UserProfile as prost::Message>::decode(payload).unwrap();
         assert_eq!(resp_profile.user_id, i);
         let expected = format!("stream-user-{}-echoed", i);
-        assert_eq!(resp_profile.username, expected, "frame {} username mismatch", i);
+        assert_eq!(
+            resp_profile.username, expected,
+            "frame {} username mismatch",
+            i
+        );
     }
 
     println!("Rust gRPC Bidirectional Streaming test passed!");
@@ -406,9 +473,7 @@ async fn run_grpc_streaming_test(addr: std::net::SocketAddr) {
 async fn run_grpc_deadline_test(addr: SocketAddr) {
     use hyper::{Body, Client, Request};
 
-    let client = Client::builder()
-        .http2_only(true)
-        .build_http::<Body>();
+    let client = Client::builder().http2_only(true).build_http::<Body>();
 
     let profile = UserProfile {
         user_id: 42,
@@ -423,7 +488,10 @@ async fn run_grpc_deadline_test(addr: SocketAddr) {
     frame.extend_from_slice(&(payload.len() as u32).to_be_bytes());
     frame.extend_from_slice(&payload);
 
-    let uri = format!("http://{}/helix_example.UserProfileService/GetSlowProfile", addr);
+    let uri = format!(
+        "http://{}/helix_example.UserProfileService/GetSlowProfile",
+        addr
+    );
     let req = Request::builder()
         .method("POST")
         .uri(uri)
@@ -443,12 +511,10 @@ async fn run_grpc_deadline_test(addr: SocketAddr) {
 }
 
 async fn run_grpc_health_test(addr: SocketAddr) {
-    use hyper::{Body, Client, Request};
     use hyper::body::HttpBody;
+    use hyper::{Body, Client, Request};
 
-    let client = Client::builder()
-        .http2_only(true)
-        .build_http::<Body>();
+    let client = Client::builder().http2_only(true).build_http::<Body>();
 
     let frame = vec![0u8; 5]; // empty service name request
 
@@ -462,7 +528,10 @@ async fn run_grpc_health_test(addr: SocketAddr) {
 
     let resp = client.request(req).await.unwrap();
     assert_eq!(resp.status(), hyper::StatusCode::OK);
-    assert_eq!(resp.headers().get("grpc-status").unwrap().to_str().unwrap(), "0");
+    assert_eq!(
+        resp.headers().get("grpc-status").unwrap().to_str().unwrap(),
+        "0"
+    );
 
     let mut body = resp.into_body();
     let mut buf = Vec::new();
@@ -472,19 +541,17 @@ async fn run_grpc_health_test(addr: SocketAddr) {
 
     assert!(buf.len() >= 5);
     let length = u32::from_be_bytes([buf[1], buf[2], buf[3], buf[4]]) as usize;
-    let payload = &buf[5..5+length];
+    let payload = &buf[5..5 + length];
     // status should be 1 (Serving) -> [0x08, 0x01]
     assert_eq!(payload, &[0x08, 0x01]);
     println!("Rust gRPC Health Check test passed!");
 }
 
 async fn run_grpc_compression_test(addr: SocketAddr) {
-    use hyper::{Body, Client, Request};
     use hyper::body::HttpBody;
+    use hyper::{Body, Client, Request};
 
-    let client = Client::builder()
-        .http2_only(true)
-        .build_http::<Body>();
+    let client = Client::builder().http2_only(true).build_http::<Body>();
 
     let profile = UserProfile {
         user_id: 88,
@@ -503,7 +570,10 @@ async fn run_grpc_compression_test(addr: SocketAddr) {
     frame.extend_from_slice(&(compressed_payload.len() as u32).to_be_bytes());
     frame.extend_from_slice(&compressed_payload);
 
-    let uri = format!("http://{}/helix_example.UserProfileService/GetUserProfile", addr);
+    let uri = format!(
+        "http://{}/helix_example.UserProfileService/GetUserProfile",
+        addr
+    );
     let req = Request::builder()
         .method("POST")
         .uri(uri)
@@ -514,8 +584,18 @@ async fn run_grpc_compression_test(addr: SocketAddr) {
 
     let resp = client.request(req).await.unwrap();
     assert_eq!(resp.status(), hyper::StatusCode::OK);
-    assert_eq!(resp.headers().get("grpc-status").unwrap().to_str().unwrap(), "0");
-    assert_eq!(resp.headers().get("grpc-encoding").unwrap().to_str().unwrap(), "gzip");
+    assert_eq!(
+        resp.headers().get("grpc-status").unwrap().to_str().unwrap(),
+        "0"
+    );
+    assert_eq!(
+        resp.headers()
+            .get("grpc-encoding")
+            .unwrap()
+            .to_str()
+            .unwrap(),
+        "gzip"
+    );
 
     let mut body = resp.into_body();
     let mut buf = Vec::new();
@@ -527,7 +607,7 @@ async fn run_grpc_compression_test(addr: SocketAddr) {
     let compressed_flag = buf[0];
     assert_eq!(compressed_flag, 1);
     let length = u32::from_be_bytes([buf[1], buf[2], buf[3], buf[4]]) as usize;
-    let payload = &buf[5..5+length];
+    let payload = &buf[5..5 + length];
 
     // Decompress payload
     let decompressed = compressor.decompress(payload).unwrap();
@@ -565,9 +645,7 @@ async fn run_grpc_tls_test(addr: SocketAddr) {
         .https_only()
         .enable_http2()
         .build();
-    let client: Client<_, Body> = Client::builder()
-        .http2_only(true)
-        .build(https);
+    let client: Client<_, Body> = Client::builder().http2_only(true).build(https);
 
     let profile = UserProfile {
         user_id: 99,
@@ -582,7 +660,10 @@ async fn run_grpc_tls_test(addr: SocketAddr) {
     frame.extend_from_slice(&(payload.len() as u32).to_be_bytes());
     frame.extend_from_slice(&payload);
 
-    let uri = format!("https://localhost:{}/helix_example.UserProfileService/GetUserProfile", addr.port());
+    let uri = format!(
+        "https://localhost:{}/helix_example.UserProfileService/GetUserProfile",
+        addr.port()
+    );
     let req = Request::builder()
         .method("POST")
         .uri(uri)
@@ -600,11 +681,9 @@ async fn run_grpc_tls_test(addr: SocketAddr) {
         buf.extend_from_slice(&chunk.unwrap());
     }
 
-    let length = u32::from_be_bytes([
-        buf[1], buf[2], buf[3], buf[4],
-    ]) as usize;
+    let length = u32::from_be_bytes([buf[1], buf[2], buf[3], buf[4]]) as usize;
     let payload = &buf[5..5 + length];
-    
+
     let resp_profile = <UserProfile as prost::Message>::decode(payload).unwrap();
     assert_eq!(resp_profile.user_id, 99);
     assert_eq!(resp_profile.username, "tls-user-response");
@@ -620,7 +699,10 @@ async fn run_flatbuffers_codec_test() {
     };
 
     let buf = original.marshal_flatbuffers();
-    assert!(!buf.is_empty(), "flatbuffers: marshal returned empty buffer");
+    assert!(
+        !buf.is_empty(),
+        "flatbuffers: marshal returned empty buffer"
+    );
 
     let decoded = UserProfile::unmarshal_flatbuffers(&buf).unwrap();
     assert_eq!(decoded.user_id, original.user_id);
@@ -629,4 +711,3 @@ async fn run_flatbuffers_codec_test() {
 
     println!("Rust FlatBuffers local codec test passed!");
 }
-

@@ -21,8 +21,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	kitexserver "github.com/cloudwego/kitex/server"
 	kitexclient "github.com/cloudwego/kitex/client"
+	kitexserver "github.com/cloudwego/kitex/server"
 	"github.com/helix-rpc/helix/integration-tests/go-go/kitex_gen/helix/example"
 	"github.com/helix-rpc/helix/integration-tests/go-go/kitex_gen/helix/example/userprofileservice"
 )
@@ -30,13 +30,13 @@ import (
 var (
 	initBenchOnce sync.Once
 
-	nativeGrpcAddr    string
-	nativeThriftAddr  string
-	nativeHttpAddr    string
-	helixAddr         string
-	kitexAddr         string
+	nativeGrpcAddr   string
+	nativeThriftAddr string
+	nativeHttpAddr   string
+	helixAddr        string
+	kitexAddr        string
 
-	grpcConn *grpc.ClientConn
+	grpcConn    *grpc.ClientConn
 	kitexClient userprofileservice.Client
 
 	httpClient      *http.Client

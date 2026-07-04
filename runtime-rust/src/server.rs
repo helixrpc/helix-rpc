@@ -1,12 +1,12 @@
+use hyper::server::conn::Http;
+use hyper::service::Service;
+use hyper::{Body, Request, Response, StatusCode};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
+use std::task::{Context, Poll};
 use tokio::net::TcpStream;
 use tokio::sync::mpsc;
-use hyper::{Body, Request, Response, StatusCode};
-use hyper::service::Service;
-use hyper::server::conn::Http;
-use std::task::{Context, Poll};
 
 // ---------------------------------------------------------------------------
 // Bidirectional Streaming primitives
@@ -98,7 +98,10 @@ impl ServerStream for GrpcServerStream {
         frame.push(0u8); // uncompressed
         frame.extend_from_slice(&(payload.len() as u32).to_be_bytes());
         frame.extend_from_slice(&payload);
-        self.tx.send(Ok(frame)).await.map_err(|e| format!("send error: {}", e))
+        self.tx
+            .send(Ok(frame))
+            .await
+            .map_err(|e| format!("send error: {}", e))
     }
 }
 
@@ -119,12 +122,22 @@ pub trait HttpSseHandler: Send + Sync {
     /// Return `true` if `path` should be handled as an SSE stream.
     fn is_sse(&self, path: &str) -> bool;
     /// Execute the SSE handler. Returns a channel receiver for the text events.
-    async fn handle_sse(&self, path: &str, body: Vec<u8>, is_json: bool) -> Result<tokio::sync::mpsc::Receiver<Result<String, String>>, String>;
+    async fn handle_sse(
+        &self,
+        path: &str,
+        body: Vec<u8>,
+        is_json: bool,
+    ) -> Result<tokio::sync::mpsc::Receiver<Result<String, String>>, String>;
 }
 
 #[async_trait::async_trait]
 pub trait HttpServiceHandler: Send + Sync + 'static {
-    async fn handle_request(&self, path: &str, body: Vec<u8>, is_json: bool) -> Result<(Vec<u8>, String), String>;
+    async fn handle_request(
+        &self,
+        path: &str,
+        body: Vec<u8>,
+        is_json: bool,
+    ) -> Result<(Vec<u8>, String), String>;
 }
 
 #[derive(Clone, Debug)]
@@ -189,7 +202,12 @@ where
             let path = req.uri().path().to_string();
             let req_method = req.method().as_str().to_uppercase();
 
-            if !disable_metrics && (path == "/metrics" || path == "/metrics/" || path == "/__helix/metrics" || path == "/__helix/metrics/") {
+            if !disable_metrics
+                && (path == "/metrics"
+                    || path == "/metrics/"
+                    || path == "/__helix/metrics"
+                    || path == "/__helix/metrics/")
+            {
                 let metrics_data = crate::metrics::GLOBAL_METRICS.format_prometheus();
                 let response = Response::builder()
                     .status(StatusCode::OK)
@@ -200,7 +218,11 @@ where
             }
 
             let span = tracing::info_span!("HTTP Request", method = %req_method, path = %path);
-            crate::telemetry::attach_span_context(req.headers(), &span, crate::telemetry::SamplingStrategy::Probabilistic(0.01));
+            crate::telemetry::attach_span_context(
+                req.headers(),
+                &span,
+                crate::telemetry::SamplingStrategy::Probabilistic(0.01),
+            );
             let _enter = span.enter();
 
             let path_clone = path.clone();
@@ -610,7 +632,12 @@ where
                 if !disable_metrics {
                     let duration = start_time.elapsed();
                     let status_code = response.status().as_u16();
-                    crate::metrics::GLOBAL_METRICS.record(&req_method_clone, &path_clone, status_code, duration);
+                    crate::metrics::GLOBAL_METRICS.record(
+                        &req_method_clone,
+                        &path_clone,
+                        status_code,
+                        duration,
+                    );
                 }
             }
 
@@ -696,7 +723,8 @@ pub struct HelixServer<H> {
     tls_acceptor: Option<tokio_rustls::TlsAcceptor>,
     shutdown_tx: broadcast::Sender<()>,
     #[allow(clippy::type_complexity)]
-    protocol_fallback: Option<Arc<Box<dyn Fn(tokio::net::TcpStream, crate::sniffer::Protocol) + Send + Sync>>>,
+    protocol_fallback:
+        Option<Arc<Box<dyn Fn(tokio::net::TcpStream, crate::sniffer::Protocol) + Send + Sync>>>,
     config: ServerConfig,
 }
 
@@ -723,7 +751,7 @@ impl<H: HttpServiceHandler + Send + Sync + 'static> HelixServer<H> {
     pub fn set_streaming_handler(&mut self, handler: Arc<dyn HttpStreamingHandler>) {
         self.streaming_handler = Some(handler);
     }
-    
+
     pub fn set_sse_handler(&mut self, handler: Arc<dyn HttpSseHandler>) {
         self.sse_handler = Some(handler);
     }
@@ -732,8 +760,10 @@ impl<H: HttpServiceHandler + Send + Sync + 'static> HelixServer<H> {
         self.tls_acceptor = Some(acceptor);
     }
 
-    pub fn set_protocol_fallback<F>(&mut self, fallback: F) 
-    where F: Fn(tokio::net::TcpStream, crate::sniffer::Protocol) + Send + Sync + 'static {
+    pub fn set_protocol_fallback<F>(&mut self, fallback: F)
+    where
+        F: Fn(tokio::net::TcpStream, crate::sniffer::Protocol) + Send + Sync + 'static,
+    {
         self.protocol_fallback = Some(Arc::new(Box::new(fallback)));
     }
 
@@ -752,16 +782,16 @@ impl<H: HttpServiceHandler + Send + Sync + 'static> HelixServer<H> {
                     let fallback = self.protocol_fallback.clone();
                     let mut conn_shutdown_rx = self.shutdown_tx.subscribe();
                     let config = self.config.clone();
-                    
+
                     tokio::spawn(async move {
                         let mut buf = [0u8; 8];
                         let _ = stream.peek(&mut buf).await;
-                        
+
                         if buf[0] == 0x16 {
                             if let Some(acceptor) = tls_acceptor {
                                 if let Ok(tls_stream) = acceptor.accept(stream).await {
                                     let mut http = Http::new();
-                                    
+
                                     let (_, session) = tls_stream.get_ref();
                                     if let Some(alpn) = session.alpn_protocol() {
                                         if alpn == b"h2" {
@@ -779,7 +809,7 @@ impl<H: HttpServiceHandler + Send + Sync + 'static> HelixServer<H> {
                                         http.http1_only(true);
                                         http.http1_keep_alive(true);
                                     }
-                                    
+
                                     let service = HelixHttpService {
                                         handler,
                                         rest_routes,
@@ -788,10 +818,10 @@ impl<H: HttpServiceHandler + Send + Sync + 'static> HelixServer<H> {
                                         health_checker: if config.disable_health { None } else { Some(crate::health::HealthChecker::new()) },
                                         disable_metrics: config.disable_metrics,
                                     };
-                                    
+
                                     let conn = http.serve_connection(tls_stream, service);
                                     let mut conn = Box::pin(conn.with_upgrades());
-                                    
+
                                     tokio::select! {
                                         _ = &mut conn => {}
                                         _ = conn_shutdown_rx.recv() => {

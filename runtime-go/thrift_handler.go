@@ -17,7 +17,7 @@ func HandleThriftConnection(conn net.Conn, processor ThriftProcessor, isCompact 
 
 	// Wrap socket in thrift socket transport
 	tSocket := thrift.NewTSocketFromConnConf(conn, nil)
-	
+
 	// Wrap in framed transport
 	transport := thrift.NewTFramedTransport(tSocket)
 	defer transport.Close()

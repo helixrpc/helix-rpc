@@ -1,17 +1,16 @@
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
 use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
+use std::sync::{Arc, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
-
 
 const NANO_TOKEN: i64 = 1_000_000_000;
 
 #[derive(Debug)]
 pub struct ClientBucket {
-    tokens: AtomicI64,       // stored as nano-tokens
-    last_seen: AtomicU64,    // Unix nanoseconds
-    capacity: i64,           // nano-tokens
-    refill_ns: i64,          // nano-tokens/ns (= tokens/s at nano scale)
+    tokens: AtomicI64,    // stored as nano-tokens
+    last_seen: AtomicU64, // Unix nanoseconds
+    capacity: i64,        // nano-tokens
+    refill_ns: i64,       // nano-tokens/ns (= tokens/s at nano scale)
 }
 
 impl ClientBucket {
@@ -43,7 +42,11 @@ impl ClientBucket {
             loop {
                 let cur = self.tokens.load(Ordering::SeqCst);
                 let next = (cur + refill).min(self.capacity);
-                if self.tokens.compare_exchange(cur, next, Ordering::SeqCst, Ordering::SeqCst).is_ok() {
+                if self
+                    .tokens
+                    .compare_exchange(cur, next, Ordering::SeqCst, Ordering::SeqCst)
+                    .is_ok()
+                {
                     break;
                 }
             }
@@ -54,7 +57,11 @@ impl ClientBucket {
             if cur < NANO_TOKEN {
                 return (cur / NANO_TOKEN, false);
             }
-            if self.tokens.compare_exchange(cur, cur - NANO_TOKEN, Ordering::SeqCst, Ordering::SeqCst).is_ok() {
+            if self
+                .tokens
+                .compare_exchange(cur, cur - NANO_TOKEN, Ordering::SeqCst, Ordering::SeqCst)
+                .is_ok()
+            {
                 return ((cur - NANO_TOKEN) / NANO_TOKEN, true);
             }
         }
@@ -85,7 +92,8 @@ impl RateLimiter {
             }
         }
         let mut write = self.buckets.write().unwrap();
-        let bucket = write.entry(key.to_string())
+        let bucket = write
+            .entry(key.to_string())
             .or_insert_with(|| Arc::new(ClientBucket::new(self.rps, self.burst)))
             .clone();
         bucket.allow()

@@ -29,7 +29,7 @@ func GenerateRust(parsed *ast.AST) (string, error) {
 
 		// Implement TSerializable for Thrift
 		sb.WriteString(fmt.Sprintf("impl TSerializable for %s {\n", str.Name))
-		
+
 		// read_from_in_protocol
 		sb.WriteString("    fn read_from_in_protocol(i_prot: &mut dyn TInputProtocol) -> thrift::Result<Self> {\n")
 		sb.WriteString("        i_prot.read_struct_begin()?;\n")

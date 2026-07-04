@@ -26,16 +26,22 @@ impl MetricsCollector {
 
     pub fn record(&self, method: &str, path: &str, status: u16, duration: Duration) {
         let dur_secs = duration.as_secs_f64();
-        
+
         let mut reqs = self.requests.write().unwrap();
-        *reqs.entry((method.to_string(), path.to_string(), status)).or_insert(0) += 1;
+        *reqs
+            .entry((method.to_string(), path.to_string(), status))
+            .or_insert(0) += 1;
 
         let mut durs = self.durations.write().unwrap();
-        durs.entry((method.to_string(), path.to_string())).or_default().push(dur_secs);
+        durs.entry((method.to_string(), path.to_string()))
+            .or_default()
+            .push(dur_secs);
 
         if status >= 400 {
             let mut errs = self.errors.write().unwrap();
-            *errs.entry((method.to_string(), path.to_string())).or_insert(0) += 1;
+            *errs
+                .entry((method.to_string(), path.to_string()))
+                .or_insert(0) += 1;
         }
     }
 
@@ -67,7 +73,9 @@ impl MetricsCollector {
             }
         }
 
-        let buckets = vec![0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0];
+        let buckets = vec![
+            0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0,
+        ];
         lines.push("".to_string());
         lines.push("# HELP helix_request_duration_seconds Request latency histogram.".to_string());
         lines.push("# TYPE helix_request_duration_seconds histogram".to_string());
@@ -76,7 +84,7 @@ impl MetricsCollector {
             for ((method, path), durations) in durs.iter() {
                 let total: f64 = durations.iter().sum();
                 let count = durations.len();
-                
+
                 for &le in &buckets {
                     let bucket_count = durations.iter().filter(|&&d| d <= le).count();
                     lines.push(format!(

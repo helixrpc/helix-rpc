@@ -1,8 +1,8 @@
 package go_go
 
 import (
-	"testing"
 	generated "github.com/helix-rpc/helix/integration-tests/go-go/generated"
+	"testing"
 )
 
 func TestFlatBuffersCodec(t *testing.T) {

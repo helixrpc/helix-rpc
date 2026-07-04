@@ -1,9 +1,11 @@
 #[cfg(test)]
 mod resilience_tests {
-    use crate::retry::{CircuitBreaker, CircuitState, TokenBucket, RetryPolicy, execute_with_retry};
     use crate::batching::LeastConnBalancer;
-    use std::sync::Arc;
+    use crate::retry::{
+        execute_with_retry, CircuitBreaker, CircuitState, RetryPolicy, TokenBucket,
+    };
     use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
     use std::time::Duration;
 
     // -----------------------------------------------------------------------
@@ -67,7 +69,9 @@ mod resilience_tests {
             let cb_clone = cb.clone();
             handles.push(std::thread::spawn(move || cb_clone.record_failure()));
         }
-        for h in handles { let _ = h.join(); }
+        for h in handles {
+            let _ = h.join();
+        }
         assert_eq!(cb.state(), CircuitState::Open);
     }
 
@@ -107,7 +111,9 @@ mod resilience_tests {
                 }
             }));
         }
-        for h in handles { let _ = h.join(); }
+        for h in handles {
+            let _ = h.join();
+        }
         assert_eq!(counter.load(Ordering::Relaxed), 10);
     }
 
@@ -126,7 +132,8 @@ mod resilience_tests {
                 cc.fetch_add(1, Ordering::Relaxed);
                 Ok("ok".to_string())
             }
-        }).await;
+        })
+        .await;
         assert_eq!(result.unwrap(), "ok");
         assert_eq!(calls.load(Ordering::Relaxed), 1);
     }
@@ -147,7 +154,8 @@ mod resilience_tests {
                 cc.fetch_add(1, Ordering::Relaxed);
                 Err("transient".to_string())
             }
-        }).await;
+        })
+        .await;
         assert!(result.is_err());
         assert_eq!(calls.load(Ordering::Relaxed), 3);
     }
@@ -165,9 +173,14 @@ mod resilience_tests {
             let cc = c.clone();
             async move {
                 let n = cc.fetch_add(1, Ordering::Relaxed) + 1;
-                if n < 2 { Err("not ready".to_string()) } else { Ok("ready".to_string()) }
+                if n < 2 {
+                    Err("not ready".to_string())
+                } else {
+                    Ok("ready".to_string())
+                }
             }
-        }).await;
+        })
+        .await;
         assert_eq!(result.unwrap(), "ready");
         assert_eq!(calls.load(Ordering::Relaxed), 2);
     }
@@ -189,9 +202,14 @@ mod resilience_tests {
                 cc.fetch_add(1, Ordering::Relaxed);
                 Ok("ok".to_string())
             }
-        }).await;
+        })
+        .await;
         assert!(result.is_err());
-        assert_eq!(calls.load(Ordering::Relaxed), 0, "operation must not be called when circuit is open");
+        assert_eq!(
+            calls.load(Ordering::Relaxed),
+            0,
+            "operation must not be called when circuit is open"
+        );
     }
 
     #[tokio::test]
@@ -220,11 +238,16 @@ mod resilience_tests {
                     Ok("fast".to_string())
                 }
             }
-        }).await;
+        })
+        .await;
         let elapsed = start.elapsed();
 
         assert_eq!(result.unwrap(), "fast");
-        assert!(elapsed < Duration::from_millis(300), "hedging should be fast, took {:?}", elapsed);
+        assert!(
+            elapsed < Duration::from_millis(300),
+            "hedging should be fast, took {:?}",
+            elapsed
+        );
         assert!(calls.load(Ordering::SeqCst) >= 2);
     }
 
@@ -275,9 +298,9 @@ mod resilience_tests {
     fn test_jwt_validator_hmac() {
         use crate::auth::JwtValidator;
         use hyper::Request;
-        use jsonwebtoken::{encode, Header, EncodingKey};
-        use std::collections::HashMap;
+        use jsonwebtoken::{encode, EncodingKey, Header};
         use serde_json::Value;
+        use std::collections::HashMap;
         use std::time::{SystemTime, UNIX_EPOCH};
 
         let secret = b"my_test_secret_key_1234567890_long";
@@ -288,14 +311,16 @@ mod resilience_tests {
         let exp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
-            .as_secs() + 3600;
+            .as_secs()
+            + 3600;
         claims.insert("exp".to_string(), Value::Number(exp.into()));
 
         let token = encode(
             &Header::default(),
             &claims,
             &EncodingKey::from_secret(secret),
-        ).unwrap();
+        )
+        .unwrap();
 
         let req = Request::builder()
             .header("authorization", format!("Bearer {}", token))
@@ -326,7 +351,7 @@ mod resilience_tests {
     fn test_rate_limiter() {
         use crate::ratelimit::RateLimiter;
         let limiter = RateLimiter::new(10.0, Some(2));
-        
+
         let (rem, allowed) = limiter.allow("client1");
         assert!(allowed);
         assert_eq!(rem, 1);
@@ -349,10 +374,12 @@ mod resilience_tests {
         collector.record("POST", "/predict", 500, Duration::from_millis(150));
 
         let formatted = collector.format_prometheus();
-        assert!(formatted.contains("helix_requests_total{method=\"POST\",path=\"/predict\",status=\"200\"} 1"));
-        assert!(formatted.contains("helix_requests_total{method=\"POST\",path=\"/predict\",status=\"500\"} 1"));
+        assert!(formatted
+            .contains("helix_requests_total{method=\"POST\",path=\"/predict\",status=\"200\"} 1"));
+        assert!(formatted
+            .contains("helix_requests_total{method=\"POST\",path=\"/predict\",status=\"500\"} 1"));
         assert!(formatted.contains("helix_errors_total{method=\"POST\",path=\"/predict\"} 1"));
-        assert!(formatted.contains("helix_request_duration_seconds_count{method=\"POST\",path=\"/predict\"} 2"));
+        assert!(formatted
+            .contains("helix_request_duration_seconds_count{method=\"POST\",path=\"/predict\"} 2"));
     }
 }
-
