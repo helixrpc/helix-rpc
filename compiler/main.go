@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -208,6 +209,33 @@ func runInit(args []string) {
 	}
 
 	fs.Parse(flagArgs) //nolint:errcheck
+
+	if serviceName == "" && len(flagArgs) == 0 {
+		fmt.Printf("\n✨ Welcome to the Helix RPC Project Scaffolding Wizard!\n\n")
+		fmt.Print("? Enter service name: ")
+		fmt.Scanln(&serviceName)
+		serviceName = strings.TrimSpace(serviceName)
+		if serviceName == "" {
+			printError("service name is required")
+			os.Exit(1)
+		}
+
+		fmt.Print("? Choose target language (go, rust, python, node) [go]: ")
+		var l string
+		fmt.Scanln(&l)
+		l = strings.TrimSpace(l)
+		if l != "" {
+			*lang = l
+		}
+
+		fmt.Print("? Choose database configuration (mysql, nosql, none) [none]: ")
+		var d string
+		fmt.Scanln(&d)
+		d = strings.TrimSpace(d)
+		if d != "" {
+			*db = d
+		}
+	}
 
 	if serviceName == "" {
 		fs.Usage()
@@ -559,8 +587,25 @@ await server.start();
 `)
 	}
 
-	fmt.Printf("\n✅ Scaffolded %q (%s)\n\n", name, lang)
-	fmt.Printf("  Next steps:\n")
+	fmt.Printf("\n✅ Scaffolded %q (%s)\n", name, lang)
+
+	// Run auto-dependency tidy post-scaffolding
+	fmt.Printf("📦 Running automatic package configuration and dependency setup...\n")
+	if lang == "go" {
+		cmd := exec.Command("go", "mod", "tidy")
+		cmd.Dir = base
+		_ = cmd.Run()
+	} else if lang == "rust" {
+		cmd := exec.Command("cargo", "check")
+		cmd.Dir = base
+		_ = cmd.Run()
+	} else if lang == "node" {
+		cmd := exec.Command("npm", "install")
+		cmd.Dir = base
+		_ = cmd.Run()
+	}
+
+	fmt.Printf("\n  Next steps:\n")
 	fmt.Printf("    cd %s\n", name)
 	fmt.Printf("    make gen    # generate code from schema.proto\n")
 	fmt.Printf("    make dev    # start the server\n\n")
