@@ -1,0 +1,23 @@
+/* ── Helix RPC brand colours pulled from the logo ── */
+:root {
+  --md-primary-fg-color:        #1A5FAB;   /* deep cobalt blue  */
+  --md-primary-fg-color--light: #2C7FD5;
+  --md-primary-fg-color--dark:  #0F3A6E;
+  --md-accent-fg-color:         #1AABB8;   /* teal               */
+}
+
+/* Header strip */
+.md-header {
+  background: linear-gradient(135deg, #0F3A6E 0%, #1A5FAB 50%, #1AABB8 100%);
+}
+
+/* Hero logo sizing in nav */
+.md-header__button.md-logo img {
+  height: 2rem;
+  filter: drop-shadow(0 1px 4px rgba(0,0,0,0.25));
+}
+
+/* Slightly larger logo on home */
+.md-typeset img[src*="logo.png"] {
+  border-radius: 8px;
+}

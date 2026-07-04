@@ -20,7 +20,7 @@
         
       
       
-      <link rel="icon" href="../assets/images/favicon.png">
+      <link rel="icon" href="../assets/logo.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
     
     
@@ -51,6 +51,8 @@
       
     
     
+      <link rel="stylesheet" href="../assets/extra.css">
+    
     <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
@@ -67,7 +69,7 @@
     
     
     
-    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="black" data-md-color-accent="blue">
+    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="custom" data-md-color-accent="cyan">
   
     
     <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
@@ -92,8 +94,7 @@
   <nav class="md-header__inner md-grid" aria-label="Header">
     <a href=".." title="Helix RPC" class="md-header__button md-logo" aria-label="Helix RPC" data-md-component="logo">
       
-  
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+  <img src="../assets/logo.png" alt="logo">
 
     </a>
     <label class="md-header__button md-icon" for="__drawer">
@@ -123,13 +124,13 @@
     
     
     
-    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="black" data-md-color-accent="blue"  aria-hidden="true"  type="radio" name="__palette" id="__palette_0">
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="custom" data-md-color-accent="cyan"  aria-hidden="true"  type="radio" name="__palette" id="__palette_0">
     
   
     
     
     
-    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="white" data-md-color-accent="blue"  aria-hidden="true"  type="radio" name="__palette" id="__palette_1">
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="cyan"  aria-hidden="true"  type="radio" name="__palette" id="__palette_1">
     
   
 </form>
@@ -331,6 +332,25 @@
   
   
     <li class="md-tabs__item">
+      <a href="../llm-serving/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  LLM Token Serving
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
       <a href="../examples/" class="md-tabs__link">
         
   
@@ -401,6 +421,25 @@
   
 
       
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../benchmarks/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Benchmarks
+
+      </a>
+    </li>
+  
+
+      
     </ul>
   </div>
 </nav>
@@ -427,8 +466,7 @@
   <label class="md-nav__title" for="__drawer">
     <a href=".." title="Helix RPC" class="md-nav__button md-logo" aria-label="Helix RPC" data-md-component="logo">
       
-  
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+  <img src="../assets/logo.png" alt="logo">
 
     </a>
     Helix RPC
@@ -749,6 +787,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#high-performance-engines-allocators" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        High-Performance Engines &amp; Allocators
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -799,6 +848,33 @@
     
   
     Tutorials
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../llm-serving/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    LLM Token Serving
   
 
     
@@ -919,6 +995,33 @@
   
 
     
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../benchmarks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Benchmarks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
   </ul>
 </nav>
                   </div>
@@ -953,7 +1056,7 @@
 <hr />
 <h2 id="native-sse-streaming">Native SSE Streaming<a class="headerlink" href="#native-sse-streaming" title="Permanent link">&para;</a></h2>
 <p>Chat UIs require real-time token streaming. Helix RPC implements native Server-Sent Events (SSE) across all three runtimes. When a client sends <code>Accept: text/event-stream</code>, the gateway automatically detects the stream, launches the async generator, and proxies yields into standard <code>data: {...}\n\n</code> SSE frames.</p>
-<p><strong>Available in:</strong> Go, Rust, Python</p>
+<p><strong>Available in:</strong> Go, Rust, Python, Node.js</p>
 <hr />
 <h2 id="graceful-shutdown">Graceful Shutdown<a class="headerlink" href="#graceful-shutdown" title="Permanent link">&para;</a></h2>
 <p>In Kubernetes, pods are terminated during rolling updates. Without graceful shutdown, in-flight AI inference requests are silently dropped.</p>
@@ -961,11 +1064,11 @@
 - <strong>Go</strong>: <code>broadcast.Sender</code> signals all connection handlers to call <code>conn.GracefulShutdown()</code> and drain.
 - <strong>Rust</strong>: <code>tokio::sync::broadcast</code> with <code>graceful_shutdown()</code> on each hyper connection.
 - <strong>Python</strong>: SIGTERM/SIGINT handlers set a stop event; <code>stop_async(drain_seconds=5.0)</code> waits for in-flight requests before tearing down the <code>AppRunner</code>.</p>
-<p><strong>Available in:</strong> Go, Rust, Python</p>
+<p><strong>Available in:</strong> Go, Rust, Python, Node.js</p>
 <hr />
 <h2 id="structured-errors-helixerror">Structured Errors (<code>HelixError</code>)<a class="headerlink" href="#structured-errors-helixerror" title="Permanent link">&para;</a></h2>
 <p>All three runtimes define a common <code>HelixError</code> type carrying a gRPC-compatible <code>ErrorCode</code> (0–16) alongside a human-readable message. The runtime automatically maps the code to the correct HTTP status (e.g. <code>NOT_FOUND → 404</code>, <code>UNAVAILABLE → 503</code>) so handlers simply raise/return the error and the framework takes care of the wire format.</p>
-<p><strong>Available in:</strong> Go (<code>errors.go</code>), Rust (<code>errors.rs</code>), Python (<code>errors.py</code>)</p>
+<p><strong>Available in:</strong> Go (<code>errors.go</code>), Rust (<code>errors.rs</code>), Python (<code>errors.py</code>), Node.js (<code>errors.ts</code>)</p>
 <hr />
 <h2 id="production-middlewares">Production Middlewares<a class="headerlink" href="#production-middlewares" title="Permanent link">&para;</a></h2>
 <ul>
@@ -979,7 +1082,7 @@
 <h2 id="distributed-tracing-opentelemetry">Distributed Tracing (OpenTelemetry)<a class="headerlink" href="#distributed-tracing-opentelemetry" title="Permanent link">&para;</a></h2>
 <p>W3C <code>traceparent</code> / <code>tracestate</code> headers are extracted from every inbound request and used to start a child span, allowing full distributed tracing from the edge gateway down to the GPU model — across language boundaries.</p>
 <p>A <strong>configurable probabilistic sampler</strong> (default 1%) prevents the OpenTelemetry collector from being overwhelmed in production, while ensuring sufficient coverage for latency debugging.</p>
-<p><strong>Available in:</strong> Go (<code>telemetry.go</code>), Rust (<code>telemetry.rs</code>), Python (<code>telemetry.py</code>)</p>
+<p><strong>Available in:</strong> Go (<code>telemetry.go</code>), Rust (<code>telemetry.rs</code>), Python (<code>telemetry.py</code>), Node.js (<code>telemetry.ts</code>)</p>
 <hr />
 <h2 id="circuit-breaker-retry-p99-hedging">Circuit Breaker, Retry &amp; P99 Hedging<a class="headerlink" href="#circuit-breaker-retry-p99-hedging" title="Permanent link">&para;</a></h2>
 <p>Three resilience primitives work together to guarantee extreme availability:</p>
@@ -988,14 +1091,14 @@
 <li><strong>Exponential Backoff with Full Jitter</strong> — avoids thundering-herd retries. Sleep duration is <code>rand[0, backoff)</code> per the AWS recommendation.</li>
 <li><strong>P99 Hedging with <code>TokenBucket</code></strong> — if a request doesn't complete within the P99 latency threshold, a duplicate is fired to a different backend. The token bucket limits hedging to e.g. 10 duplicates/second, preventing hedge-induced amplification during cluster-wide slowdowns.</li>
 </ol>
-<p><strong>Available in:</strong> Go, Rust, Python</p>
+<p><strong>Available in:</strong> Go, Rust, Python, Node.js</p>
 <hr />
 <h2 id="advanced-load-balancing">Advanced Load Balancing<a class="headerlink" href="#advanced-load-balancing" title="Permanent link">&para;</a></h2>
 <ul>
-<li><strong>Round-Robin</strong>: Thread-safe atomic counter; available in Go and Rust.</li>
+<li><strong>Round-Robin</strong>: Thread-safe atomic counter; available in Go, Rust, Python, and Node.js.</li>
 <li><strong>Least-Connections (<code>LeastConnBalancer</code>)</strong>: Lock-free in Go (atomic pointer swaps + cache-line padding); <code>RwLock</code>-based in Rust. Dynamically routes new requests to the backend with the fewest in-flight connections — ideal for AI inference where request latency is highly variable.</li>
 </ul>
-<p><strong>Available in:</strong> Go (lock-free), Rust</p>
+<p><strong>Available in:</strong> Go, Rust, Python, Node.js</p>
 <hr />
 <h2 id="multi-protocol-multiplexing-go">Multi-Protocol Multiplexing (Go)<a class="headerlink" href="#multi-protocol-multiplexing-go" title="Permanent link">&para;</a></h2>
 <p>Unlike frameworks that force you to choose a protocol, Helix RPC multiplexes <strong>gRPC, REST, Apache Thrift, and SSE</strong> on the exact same port using <code>h2c</code> (HTTP/2 cleartext):</p>
@@ -1013,7 +1116,7 @@
 - <code>helix_errors_total</code>: Total number of RPC errors labeled by method and path.
 - <code>helix_request_duration_seconds</code>: Histogram of request latencies.
 - <code>helix_backend_active_connections</code>: Current active connections to each backend target.</p>
-<p><strong>Available in:</strong> Go, Rust, Python</p>
+<p><strong>Available in:</strong> Go, Rust, Python, Node.js</p>
 <hr />
 <h2 id="developer-dashboard">Developer Dashboard<a class="headerlink" href="#developer-dashboard" title="Permanent link">&para;</a></h2>
 <p>Go services embed a single-page reactive dashboard at <code>/__helix/ui</code>. It offers:
@@ -1033,7 +1136,14 @@
 <p>Helix supports pluggable service discovery interfaces. Out of the box, all runtimes provide:
 - <strong><code>StaticResolver</code></strong>: A local registry mapping service names directly to static IP addresses.
 - <strong><code>DNSResolver</code></strong>: Resolves target endpoints dynamically using standard A/AAAA record queries or port-aware SRV records—making it ready for Kubernetes cluster-internal service discovery.</p>
-<p><strong>Available in:</strong> Go, Rust, Python</p>
+<p><strong>Available in:</strong> Go, Rust, Python, Node.js</p>
+<hr />
+<h2 id="high-performance-engines-allocators">High-Performance Engines &amp; Allocators<a class="headerlink" href="#high-performance-engines-allocators" title="Permanent link">&para;</a></h2>
+<p>To support extreme throughput requirements, Helix embeds customized high-performance parsers and memory systems:
+- <strong>JIT JSON Engine (Go)</strong>: Uses JIT-compiled <strong>ByteDance Sonic</strong> with AVX/AVX2 instruction support for zero-reflection, hyper-fast JSON REST transcoding.
+- <strong>SIMD JSON Engine (Rust)</strong>: Employs SIMD-vectorized <strong>simd-json</strong> to accelerate JSON deserialization/serialization on hot API paths.
+- <strong>Global Memory Allocator (Rust)</strong>: Binds Microsoft's <strong>mimalloc</strong> thread-caching memory allocator to eliminate allocator lock contention in multi-threaded network tasks.</p>
+<p><strong>Available in:</strong> Go, Rust</p>
 
 
 
@@ -1089,7 +1199,7 @@
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.tabs", "navigation.sections", "navigation.top", "toc.integrate", "search.suggest", "search.highlight"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.tabs", "navigation.sections", "navigation.top", "toc.integrate", "search.suggest", "search.highlight", "content.code.copy"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
       <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
