@@ -58,3 +58,8 @@ nav:
   - Integrations: integrations.md
   - Enterprise Concerns: enterprise-concerns.md
   - Benchmarks: benchmarks.md
+  - Blog:
+      - Introducing Helix RPC: blog/introducing-helix-rpc.md
+      - Deep-Dive Advanced Optimizations: blog/deep-dive-advanced-optimizations.md
+      - Helix vs. Alternatives: blog/helix-vs-alternatives.md
+

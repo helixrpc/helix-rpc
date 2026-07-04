@@ -2,6 +2,47 @@
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional, AsyncIterator
 from abc import ABC, abstractmethod
+import struct as _struct
+
+def _read_varint(buf: memoryview, idx: int):
+    v, shift = 0, 0
+    while True:
+        if idx >= len(buf): raise EOFError('unexpected EOF reading varint')
+        b = buf[idx]; idx += 1
+        v |= (b & 0x7f) << shift
+        if (b & 0x80) == 0: break
+        shift += 7
+    return v, idx
+
+def _write_thrift_varint(out: bytearray, v: int) -> None:
+    while True:
+        if (v & ~0x7F) == 0: out.append(v); break
+        out.append((v & 0x7F) | 0x80); v >>= 7
+
+def _write_thrift_i16(out: bytearray, v: int) -> None:
+    out.append((v >> 8) & 0xFF); out.append(v & 0xFF)
+
+def _fast_scan_field(raw: memoryview, target_field: int):
+    idx = 0
+    while idx < len(raw):
+        tag, idx = _read_varint(raw, idx)
+        field_num = tag >> 3
+        wire_type = tag & 0x7
+        if field_num == target_field:
+            if wire_type == 2:
+                length, idx = _read_varint(raw, idx)
+                return raw[idx:idx+length], wire_type
+            elif wire_type == 0:
+                start = idx
+                _, idx = _read_varint(raw, idx)
+                return raw[start:idx], wire_type
+            raise ValueError(f'unsupported wire_type {wire_type}')
+        if wire_type == 0: _, idx = _read_varint(raw, idx)
+        elif wire_type == 2:
+            length, idx = _read_varint(raw, idx)
+            idx += length
+        else: raise ValueError(f'unknown wire_type {wire_type}')
+    raise KeyError(f'field {target_field} not found')
 
 @dataclass
 class ChatMessage:
@@ -85,6 +126,83 @@ class ChatMessage:
             content=val_content,
         )
 
+    @classmethod
+    def from_proto(cls, buf: bytes) -> 'ChatMessage':
+        raw = memoryview(buf)
+        val_role = ""
+        val_content = ""
+        idx = 0
+        while idx < len(raw):
+            tag, idx = _read_varint(raw, idx)
+            field_num = tag >> 3
+            wire_type = tag & 0x7
+            if field_num == 1:
+                _len, idx = _read_varint(raw, idx); val_role = bytes(raw[idx:idx+_len]).decode('utf-8'); idx += _len
+            elif field_num == 2:
+                _len, idx = _read_varint(raw, idx); val_content = bytes(raw[idx:idx+_len]).decode('utf-8'); idx += _len
+            else:
+                if wire_type == 0: _, idx = _read_varint(raw, idx)
+                elif wire_type == 2:
+                    _l, idx = _read_varint(raw, idx); idx += _l
+                elif wire_type == 5: idx += 4
+                elif wire_type == 1: idx += 8
+        return cls(
+            role=val_role,
+            content=val_content,
+        )
+
+class LazyChatMessage:
+    __slots__ = ('_raw',)
+    def __init__(self, raw: bytes) -> None:
+        self._raw = memoryview(raw)
+    def get_role(self) -> str:
+        b, _ = _fast_scan_field(self._raw, 1)
+        return bytes(b).decode('utf-8')
+    def get_content(self) -> str:
+        b, _ = _fast_scan_field(self._raw, 2)
+        return bytes(b).decode('utf-8')
+
+    @classmethod
+    def transpile_protobuf_to_thrift_compact(cls, data: bytes) -> bytes:
+        raw = memoryview(data)
+        out = bytearray()
+        _f_role = None
+        _f_content = None
+        idx = 0
+        while idx < len(raw):
+            tag, idx = _read_varint(raw, idx)
+            field_num = tag >> 3
+            wire_type = tag & 0x7
+            if field_num == 1:
+                _l, idx = _read_varint(raw, idx); _f_role = bytes(raw[idx:idx+_l]).decode('utf-8'); idx += _l
+            elif field_num == 2:
+                _l, idx = _read_varint(raw, idx); _f_content = bytes(raw[idx:idx+_l]).decode('utf-8'); idx += _l
+            else:
+                if wire_type == 0: _, idx = _read_varint(raw, idx)
+                elif wire_type == 2:
+                    _l, idx = _read_varint(raw, idx); idx += _l
+                elif wire_type == 5: idx += 4
+                elif wire_type == 1: idx += 8
+        prev_field = 0
+        if _f_role is not None:
+            _delta = 1 - prev_field
+            if 0 < _delta <= 15: out.append((_delta << 4) | 8)
+            else: out.append(8); _write_thrift_i16(out, 1)
+            _enc = _f_role.encode('utf-8')
+            _write_thrift_varint(out, len(_enc))
+            out.extend(_enc)
+            prev_field = 1
+        if _f_content is not None:
+            _delta = 2 - prev_field
+            if 0 < _delta <= 15: out.append((_delta << 4) | 8)
+            else: out.append(8); _write_thrift_i16(out, 2)
+            _enc = _f_content.encode('utf-8')
+            _write_thrift_varint(out, len(_enc))
+            out.extend(_enc)
+            prev_field = 2
+        out.append(0x00)  # Thrift STOP byte
+        return bytes(out)
+
 @dataclass
 class ChatCompletionRequest:
     model: str
@@ -161,6 +279,91 @@ class ChatCompletionRequest:
             messages=val_messages,
             stream=val_stream,
         )
+
+    @classmethod
+    def from_proto(cls, buf: bytes) -> 'ChatCompletionRequest':
+        raw = memoryview(buf)
+        val_model = ""
+        val_messages = 0
+        val_stream = False
+        idx = 0
+        while idx < len(raw):
+            tag, idx = _read_varint(raw, idx)
+            field_num = tag >> 3
+            wire_type = tag & 0x7
+            if field_num == 1:
+                _len, idx = _read_varint(raw, idx); val_model = bytes(raw[idx:idx+_len]).decode('utf-8'); idx += _len
+            elif field_num == 2:
+                _, idx = _read_varint(raw, idx)
+            elif field_num == 3:
+                _v, idx = _read_varint(raw, idx); val_stream = bool(_v)
+            else:
+                if wire_type == 0: _, idx = _read_varint(raw, idx)
+                elif wire_type == 2:
+                    _l, idx = _read_varint(raw, idx); idx += _l
+                elif wire_type == 5: idx += 4
+                elif wire_type == 1: idx += 8
+        return cls(
+            model=val_model,
+            messages=val_messages,
+            stream=val_stream,
+        )
+
+class LazyChatCompletionRequest:
+    __slots__ = ('_raw',)
+    def __init__(self, raw: bytes) -> None:
+        self._raw = memoryview(raw)
+    def get_model(self) -> str:
+        b, _ = _fast_scan_field(self._raw, 1)
+        return bytes(b).decode('utf-8')
+    def get_messages(self):
+        b, _ = _fast_scan_field(self._raw, 2)
+        return bytes(b)
+    def get_stream(self) -> bool:
+        b, _ = _fast_scan_field(self._raw, 3)
+        v, _ = _read_varint(b, 0)
+        return bool(v)
+
+    @classmethod
+    def transpile_protobuf_to_thrift_compact(cls, data: bytes) -> bytes:
+        raw = memoryview(data)
+        out = bytearray()
+        _f_model = None
+        _f_messages = 0
+        _f_stream = False
+        idx = 0
+        while idx < len(raw):
+            tag, idx = _read_varint(raw, idx)
+            field_num = tag >> 3
+            wire_type = tag & 0x7
+            if field_num == 1:
+                _l, idx = _read_varint(raw, idx); _f_model = bytes(raw[idx:idx+_l]).decode('utf-8'); idx += _l
+            elif field_num == 2:
+                _, idx = _read_varint(raw, idx)
+            elif field_num == 3:
+                _v, idx = _read_varint(raw, idx); _f_stream = bool(_v)
+            else:
+                if wire_type == 0: _, idx = _read_varint(raw, idx)
+                elif wire_type == 2:
+                    _l, idx = _read_varint(raw, idx); idx += _l
+                elif wire_type == 5: idx += 4
+                elif wire_type == 1: idx += 8
+        prev_field = 0
+        if _f_model is not None:
+            _delta = 1 - prev_field
+            if 0 < _delta <= 15: out.append((_delta << 4) | 8)
+            else: out.append(8); _write_thrift_i16(out, 1)
+            _enc = _f_model.encode('utf-8')
+            _write_thrift_varint(out, len(_enc))
+            out.extend(_enc)
+            prev_field = 1
+        _delta = 3 - prev_field
+        _ttype = 1 if _f_stream else 2
+        if 0 < _delta <= 15: out.append((_delta << 4) | _ttype)
+        else: out.append(_ttype); _write_thrift_i16(out, 3)
+        prev_field = 3
+        out.append(0x00)  # Thrift STOP byte
+        return bytes(out)
 
 @dataclass
 class ChatCompletionChoice:
@@ -246,6 +449,102 @@ class ChatCompletionChoice:
             delta=val_delta,
             finish_reason=val_finish_reason,
         )
+
+    @classmethod
+    def from_proto(cls, buf: bytes) -> 'ChatCompletionChoice':
+        raw = memoryview(buf)
+        val_index = 0
+        val_message = 0
+        val_delta = 0
+        val_finish_reason = ""
+        idx = 0
+        while idx < len(raw):
+            tag, idx = _read_varint(raw, idx)
+            field_num = tag >> 3
+            wire_type = tag & 0x7
+            if field_num == 1:
+                val_index, idx = _read_varint(raw, idx)
+            elif field_num == 2:
+                _, idx = _read_varint(raw, idx)
+            elif field_num == 3:
+                _, idx = _read_varint(raw, idx)
+            elif field_num == 4:
+                _len, idx = _read_varint(raw, idx); val_finish_reason = bytes(raw[idx:idx+_len]).decode('utf-8'); idx += _len
+            else:
+                if wire_type == 0: _, idx = _read_varint(raw, idx)
+                elif wire_type == 2:
+                    _l, idx = _read_varint(raw, idx); idx += _l
+                elif wire_type == 5: idx += 4
+                elif wire_type == 1: idx += 8
+        return cls(
+            index=val_index,
+            message=val_message,
+            delta=val_delta,
+            finish_reason=val_finish_reason,
+        )
+
+class LazyChatCompletionChoice:
+    __slots__ = ('_raw',)
+    def __init__(self, raw: bytes) -> None:
+        self._raw = memoryview(raw)
+    def get_index(self) -> int:
+        b, _ = _fast_scan_field(self._raw, 1)
+        v, _ = _read_varint(b, 0)
+        return v
+    def get_message(self):
+        b, _ = _fast_scan_field(self._raw, 2)
+        return bytes(b)
+    def get_delta(self):
+        b, _ = _fast_scan_field(self._raw, 3)
+        return bytes(b)
+    def get_finish_reason(self) -> str:
+        b, _ = _fast_scan_field(self._raw, 4)
+        return bytes(b).decode('utf-8')
+
+    @classmethod
+    def transpile_protobuf_to_thrift_compact(cls, data: bytes) -> bytes:
+        raw = memoryview(data)
+        out = bytearray()
+        _f_index = 0
+        _f_message = 0
+        _f_delta = 0
+        _f_finish_reason = None
+        idx = 0
+        while idx < len(raw):
+            tag, idx = _read_varint(raw, idx)
+            field_num = tag >> 3
+            wire_type = tag & 0x7
+            if field_num == 1:
+                _f_index, idx = _read_varint(raw, idx)
+            elif field_num == 2:
+                _, idx = _read_varint(raw, idx)
+            elif field_num == 3:
+                _, idx = _read_varint(raw, idx)
+            elif field_num == 4:
+                _l, idx = _read_varint(raw, idx); _f_finish_reason = bytes(raw[idx:idx+_l]).decode('utf-8'); idx += _l
+            else:
+                if wire_type == 0: _, idx = _read_varint(raw, idx)
+                elif wire_type == 2:
+                    _l, idx = _read_varint(raw, idx); idx += _l
+                elif wire_type == 5: idx += 4
+                elif wire_type == 1: idx += 8
+        prev_field = 0
+        _delta = 1 - prev_field
+        if 0 < _delta <= 15: out.append((_delta << 4) | 5)
+        else: out.append(5); _write_thrift_i16(out, 1)
+        _zz = (_f_index << 1) ^ (_f_index >> 63) if _f_index < 0 else _f_index << 1
+        _write_thrift_varint(out, _zz)
+        prev_field = 1
+        if _f_finish_reason is not None:
+            _delta = 4 - prev_field
+            if 0 < _delta <= 15: out.append((_delta << 4) | 8)
+            else: out.append(8); _write_thrift_i16(out, 4)
+            _enc = _f_finish_reason.encode('utf-8')
+            _write_thrift_varint(out, len(_enc))
+            out.extend(_enc)
+            prev_field = 4
+        out.append(0x00)  # Thrift STOP byte
+        return bytes(out)
 
 @dataclass
 class ChatCompletionResponse:
@@ -371,6 +670,128 @@ class ChatCompletionResponse:
             model=val_model,
             choices=val_choices,
         )
+
+    @classmethod
+    def from_proto(cls, buf: bytes) -> 'ChatCompletionResponse':
+        raw = memoryview(buf)
+        val_id = ""
+        val_object = ""
+        val_created = 0
+        val_model = ""
+        val_choices = 0
+        idx = 0
+        while idx < len(raw):
+            tag, idx = _read_varint(raw, idx)
+            field_num = tag >> 3
+            wire_type = tag & 0x7
+            if field_num == 1:
+                _len, idx = _read_varint(raw, idx); val_id = bytes(raw[idx:idx+_len]).decode('utf-8'); idx += _len
+            elif field_num == 2:
+                _len, idx = _read_varint(raw, idx); val_object = bytes(raw[idx:idx+_len]).decode('utf-8'); idx += _len
+            elif field_num == 3:
+                val_created, idx = _read_varint(raw, idx)
+            elif field_num == 4:
+                _len, idx = _read_varint(raw, idx); val_model = bytes(raw[idx:idx+_len]).decode('utf-8'); idx += _len
+            elif field_num == 5:
+                _, idx = _read_varint(raw, idx)
+            else:
+                if wire_type == 0: _, idx = _read_varint(raw, idx)
+                elif wire_type == 2:
+                    _l, idx = _read_varint(raw, idx); idx += _l
+                elif wire_type == 5: idx += 4
+                elif wire_type == 1: idx += 8
+        return cls(
+            id=val_id,
+            object=val_object,
+            created=val_created,
+            model=val_model,
+            choices=val_choices,
+        )
+
+class LazyChatCompletionResponse:
+    __slots__ = ('_raw',)
+    def __init__(self, raw: bytes) -> None:
+        self._raw = memoryview(raw)
+    def get_id(self) -> str:
+        b, _ = _fast_scan_field(self._raw, 1)
+        return bytes(b).decode('utf-8')
+    def get_object(self) -> str:
+        b, _ = _fast_scan_field(self._raw, 2)
+        return bytes(b).decode('utf-8')
+    def get_created(self) -> int:
+        b, _ = _fast_scan_field(self._raw, 3)
+        v, _ = _read_varint(b, 0)
+        return v
+    def get_model(self) -> str:
+        b, _ = _fast_scan_field(self._raw, 4)
+        return bytes(b).decode('utf-8')
+    def get_choices(self):
+        b, _ = _fast_scan_field(self._raw, 5)
+        return bytes(b)
+
+    @classmethod
+    def transpile_protobuf_to_thrift_compact(cls, data: bytes) -> bytes:
+        raw = memoryview(data)
+        out = bytearray()
+        _f_id = None
+        _f_object = None
+        _f_created = 0
+        _f_model = None
+        _f_choices = 0
+        idx = 0
+        while idx < len(raw):
+            tag, idx = _read_varint(raw, idx)
+            field_num = tag >> 3
+            wire_type = tag & 0x7
+            if field_num == 1:
+                _l, idx = _read_varint(raw, idx); _f_id = bytes(raw[idx:idx+_l]).decode('utf-8'); idx += _l
+            elif field_num == 2:
+                _l, idx = _read_varint(raw, idx); _f_object = bytes(raw[idx:idx+_l]).decode('utf-8'); idx += _l
+            elif field_num == 3:
+                _f_created, idx = _read_varint(raw, idx)
+            elif field_num == 4:
+                _l, idx = _read_varint(raw, idx); _f_model = bytes(raw[idx:idx+_l]).decode('utf-8'); idx += _l
+            elif field_num == 5:
+                _, idx = _read_varint(raw, idx)
+            else:
+                if wire_type == 0: _, idx = _read_varint(raw, idx)
+                elif wire_type == 2:
+                    _l, idx = _read_varint(raw, idx); idx += _l
+                elif wire_type == 5: idx += 4
+                elif wire_type == 1: idx += 8
+        prev_field = 0
+        if _f_id is not None:
+            _delta = 1 - prev_field
+            if 0 < _delta <= 15: out.append((_delta << 4) | 8)
+            else: out.append(8); _write_thrift_i16(out, 1)
+            _enc = _f_id.encode('utf-8')
+            _write_thrift_varint(out, len(_enc))
+            out.extend(_enc)
+            prev_field = 1
+        if _f_object is not None:
+            _delta = 2 - prev_field
+            if 0 < _delta <= 15: out.append((_delta << 4) | 8)
+            else: out.append(8); _write_thrift_i16(out, 2)
+            _enc = _f_object.encode('utf-8')
+            _write_thrift_varint(out, len(_enc))
+            out.extend(_enc)
+            prev_field = 2
+        _delta = 3 - prev_field
+        if 0 < _delta <= 15: out.append((_delta << 4) | 6)
+        else: out.append(6); _write_thrift_i16(out, 3)
+        _zz = (_f_created << 1) ^ (_f_created >> 63) if _f_created < 0 else _f_created << 1
+        _write_thrift_varint(out, _zz)
+        prev_field = 3
+        if _f_model is not None:
+            _delta = 4 - prev_field
+            if 0 < _delta <= 15: out.append((_delta << 4) | 8)
+            else: out.append(8); _write_thrift_i16(out, 4)
+            _enc = _f_model.encode('utf-8')
+            _write_thrift_varint(out, len(_enc))
+            out.extend(_enc)
+            prev_field = 4
+        out.append(0x00)  # Thrift STOP byte
+        return bytes(out)
 
 class ChatCompletionServiceBase(ABC):
     @abstractmethod
