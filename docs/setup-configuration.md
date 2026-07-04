@@ -2,6 +2,19 @@
 
 Helix RPC is designed to be embedded directly into your application as a library, giving you total control over the server environment, routing, and deployment.
 
+## System Requirements
+
+Before getting started, ensure your development environment matches the minimum language runtime requirements:
+
+| Language | Minimum Version | Recommended / Verified | Package Manager |
+|:---|:---:|:---:|:---|
+| **Go** | `1.25.0` | `1.25.0` | Go Modules (`go get`) |
+| **Rust** | Rust Edition `2021` | Rust `1.75.0` or newer | Cargo (`cargo add`) |
+| **Python** | `3.10` | `3.10` - `3.13` | Pip (`pip install`) |
+| **Node.js** | `18.0.0` | `20.0.0` or newer | NPM (`npm install`) |
+
+---
+
 ## 1. Installation
 
 ### Go Runtime
