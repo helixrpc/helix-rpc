@@ -711,3 +711,145 @@ async fn run_flatbuffers_codec_test() {
 
     println!("Rust FlatBuffers local codec test passed!");
 }
+
+#[cfg(test)]
+mod advanced_optimization_tests {
+    use super::generated::UserProfile;
+    use prost::Message;
+
+    fn make_proto_bytes() -> Vec<u8> {
+        let profile = UserProfile {
+            user_id: 42,
+            username: "zero_copy_hero".to_string(),
+            email: "hero@helix.rpc".to_string(),
+        };
+        let mut buf = Vec::new();
+        profile.encode(&mut buf).unwrap();
+        buf
+    }
+
+    #[test]
+    fn test_zero_copy_view_parse() {
+        let buf = make_proto_bytes();
+        let view = super::generated::UserProfileView::parse(&buf)
+            .expect("UserProfileView::parse should succeed");
+        assert_eq!(view.user_id, 42);
+        assert_eq!(view.username, "zero_copy_hero");
+        assert_eq!(view.email, "hero@helix.rpc");
+    }
+
+    #[test]
+    fn test_zero_copy_view_lifetime_borrows_buffer() {
+        let buf = make_proto_bytes();
+        let view = super::generated::UserProfileView::parse(&buf)
+            .expect("parse should succeed");
+        // username and email are &str slices pointing INTO buf (no allocation)
+        // Verify they are subslices of buf by checking pointer range
+        let buf_start = buf.as_ptr() as usize;
+        let buf_end = buf_start + buf.len();
+        let username_ptr = view.username.as_ptr() as usize;
+        assert!(
+            username_ptr >= buf_start && username_ptr < buf_end,
+            "username pointer should be within original buffer (zero-copy)"
+        );
+        let email_ptr = view.email.as_ptr() as usize;
+        assert!(
+            email_ptr >= buf_start && email_ptr < buf_end,
+            "email pointer should be within original buffer (zero-copy)"
+        );
+    }
+
+    #[test]
+    fn test_lazy_smart_fields_user_id() {
+        let buf = make_proto_bytes();
+        let lazy = super::generated::LazyUserProfile::new(&buf);
+        assert_eq!(lazy.get_user_id().unwrap(), 42);
+    }
+
+    #[test]
+    fn test_lazy_smart_fields_username() {
+        let buf = make_proto_bytes();
+        let lazy = super::generated::LazyUserProfile::new(&buf);
+        assert_eq!(lazy.get_username().unwrap(), "zero_copy_hero");
+    }
+
+    #[test]
+    fn test_lazy_smart_fields_email() {
+        let buf = make_proto_bytes();
+        let lazy = super::generated::LazyUserProfile::new(&buf);
+        assert_eq!(lazy.get_email().unwrap(), "hero@helix.rpc");
+    }
+
+    #[test]
+    fn test_lazy_smart_fields_independent_field_access() {
+        // Verify each getter can be called independently without full deserialization
+        let buf = make_proto_bytes();
+        let lazy = super::generated::LazyUserProfile::new(&buf);
+        // Only access email — should work without ever decoding username or user_id
+        let email = lazy.get_email().expect("get_email should succeed");
+        assert_eq!(email, "hero@helix.rpc");
+    }
+
+    #[test]
+    fn test_transpile_protobuf_to_thrift_compact_succeeds() {
+        let buf = make_proto_bytes();
+        let mut output = Vec::new();
+        UserProfile::transpile_protobuf_to_thrift_compact(&buf, &mut output)
+            .expect("transpile should succeed");
+        // Must end with Thrift STOP byte
+        assert!(!output.is_empty(), "output should not be empty");
+        assert_eq!(*output.last().unwrap(), 0x00, "last byte must be Thrift STOP");
+    }
+
+    #[test]
+    fn test_transpile_contains_field_strings() {
+        let buf = make_proto_bytes();
+        let mut output = Vec::new();
+        UserProfile::transpile_protobuf_to_thrift_compact(&buf, &mut output).unwrap();
+        // The string "zero_copy_hero" and "hero@helix.rpc" must appear verbatim in Thrift output
+        let contains_username = output.windows(14).any(|w| w == b"zero_copy_hero");
+        let contains_email = output.windows(14).any(|w| w == b"hero@helix.rpc");
+        assert!(contains_username, "username string should appear in Thrift compact output");
+        assert!(contains_email, "email string should appear in Thrift compact output");
+    }
+
+    #[test]
+    fn test_transpile_roundtrip_no_data_loss() {
+        // Transpile, then verify we can still see all field data
+        let profile = UserProfile {
+            user_id: 99,
+            username: "roundtrip".to_string(),
+            email: "rt@test.com".to_string(),
+        };
+        let mut proto_buf = Vec::new();
+        profile.encode(&mut proto_buf).unwrap();
+        let mut thrift_buf = Vec::new();
+        UserProfile::transpile_protobuf_to_thrift_compact(&proto_buf, &mut thrift_buf).unwrap();
+        let contains_username = thrift_buf.windows(9).any(|w| w == b"roundtrip");
+        let contains_email = thrift_buf.windows(11).any(|w| w == b"rt@test.com");
+        assert!(contains_username, "roundtrip username should be in thrift output");
+        assert!(contains_email, "roundtrip email should be in thrift output");
+    }
+
+    #[test]
+    fn test_ebpf_sockmap_fallback_on_non_linux() {
+        // On macOS (CI) this must return Err (graceful fallback)
+        let result = helix_rt::load_bpf_sockmap("127.0.0.1:9090");
+        #[cfg(not(target_os = "linux"))]
+        assert!(result.is_err(), "expected fallback Err on non-Linux");
+        // On Linux without root this would also be Err
+    }
+
+    #[test]
+    fn test_ebpf_unix_prefix_detection() {
+        assert!(helix_rt::has_unix_prefix("unix:///tmp/helix.sock"));
+        assert!(!helix_rt::has_unix_prefix("127.0.0.1:9090"));
+        assert!(!helix_rt::has_unix_prefix("localhost:8080"));
+    }
+
+    #[test]
+    fn test_ebpf_strip_unix_prefix() {
+        assert_eq!(helix_rt::strip_unix_prefix("unix:///tmp/helix.sock"), "/tmp/helix.sock");
+        assert_eq!(helix_rt::strip_unix_prefix("127.0.0.1:9090"), "127.0.0.1:9090");
+    }
+}

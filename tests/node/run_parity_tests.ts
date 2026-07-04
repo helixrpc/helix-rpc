@@ -1,5 +1,5 @@
-import { HelixServer, TokenBucketRateLimiter, BatchScheduler, decodeAndVerifyJWT, withRetries, CircuitBreaker, RoundRobinBalancer } from 'helix-rt-node';
-import { UserProfile } from './generated.js';
+import { HelixServer, TokenBucketRateLimiter, BatchScheduler, decodeAndVerifyJWT, withRetries, CircuitBreaker, RoundRobinBalancer, loadBpfSockmap, hasUnixPrefix, stripUnixPrefix } from 'helix-rt-node';
+import { UserProfile, LazyUserProfile } from './generated.js';
 import * as http from 'http';
 
 function assert(condition: boolean, message?: string) {
@@ -193,6 +193,49 @@ async function runParityTests() {
     assert(sseStream.includes("hello") && sseStream.includes("world"), "SSE stream should contain chunk outputs");
     sseServer.shutdown();
     console.log("✅ Health check & SSE stream server tests passed!");
+
+    console.log("--- 9. Testing Advanced Performance Optimizations ---");
+
+    // Build a sample Protobuf-encoded UserProfile
+    const enc2 = new TextEncoder();
+    const usernameBytes = enc2.encode('zero_copy_hero');
+    const emailBytes = enc2.encode('hero@helix.rpc');
+    const protoInput = new Uint8Array([
+        0x08, 42,
+        0x12, usernameBytes.length, ...usernameBytes,
+        0x1A, emailBytes.length, ...emailBytes,
+    ]);
+
+    // Test LazyUserProfile
+    const lazy = new LazyUserProfile(protoInput);
+    assert(lazy.getUserId() === 42, `LazyUserProfile.getUserId() should be 42, got ${lazy.getUserId()}`);
+    assert(lazy.getUsername() === 'zero_copy_hero', `LazyUserProfile.getUsername() should be 'zero_copy_hero', got '${lazy.getUsername()}'`);
+    assert(lazy.getEmail() === 'hero@helix.rpc', `LazyUserProfile.getEmail() should be 'hero@helix.rpc', got '${lazy.getEmail()}'`);
+
+    // Test transpileProtobufToThriftCompact
+    const thriftBytes = UserProfile.transpileProtobufToThriftCompact(protoInput);
+    assert(thriftBytes instanceof Uint8Array, 'transpile output should be Uint8Array');
+    assert(thriftBytes.length > 0, 'transpile output should not be empty');
+    assert(thriftBytes[thriftBytes.length - 1] === 0x00, 'last byte must be Thrift STOP (0x00)');
+    // Verify string contents appear verbatim in Thrift output
+    const thriftStr = Buffer.from(thriftBytes).toString('latin1');
+    assert(thriftStr.includes('zero_copy_hero'), 'username should appear verbatim in Thrift compact output');
+    assert(thriftStr.includes('hero@helix.rpc'), 'email should appear verbatim in Thrift compact output');
+
+    // Test eBPF helpers from runtime
+    assert(hasUnixPrefix('unix:///tmp/helix.sock') === true, 'hasUnixPrefix should return true for unix:// scheme');
+    assert(hasUnixPrefix('127.0.0.1:9090') === false, 'hasUnixPrefix should return false for TCP addr');
+    assert(stripUnixPrefix('unix:///tmp/helix.sock') === '/tmp/helix.sock', 'stripUnixPrefix should strip unix:// prefix');
+    assert(stripUnixPrefix('127.0.0.1:9090') === '127.0.0.1:9090', 'stripUnixPrefix should not change TCP addr');
+    // loadBpfSockmap should return false on non-Linux
+    const ebpfResult = loadBpfSockmap('127.0.0.1:9090');
+    assert(typeof ebpfResult === 'boolean', 'loadBpfSockmap should return boolean');
+    // On non-Linux, should be false (graceful fallback)
+    if (process.platform !== 'linux') {
+        assert(ebpfResult === false, 'loadBpfSockmap should return false on non-Linux');
+    }
+
+    console.log('✅ Advanced performance optimization tests passed!');
 
     console.log("🎉 ALL PARITY TESTS COMPLETED SUCCESSFULLY!");
 }
