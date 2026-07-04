@@ -252,3 +252,124 @@ func main() {
 }
 ```
 
+---
+
+## Unified Runtime Reference (All Languages)
+
+To make it easy to adopt Helix, here is how you implement and run a standard server executing the exact same `UserProfileService` method (`/helix.example.UserProfileService/GetUserProfile`) across all four supported runtimes:
+
+### 1. Go (`runtimes/go`)
+```go
+package main
+
+import (
+	"context"
+	"log"
+
+	runtime "github.com/helix-rpc/helix/runtime-go"
+)
+
+func main() {
+	server := runtime.NewServer(":8080")
+
+	server.RegisterMethod("/helix.example.UserProfileService/GetUserProfile", runtime.MethodInfo{
+		Decoder: func(dec func(interface{}) error) (interface{}, error) {
+			req := &struct{ UserId int64 }{}
+			return req, dec(req)
+		},
+		Handler: func(ctx context.Context, req interface{}) (interface{}, error) {
+			return map[string]interface{}{
+				"userId":   123,
+				"username": "alex",
+				"email":    "alex@example.com",
+			}, nil
+		},
+	})
+
+	log.Println("Starting Go Helix Server on :8080...")
+	log.Fatal(server.Start())
+}
+```
+
+### 2. Rust (`runtimes/rust`)
+```rust
+use std::sync::Arc;
+use helix_rt::{HttpServiceHandler, RestRoute, handle_http_connection};
+
+struct UserProfileService;
+
+#[async_trait::async_trait]
+impl HttpServiceHandler for UserProfileService {
+    async fn handle_request(&self, path: &str, body: Vec<u8>, is_json: bool)
+        -> Result<(Vec<u8>, String), String> 
+    {
+        if path == "/helix.example.UserProfileService/GetUserProfile" {
+            let resp = serde_json::json!({
+                "userId": 123,
+                "username": "alex",
+                "email": "alex@example.com"
+            });
+            Ok((serde_json::to_vec(&resp).unwrap(), "application/json".to_string()))
+        } else {
+            Err(format!("unknown path: {}", path))
+        }
+    }
+}
+```
+
+### 3. Node.js / TypeScript (`runtimes/node`)
+```typescript
+import { HelixServer } from 'helix-rt-node';
+
+const server = new HelixServer('127.0.0.1:8080');
+
+server.registerMethod('/helix.example.UserProfileService/GetUserProfile', {
+    Decoder: (dec) => {
+        const req = { userId: 0 };
+        dec(req);
+        return req;
+    },
+    Handler: async (ctx, req) => {
+        return {
+            userId: 123,
+            username: "alex",
+            email: "alex@example.com"
+        };
+    }
+});
+
+console.log("Starting Node.js Helix Server on :8080...");
+await server.start();
+```
+
+### 4. Python (`runtimes/python`)
+```python
+import asyncio
+from helix_rt import HelixServer, MethodInfo
+
+async def handle_get_profile(ctx, req):
+    return {
+        "userId": 123,
+        "username": "alex",
+        "email": "alex@example.com"
+    }
+
+async def main():
+    server = HelixServer("127.0.0.1:8080")
+    
+    server.register_method(
+        "/helix.example.UserProfileService/GetUserProfile",
+        MethodInfo(
+            decoder=lambda data: data, # Pass-through
+            handler=handle_get_profile
+        )
+    )
+    
+    print("Starting Python Helix Server on :8080...")
+    await server.start()
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+
