@@ -1080,6 +1080,45 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#operational-tradeoffs-and-migration-strategies" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Operational Tradeoffs and Migration Strategies
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Operational Tradeoffs and Migration Strategies">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#migration-path-from-rest-to-helix-rpc" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Migration Path: From REST to Helix RPC
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#operational-cost-of-mesh-sidecars" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Operational Cost of Mesh Sidecars
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#when-to-choose-what" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1209,9 +1248,26 @@
 <h3 id="4-direct-kernel-bypass-for-co-located-services">4. Direct Kernel Bypass for Co-Located Services<a class="headerlink" href="#4-direct-kernel-bypass-for-co-located-services" title="Permanent link">&para;</a></h3>
 <p>Many modern architectures deploy related services in the same Kubernetes pod or on the same virtual host. Helix's runtime detects these co-located instances and automatically programs <strong>eBPF Sockmaps</strong> to redirect socket packets inside the kernel, avoiding the latency and CPU cycle cost of the TCP/IP stack.</p>
 <hr />
+<h2 id="operational-tradeoffs-and-migration-strategies">Operational Tradeoffs and Migration Strategies<a class="headerlink" href="#operational-tradeoffs-and-migration-strategies" title="Permanent link">&para;</a></h2>
+<h3 id="migration-path-from-rest-to-helix-rpc">Migration Path: From REST to Helix RPC<a class="headerlink" href="#migration-path-from-rest-to-helix-rpc" title="Permanent link">&para;</a></h3>
+<p>Migrating an existing microservices topology from JSON/REST to a binary protocol is traditionally a high-risk operation. You have to migrate all clients and servers simultaneously, or run dual-stack deployments.</p>
+<p>Helix RPC simplifies this transition:
+1. <strong>Step 1</strong>: Compile your new Protobuf IDL with Helix compiler.
+2. <strong>Step 2</strong>: Replace your server implementation with the Helix stub. Because the Helix server accepts JSON/HTTP/1.1 directly on the same port, your existing frontend clients can continue calling your service without any code changes.
+3. <strong>Step 3</strong>: Upgrade internal microservice clients to use the binary Helix client stub. They will automatically switch to high-speed binary protocols (like gRPC or Thrift) using the same socket connection.</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>[Phase 1]: Web Client (JSON) --------&gt; [ Helix Server ]
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>[Phase 2]: Go Client (gRPC binary) ---&gt; [ Helix Server ] (Same Port!)
+</span></code></pre></div>
+<h3 id="operational-cost-of-mesh-sidecars">Operational Cost of Mesh Sidecars<a class="headerlink" href="#operational-cost-of-mesh-sidecars" title="Permanent link">&para;</a></h3>
+<p>In a typical gRPC environment, calling co-located containers or translating formats (e.g. JSON to Protobuf) requires routing traffic through sidecars like Envoy. This adds:
+- <strong>CPU Overhead</strong>: Parsing headers twice at each hop.
+- <strong>Memory Cost</strong>: Envoy sidecars typically consume 50MB–150MB of RAM per pod, which adds up to gigabytes across large clusters.
+- <strong>Network Latency</strong>: Adding 0.5ms–1.5ms per hop due to loopback traversal.</p>
+<p>Helix RPC removes the sidecar requirement entirely. It performs direct transcoding inside the application process using zero-allocation transpilers, and routes local traffic using kernel-level eBPF Sockmaps.</p>
+<hr />
 <h2 id="when-to-choose-what">When to Choose What<a class="headerlink" href="#when-to-choose-what" title="Permanent link">&para;</a></h2>
 <ul>
-<li><strong>Choose REST/JSON</strong> if you are building simple internal internal tools or low-traffic static websites where speed and type guarantees are not constraints.</li>
+<li><strong>Choose REST/JSON</strong> if you are building simple internal tools or low-traffic static websites where speed and type guarantees are not constraints.</li>
 <li><strong>Choose gRPC</strong> if your entire stack is purely built on static Go/C++ pipelines and you already have deep infrastructure investments in complex Service Meshes.</li>
 <li><strong>Choose Helix RPC</strong> if:<ul>
 <li>You serve heterogeneous environments (browsers requiring REST, microservices requiring high-performance binary protocols).</li>
