@@ -39,6 +39,8 @@ export class HelixServer {
                 return { status: 1 }; // SERVING
             }
         });
+        this.registerRESTRoute('POST', '/grpc.health.v1.Health/Check', '/grpc.health.v1.Health/Check');
+        this.registerRESTRoute('GET', '/grpc.health.v1.Health/Check', '/grpc.health.v1.Health/Check');
     }
 
     public registerMethod(path: string, info: MethodInfo) {
