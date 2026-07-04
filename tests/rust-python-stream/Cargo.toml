@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-helix-rt = { path = "../../runtime-rust" }
+helix-rt = { path = "../../runtimes/rust" }
 pyo3 = { version = "0.23", features = ["auto-initialize", "abi3-py310"] }
 tokio = { version = "1.0", features = ["full"] }
 async-trait = "0.1"

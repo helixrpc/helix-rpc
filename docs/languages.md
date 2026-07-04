@@ -34,7 +34,7 @@ Helix RPC is designed around a multi-language philosophy, recognising that diffe
 
 ---
 
-## Go (`runtime-go`)
+## Go (`runtimes/go`)
 
 Go is the king of highly concurrent, networked routing. We use Go for the **Gateway layer** where horizontal scaling and request fan-in/fan-out are paramount.
 
@@ -48,7 +48,7 @@ Go is the king of highly concurrent, networked routing. We use Go for the **Gate
 
 ---
 
-## Rust (`runtime-rust`)
+## Rust (`runtimes/rust`)
 
 Rust is the king of memory safety and zero-cost abstractions. We use Rust where deep system integration and absolute raw compute speed are paramount.
 

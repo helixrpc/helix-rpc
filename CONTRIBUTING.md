@@ -53,7 +53,7 @@ To keep the codebase clean and maintainable, please format your code before comm
 ### Go
 Use the standard formatting and liveness checkers:
 ```bash
-cd runtime-go
+cd runtimes/go
 go fmt ./...
 go vet ./...
 ```
@@ -61,7 +61,7 @@ go vet ./...
 ### Rust
 Ensure cargo formatting is applied and clippy checks pass without warnings:
 ```bash
-cd runtime-rust
+cd runtimes/rust
 cargo fmt
 cargo clippy -- -D warnings
 ```
@@ -69,7 +69,7 @@ cargo clippy -- -D warnings
 ### Python
 Use PEP 8 compliant formatting:
 ```bash
-cd runtime-python
+cd runtimes/python
 python3 -m pip install black flake8
 black helix_rt/ tests/
 flake8 helix_rt/ tests/
