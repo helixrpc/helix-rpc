@@ -66,34 +66,26 @@
 
 ```
 helix-rpc/
+├── Makefile               # Top-level operational shortcuts
+├── test.sh                # Main test suite script runner
 ├── compiler/              # Helix IDL compiler
 │   ├── ast/               # Unified AST (Protobuf + Thrift → common IR)
 │   ├── parser/            # .proto and .thrift parsers
-│   └── gen/               # Code generators (Go, Rust)
-│       ├── go_gen.go
-│       └── rust_gen.go
-├── runtime-go/            # Go runtime library
-│   ├── grpc_handler.go    # gRPC/HTTP handler, streaming, interceptors
-│   ├── sniffer.go         # Protocol sniffing listener
-│   ├── metadata.go        # Request-scoped metadata context
-│   ├── errors.go          # Unified error codes
-│   ├── client_pool.go     # Connection pooling & load balancing
-│   ├── resolver.go        # Service discovery interface
-│   └── shm.go             # POSIX shared-memory transport
-├── runtime-rust/          # Rust runtime library
-│   └── src/
-│       ├── server.rs      # HTTP service, streaming, REST routing
-│       ├── sniffer.rs     # Protocol sniffing
-│       ├── metadata.rs    # Task-local metadata context
-│       ├── errors.rs      # Unified error codes
-│       ├── client_pool.rs # Connection pooling & load balancing
-│       ├── resolver.rs    # Service discovery trait
-│       ├── shm_transport.rs # POSIX shared-memory transport
-│       └── lib.rs         # Crate root re-exports
-└── integration-tests/
-    ├── go-go/             # Go-to-Go E2E tests
-    ├── rust-rust/          # Rust-to-Rust E2E tests
-    └── schema/            # Shared .proto / .thrift definitions
+│   └── codegen/           # Code generators (Go, Rust, Python, Node)
+├── runtimes/              # Shared core runtime libraries
+│   ├── go/                # Go runtime library
+│   ├── rust/              # Rust runtime library
+│   ├── python/            # Python runtime library
+│   └── node/              # Node.js/TypeScript runtime library
+├── tests/                 # Matrix E2E integration test suites
+│   ├── go-go/             # Go-to-Go E2E tests
+│   ├── rust-rust/         # Rust-to-Rust E2E tests
+│   ├── go-python-ai/      # Go-to-Python AI E2E tests
+│   ├── node-node/         # Node.js E2E tests
+│   └── schema/            # Shared .proto / .thrift definitions
+├── extensions/            # Sidecar proxy extensions
+│   └── envoy-filter/      # Envoy proxy-wasm filter in Rust
+└── examples/              # Quickstarts and architectural examples
 ```
 
 ---
