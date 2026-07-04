@@ -150,3 +150,105 @@ server.registerRESTRoute('POST', '/v1/users', '/helix.example.UserProfileService
 console.log('Starting Node.js Helix Server...');
 await server.start();
 ```
+
+---
+
+## Code Generation & IDL Compilation (Protobuf & Thrift)
+
+Helix RPC allows you to define your schemas once using standard Protobuf (`.proto`) or Apache Thrift (`.thrift`) IDL formats and generate high-performance stubs.
+
+### 1. Define Your Schemas
+
+#### Protobuf (`user.proto`):
+```protobuf
+syntax = "proto3";
+package user;
+
+message UserRequest {
+  int64 user_id = 1;
+}
+
+message UserResponse {
+  int64 user_id = 1;
+  string name = 2;
+}
+
+service UserService {
+  rpc GetUser (UserRequest) returns (UserResponse);
+}
+```
+
+#### Thrift (`user.thrift`):
+```thrift
+namespace go user
+
+struct UserRequest {
+  1: i64 user_id;
+}
+
+struct UserResponse {
+  1: i64 user_id;
+  2: string name;
+}
+
+service UserService {
+  UserResponse GetUser(1: UserRequest request)
+}
+```
+
+### 2. Compile Stubs using `helix-gen`
+
+Generate stubs for Go, Rust, or Python using the unified compiler binary:
+
+```bash
+# Compile Protobuf IDL to Rust stubs
+helix-gen -idl user.proto -lang rust -out ./src/generated.rs
+
+# Compile Thrift IDL to Go stubs
+helix-gen -idl user.thrift -lang go -out ./generated/
+```
+
+### 3. Serving Dual-Protocol (gRPC & Thrift) in Go
+
+The compiled stubs handle serialization automatically. The Go sniffer routes incoming connections:
+
+```go
+package main
+
+import (
+	"context"
+	"log"
+	
+	runtime "github.com/helixrpc/helix-rt"
+	generated "github.com/helix-rpc/helix/generated"
+)
+
+type UserHandler struct{}
+
+func (h *UserHandler) GetUser(ctx context.Context, req *generated.UserRequest) (*generated.UserResponse, error) {
+	return &generated.UserResponse{
+		UserId: req.UserId,
+		Name:   "Alex",
+	}, nil
+}
+
+func main() {
+	server := runtime.NewServer(":8080")
+	handler := &UserHandler{}
+
+	// Register generated method handlers
+	server.RegisterMethod("/user.UserService/GetUser", runtime.MethodInfo{
+		Decoder: func(dec func(interface{}) error) (interface{}, error) {
+			req := &generated.UserRequest{}
+			return req, dec(req)
+		},
+		Handler: func(ctx context.Context, req interface{}) (interface{}, error) {
+			return handler.GetUser(ctx, req.(*generated.UserRequest))
+		},
+	})
+
+	log.Println("Starting dual-protocol (gRPC/Thrift) Server on :8080...")
+	log.Fatal(server.Start())
+}
+```
+
