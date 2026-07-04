@@ -5,18 +5,18 @@ echo "========================================="
 echo "   Helix RPC - Integration Test Harness  "
 echo "========================================="
 
-echo "[1/4] Running Go Runtime Unit Tests (with -race)..."
+echo "[1/5] Running Go Runtime Unit Tests (with -race)..."
 cd runtimes/go
 go test -v -race ./...
 cd ../..
 
-echo "[2/4] Running Rust Runtime Checks (Clippy & Tests)..."
+echo "[2/5] Running Rust Runtime Checks (Clippy & Tests)..."
 cd runtimes/rust
 cargo clippy -- -D warnings
 cargo test
 cd ../..
 
-echo "[3/4] Testing Compiler & Python Code Generation..."
+echo "[3/5] Testing Compiler & Python Code Generation..."
 cd compiler
 go build -o helix-gen .
 ./helix-gen -idl ../tests/schema/chat_completion.proto -lang python -out ../tests/schema/generated.py
@@ -27,14 +27,19 @@ fi
 echo "✅ Python codegen succeeded!"
 cd ..
 
-echo "[4/4] Running Go-Go & Cross-Language Matrix Tests (with -race)..."
+echo "[4/5] Running Go-Go & Cross-Language Matrix Tests (with -race)..."
 cd tests/go
 go test -v -race ./...
 cd ../..
 
-echo "[4/4] Running Rust-Rust Matrix Tests..."
+echo "[4/5] Running Rust-Rust Matrix Tests..."
 cd tests/rust
 cargo test
+cd ../..
+
+echo "[5/5] Running Node.js E2E Parity Tests..."
+cd tests/node
+npm run test
 cd ../..
 
 echo "========================================="

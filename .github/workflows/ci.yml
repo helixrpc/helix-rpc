@@ -16,7 +16,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version: '1.25'
 
       - name: Go Runtime Tests (with -race)
         working-directory: ./runtimes/go
@@ -50,7 +50,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version: '1.25'
 
       - name: Set up Rust (Stable)
         uses: dtolnay/rust-toolchain@stable
@@ -66,8 +66,16 @@ jobs:
         with:
           python-version: '3.13'
 
-      - name: Install Python dependencies
-        run: pip install pytest aiohttp
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Node & Python dependencies
+        run: |
+          pip install pytest aiohttp
+          cd runtimes/node && npm install && npm run build && cd ../..
+          cd tests/node && npm install && cd ../..
 
       - name: Run Test Harness
         run: |
