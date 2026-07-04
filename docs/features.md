@@ -23,7 +23,7 @@ Helix RPC completely bypasses the network stack between the Gateway and the Mode
 ## Native SSE Streaming
 Chat UIs require real-time token streaming. Helix RPC implements native Server-Sent Events (SSE) across all three runtimes. When a client sends `Accept: text/event-stream`, the gateway automatically detects the stream, launches the async generator, and proxies yields into standard `data: {...}\n\n` SSE frames.
 
-**Available in:** Go, Rust, Python
+**Available in:** Go, Rust, Python, Node.js
 
 ---
 
@@ -35,14 +35,14 @@ Helix RPC implements graceful shutdown across all three runtimes:
 - **Rust**: `tokio::sync::broadcast` with `graceful_shutdown()` on each hyper connection.
 - **Python**: SIGTERM/SIGINT handlers set a stop event; `stop_async(drain_seconds=5.0)` waits for in-flight requests before tearing down the `AppRunner`.
 
-**Available in:** Go, Rust, Python
+**Available in:** Go, Rust, Python, Node.js
 
 ---
 
 ## Structured Errors (`HelixError`)
 All three runtimes define a common `HelixError` type carrying a gRPC-compatible `ErrorCode` (0–16) alongside a human-readable message. The runtime automatically maps the code to the correct HTTP status (e.g. `NOT_FOUND → 404`, `UNAVAILABLE → 503`) so handlers simply raise/return the error and the framework takes care of the wire format.
 
-**Available in:** Go (`errors.go`), Rust (`errors.rs`), Python (`errors.py`)
+**Available in:** Go (`errors.go`), Rust (`errors.rs`), Python (`errors.py`), Node.js (`errors.ts`)
 
 ---
 
@@ -60,7 +60,7 @@ W3C `traceparent` / `tracestate` headers are extracted from every inbound reques
 
 A **configurable probabilistic sampler** (default 1%) prevents the OpenTelemetry collector from being overwhelmed in production, while ensuring sufficient coverage for latency debugging.
 
-**Available in:** Go (`telemetry.go`), Rust (`telemetry.rs`), Python (`telemetry.py`)
+**Available in:** Go (`telemetry.go`), Rust (`telemetry.rs`), Python (`telemetry.py`), Node.js (`telemetry.ts`)
 
 ---
 
@@ -71,15 +71,15 @@ Three resilience primitives work together to guarantee extreme availability:
 2. **Exponential Backoff with Full Jitter** — avoids thundering-herd retries. Sleep duration is `rand[0, backoff)` per the AWS recommendation.
 3. **P99 Hedging with `TokenBucket`** — if a request doesn't complete within the P99 latency threshold, a duplicate is fired to a different backend. The token bucket limits hedging to e.g. 10 duplicates/second, preventing hedge-induced amplification during cluster-wide slowdowns.
 
-**Available in:** Go, Rust, Python
+**Available in:** Go, Rust, Python, Node.js
 
 ---
 
 ## Advanced Load Balancing
-- **Round-Robin**: Thread-safe atomic counter; available in Go and Rust.
+- **Round-Robin**: Thread-safe atomic counter; available in Go, Rust, Python, and Node.js.
 - **Least-Connections (`LeastConnBalancer`)**: Lock-free in Go (atomic pointer swaps + cache-line padding); `RwLock`-based in Rust. Dynamically routes new requests to the backend with the fewest in-flight connections — ideal for AI inference where request latency is highly variable.
 
-**Available in:** Go (lock-free), Rust
+**Available in:** Go, Rust, Python, Node.js
 
 ---
 
@@ -102,7 +102,7 @@ Helix RPC runtimes gather and expose performance metrics at `/metrics` and `/__h
 - `helix_request_duration_seconds`: Histogram of request latencies.
 - `helix_backend_active_connections`: Current active connections to each backend target.
 
-**Available in:** Go, Rust, Python
+**Available in:** Go, Rust, Python, Node.js
 
 ---
 
@@ -131,5 +131,15 @@ Helix supports pluggable service discovery interfaces. Out of the box, all runti
 - **`StaticResolver`**: A local registry mapping service names directly to static IP addresses.
 - **`DNSResolver`**: Resolves target endpoints dynamically using standard A/AAAA record queries or port-aware SRV records—making it ready for Kubernetes cluster-internal service discovery.
 
-**Available in:** Go, Rust, Python
+**Available in:** Go, Rust, Python, Node.js
+
+---
+
+## High-Performance Engines & Allocators
+To support extreme throughput requirements, Helix embeds customized high-performance parsers and memory systems:
+- **JIT JSON Engine (Go)**: Uses JIT-compiled **ByteDance Sonic** with AVX/AVX2 instruction support for zero-reflection, hyper-fast JSON REST transcoding.
+- **SIMD JSON Engine (Rust)**: Employs SIMD-vectorized **simd-json** to accelerate JSON deserialization/serialization on hot API paths.
+- **Global Memory Allocator (Rust)**: Binds Microsoft's **mimalloc** thread-caching memory allocator to eliminate allocator lock contention in multi-threaded network tasks.
+
+**Available in:** Go, Rust
 
