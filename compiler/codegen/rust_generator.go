@@ -15,6 +15,67 @@ func GenerateRust(parsed *ast.AST) (string, error) {
 	sb.WriteString("use thrift::protocol::{TInputProtocol, TOutputProtocol, TSerializable, TFieldIdentifier, TStructIdentifier, TType};\n")
 	sb.WriteString("use thrift::Error as ThriftError;\n\n")
 
+	// Inject helper functions once per generated file
+	sb.WriteString(`
+#[inline]
+fn read_varint(buf: &[u8], mut idx: usize) -> Result<(u64, usize), String> {
+    let mut v: u64 = 0;
+    let mut shift: u32 = 0;
+    loop {
+        if idx >= buf.len() { return Err("unexpected EOF reading varint".to_string()); }
+        let b = buf[idx]; idx += 1;
+        v |= ((b & 0x7f) as u64) << shift;
+        if b & 0x80 == 0 { break; }
+        shift += 7;
+    }
+    Ok((v, idx))
+}
+
+#[inline]
+fn write_thrift_varint(out: &mut Vec<u8>, mut v: u64) {
+    loop {
+        if v & !0x7F == 0 { out.push(v as u8); break; }
+        out.push((v as u8 & 0x7F) | 0x80);
+        v >>= 7;
+    }
+}
+
+#[inline]
+fn write_thrift_i16(out: &mut Vec<u8>, v: i16) {
+    out.push((v >> 8) as u8);
+    out.push(v as u8);
+}
+
+fn fast_scan_field(buf: &[u8], target: i32) -> Result<(&[u8], u8), String> {
+    let mut idx = 0usize;
+    while idx < buf.len() {
+        let (tag, ni) = read_varint(buf, idx)?;
+        idx = ni;
+        let field_num = (tag >> 3) as i32;
+        let wire_type = (tag & 0x7) as u8;
+        if field_num == target {
+            if wire_type == 2 {
+                let (len, ni) = read_varint(buf, idx)?;
+                let end = ni + len as usize;
+                if end > buf.len() { return Err("unexpected EOF".to_string()); }
+                return Ok((&buf[ni..end], wire_type));
+            } else if wire_type == 0 {
+                let start = idx;
+                let (_, ni) = read_varint(buf, idx)?;
+                return Ok((&buf[start..ni], wire_type));
+            }
+            return Err(format!("unsupported wire_type {} for fast_scan", wire_type));
+        }
+        // Skip unknown field
+        if wire_type == 0 { let (_, ni) = read_varint(buf, idx)?; idx = ni; }
+        else if wire_type == 2 { let (len, ni) = read_varint(buf, idx)?; idx = ni + len as usize; }
+        else { return Err(format!("unhandled wire_type {} in fast_scan skip", wire_type)); }
+    }
+    Err(format!("field {} not found", target))
+}
+
+`)
+
 	// Generate Structs
 	for _, str := range parsed.Structs {
 		sb.WriteString("#[derive(Clone, PartialEq, ::prost::Message, ::serde::Serialize, ::serde::Deserialize)]\n")
@@ -236,6 +297,155 @@ func GenerateRust(parsed *ast.AST) (string, error) {
 		sb.WriteString("        })\n")
 		sb.WriteString("    }\n")
 		sb.WriteString("}\n\n")
+
+		// ── Zero-Copy View struct with lifetime-bound slices ──────────────────
+		sb.WriteString(fmt.Sprintf("pub struct %sView<'a> {\n", str.Name))
+		for _, f := range str.Fields {
+			switch f.Type.Kind {
+			case ast.TypeString:
+				sb.WriteString(fmt.Sprintf("    pub %s: &'a str,\n", f.Name))
+			case ast.TypeBinary:
+				sb.WriteString(fmt.Sprintf("    pub %s: &'a [u8],\n", f.Name))
+			default:
+				sb.WriteString(fmt.Sprintf("    pub %s: %s,\n", f.Name, mapRustType(f.Type)))
+			}
+		}
+		sb.WriteString("}\n\n")
+
+		sb.WriteString(fmt.Sprintf("impl<'a> %sView<'a> {\n", str.Name))
+		sb.WriteString("    pub fn parse(buf: &'a [u8]) -> Result<Self, String> {\n")
+		sb.WriteString("        let mut idx = 0usize;\n")
+		for _, f := range str.Fields {
+			switch f.Type.Kind {
+			case ast.TypeInt32:
+				sb.WriteString(fmt.Sprintf("        let mut var_%s: i32 = 0;\n", f.Name))
+			case ast.TypeInt64:
+				sb.WriteString(fmt.Sprintf("        let mut var_%s: i64 = 0;\n", f.Name))
+			case ast.TypeString, ast.TypeBinary:
+				sb.WriteString(fmt.Sprintf("        let mut var_%s: &'a [u8] = &[];\n", f.Name))
+			}
+		}
+		sb.WriteString("        while idx < buf.len() {\n")
+		sb.WriteString("            let (tag, new_idx) = read_varint(buf, idx)?;\n")
+		sb.WriteString("            idx = new_idx;\n")
+		sb.WriteString("            let field_num = (tag >> 3) as i32;\n")
+		sb.WriteString("            let wire_type = (tag & 0x7) as u8;\n")
+		sb.WriteString("            match field_num {\n")
+		for _, f := range str.Fields {
+			sb.WriteString(fmt.Sprintf("                %d => {\n", f.ID))
+			switch f.Type.Kind {
+			case ast.TypeInt32, ast.TypeInt64:
+				sb.WriteString("                    let (v, ni) = read_varint(buf, idx)?; idx = ni;\n")
+				if f.Type.Kind == ast.TypeInt32 {
+					sb.WriteString(fmt.Sprintf("                    var_%s = v as i32;\n", f.Name))
+				} else {
+					sb.WriteString(fmt.Sprintf("                    var_%s = v as i64;\n", f.Name))
+				}
+			case ast.TypeString, ast.TypeBinary:
+				sb.WriteString("                    let (len, ni) = read_varint(buf, idx)?; idx = ni;\n")
+				sb.WriteString("                    let end = idx + len as usize;\n")
+				sb.WriteString("                    if end > buf.len() { return Err(\"unexpected EOF\".to_string()); }\n")
+				sb.WriteString(fmt.Sprintf("                    var_%s = &buf[idx..end]; idx = end;\n", f.Name))
+			}
+			sb.WriteString("                }\n")
+		}
+		sb.WriteString("                _ => {\n")
+		sb.WriteString("                    if wire_type == 0 { let (_, ni) = read_varint(buf, idx)?; idx = ni; }\n")
+		sb.WriteString("                    else if wire_type == 2 { let (len, ni) = read_varint(buf, idx)?; idx = ni + len as usize; }\n")
+		sb.WriteString("                    else { return Err(format!(\"unsupported wire_type {}\", wire_type)); }\n")
+		sb.WriteString("                }\n")
+		sb.WriteString("            }\n")
+		sb.WriteString("        }\n")
+		sb.WriteString("        Ok(Self {\n")
+		for _, f := range str.Fields {
+			switch f.Type.Kind {
+			case ast.TypeString:
+				sb.WriteString(fmt.Sprintf("            %s: std::str::from_utf8(var_%s).map_err(|e| e.to_string())?,\n", f.Name, f.Name))
+			case ast.TypeBinary:
+				sb.WriteString(fmt.Sprintf("            %s: var_%s,\n", f.Name, f.Name))
+			default:
+				sb.WriteString(fmt.Sprintf("            %s: var_%s,\n", f.Name, f.Name))
+			}
+		}
+		sb.WriteString("        })\n    }\n}\n\n")
+
+		// ── Lazy Struct ───────────────────────────────────────────────────────
+		sb.WriteString(fmt.Sprintf("pub struct Lazy%s<'a> {\n    raw: &'a [u8],\n}\n\n", str.Name))
+		sb.WriteString(fmt.Sprintf("impl<'a> Lazy%s<'a> {\n", str.Name))
+		sb.WriteString(fmt.Sprintf("    pub fn new(raw: &'a [u8]) -> Self { Self { raw } }\n"))
+		for _, f := range str.Fields {
+			capName := strings.Title(f.Name) //nolint:staticcheck
+			switch f.Type.Kind {
+			case ast.TypeInt32:
+				sb.WriteString(fmt.Sprintf("    pub fn get_%s(&self) -> Result<i32, String> {\n", f.Name))
+				sb.WriteString(fmt.Sprintf("        let (b, _) = fast_scan_field(self.raw, %d)?;\n", f.ID))
+				sb.WriteString("        let (v, _) = read_varint(b, 0)?;\n")
+				sb.WriteString("        Ok(v as i32)\n    }\n")
+			case ast.TypeInt64:
+				sb.WriteString(fmt.Sprintf("    pub fn get_%s(&self) -> Result<i64, String> {\n", f.Name))
+				sb.WriteString(fmt.Sprintf("        let (b, _) = fast_scan_field(self.raw, %d)?;\n", f.ID))
+				sb.WriteString("        let (v, _) = read_varint(b, 0)?;\n")
+				sb.WriteString("        Ok(v as i64)\n    }\n")
+			case ast.TypeString:
+				sb.WriteString(fmt.Sprintf("    pub fn get_%s(&self) -> Result<&str, String> {\n", f.Name))
+				sb.WriteString(fmt.Sprintf("        let (b, _) = fast_scan_field(self.raw, %d)?;\n", f.ID))
+				sb.WriteString("        std::str::from_utf8(b).map_err(|e| e.to_string())\n    }\n")
+			default:
+				_ = capName
+			}
+		}
+		sb.WriteString("}\n\n")
+
+		// ── Zero-Allocation Transpiler: Protobuf → Thrift Compact ─────────────
+		sb.WriteString(fmt.Sprintf("impl %s {\n", str.Name))
+		sb.WriteString("    pub fn transpile_protobuf_to_thrift_compact(input: &[u8], output: &mut Vec<u8>) -> Result<(), String> {\n")
+		sb.WriteString("        let mut idx = 0usize;\n")
+		sb.WriteString("        let mut last_field: i16 = 0;\n")
+		sb.WriteString("        while idx < input.len() {\n")
+		sb.WriteString("            let (tag, new_idx) = read_varint(input, idx)?;\n")
+		sb.WriteString("            idx = new_idx;\n")
+		sb.WriteString("            let field_num = (tag >> 3) as i16;\n")
+		sb.WriteString("            let wire_type = (tag & 0x7) as u8;\n")
+		sb.WriteString("            match field_num {\n")
+		for _, f := range str.Fields {
+			sb.WriteString(fmt.Sprintf("                %d => {\n", f.ID))
+			switch f.Type.Kind {
+			case ast.TypeInt32, ast.TypeInt64:
+				typeNibble := "0x05u8" // i32 compact type
+				if f.Type.Kind == ast.TypeInt64 {
+					typeNibble = "0x06u8" // i64 compact type
+				}
+				sb.WriteString("                    let (v, ni) = read_varint(input, idx)?; idx = ni;\n")
+				sb.WriteString(fmt.Sprintf("                    let delta = field_num - last_field;\n"))
+				sb.WriteString(fmt.Sprintf("                    if delta > 0 && delta <= 15 { output.push(((delta as u8) << 4) | %s); }\n", typeNibble))
+				sb.WriteString(fmt.Sprintf("                    else { output.push(%s); write_thrift_i16(output, field_num); }\n", typeNibble))
+				sb.WriteString("                    last_field = field_num;\n")
+				if f.Type.Kind == ast.TypeInt32 {
+					sb.WriteString("                    let zz = ((v as i32) << 1 ^ (v as i32) >> 31) as u64;\n")
+				} else {
+					sb.WriteString("                    let zz = ((v as i64) << 1 ^ (v as i64) >> 63) as u64;\n")
+				}
+				sb.WriteString("                    write_thrift_varint(output, zz);\n")
+			case ast.TypeString, ast.TypeBinary:
+				sb.WriteString("                    let (len, ni) = read_varint(input, idx)?; idx = ni;\n")
+				sb.WriteString("                    let delta = field_num - last_field;\n")
+				sb.WriteString("                    if delta > 0 && delta <= 15 { output.push(((delta as u8) << 4) | 0x08u8); }\n")
+				sb.WriteString("                    else { output.push(0x08u8); write_thrift_i16(output, field_num); }\n")
+				sb.WriteString("                    last_field = field_num;\n")
+				sb.WriteString("                    write_thrift_varint(output, len);\n")
+				sb.WriteString("                    output.extend_from_slice(&input[idx..idx + len as usize]);\n")
+				sb.WriteString("                    idx += len as usize;\n")
+			}
+			sb.WriteString("                }\n")
+		}
+		sb.WriteString("                _ => {\n")
+		sb.WriteString("                    if wire_type == 0 { let (_, ni) = read_varint(input, idx)?; idx = ni; }\n")
+		sb.WriteString("                    else if wire_type == 2 { let (len, ni) = read_varint(input, idx)?; idx = ni + len as usize; }\n")
+		sb.WriteString("                }\n")
+		sb.WriteString("            }\n")
+		sb.WriteString("        }\n")
+		sb.WriteString("        output.push(0); // Thrift STOP field\n")
+		sb.WriteString("        Ok(())\n    }\n}\n\n")
 	}
 
 	// Generate Service Traits

@@ -21,6 +21,7 @@ import (
 
 	generated "github.com/helix-rpc/helix/tests/go/generated"
 	"github.com/helix-rpc/helix/runtime-go"
+	"github.com/apache/thrift/lib/go/thrift"
 )
 
 type slowUserProfileService struct {
@@ -379,4 +380,125 @@ func generateCertificates() ([]byte, []byte, error) {
 	_ = pem.Encode(keyBuf, &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(priv)})
 
 	return certBuf.Bytes(), keyBuf.Bytes(), nil
+}
+
+func TestGoAdvancedOptimizations(t *testing.T) {
+	// Setup user profile
+	original := &generated.UserProfile{
+		UserID:   42,
+		Username: "zero_copy_hero",
+		Email:    "hero@helix.rpc",
+	}
+
+	protoBytes, err := original.Marshal()
+	if err != nil {
+		t.Fatalf("failed to marshal proto: %v", err)
+	}
+
+	// 1. Zero-Copy String/Bytes Slicing Test
+	t.Run("Zero-Copy Slicing", func(t *testing.T) {
+		// Capture exact offset of Username string in protoBytes
+		usernameIdx := bytes.Index(protoBytes, []byte("zero_copy_hero"))
+		if usernameIdx == -1 {
+			t.Fatal("username string not found in serialized bytes")
+		}
+
+		user := &generated.UserProfile{}
+		if err := user.Unmarshal(protoBytes); err != nil {
+			t.Fatalf("failed to unmarshal: %v", err)
+		}
+
+		if user.Username != "zero_copy_hero" {
+			t.Errorf("expected username zero_copy_hero, got %s", user.Username)
+		}
+
+		// Mutate the original buffer in-place
+		protoBytes[usernameIdx] = 'X'
+
+		// Assert that the parsed string was mutated (proving zero-copy pointing)
+		if user.Username != "Xero_copy_hero" {
+			t.Errorf("expected mutated string Xero_copy_hero, got %s (copy happened!)", user.Username)
+		}
+
+		// Restore
+		protoBytes[usernameIdx] = 'z'
+	})
+
+	// 2. Progressive Payload Degradation (Smart Fields) Test
+	t.Run("Progressive Degradation", func(t *testing.T) {
+		lazy := generated.NewLazyUserProfile(protoBytes)
+
+		userID, err := lazy.GetUserID()
+		if err != nil {
+			t.Fatalf("failed to get UserID: %v", err)
+		}
+		if userID != 42 {
+			t.Errorf("expected UserID 42, got %d", userID)
+		}
+
+		username, err := lazy.GetUsername()
+		if err != nil {
+			t.Fatalf("failed to get Username: %v", err)
+		}
+		if username != "zero_copy_hero" {
+			t.Errorf("expected Username zero_copy_hero, got %s", username)
+		}
+
+		email, err := lazy.GetEmail()
+		if err != nil {
+			t.Fatalf("failed to get Email: %v", err)
+		}
+		if email != "hero@helix.rpc" {
+			t.Errorf("expected Email hero@helix.rpc, got %s", email)
+		}
+	})
+
+	// 3. Zero-Allocation Wire-Transpiling Test
+	t.Run("Zero-Allocation Transpiling", func(t *testing.T) {
+		outBuf := make([]byte, 1024)
+		var transpileObj generated.UserProfile
+
+		// Measure allocations
+		allocs := testing.AllocsPerRun(10, func() {
+			_, _ = transpileObj.TranspileProtobufToThriftCompact(protoBytes, outBuf)
+		})
+
+		if allocs > 0 {
+			t.Errorf("expected 0 allocations for transpilation, got %f", allocs)
+		}
+
+		n, err := transpileObj.TranspileProtobufToThriftCompact(protoBytes, outBuf)
+		if err != nil {
+			t.Fatalf("transpilation failed: %v", err)
+		}
+
+		// Verify Thrift Compact payload is valid by decoding it
+		transport := thrift.NewTMemoryBuffer()
+		_, _ = transport.Write(outBuf[:n])
+		protocol := thrift.NewTCompactProtocolConf(transport, nil)
+
+		decoded := &generated.UserProfile{}
+		if err := decoded.Read(context.Background(), protocol); err != nil {
+			t.Fatalf("failed to read transpiled Thrift payload: %v", err)
+		}
+
+		if decoded.UserID != 42 || decoded.Username != "zero_copy_hero" || decoded.Email != "hero@helix.rpc" {
+			t.Errorf("decoded transpile content mismatch: %+v", decoded)
+		}
+	})
+
+	// 4. Local socket eBPF/UDS mock redirect test
+	t.Run("eBPF UDS Routing Bypass", func(t *testing.T) {
+		err := runtime.LoadBpfSockmap("127.0.0.1:8080")
+		if err == nil {
+			t.Log("Note: eBPF loaded (this would only happen on Linux as root)")
+		}
+
+		// Verify UDS dialing logic
+		udsAddr := "unix:///tmp/helix_test.sock"
+		pool := runtime.NewClientConnPool(udsAddr, 5)
+		if pool == nil {
+			t.Fatal("failed to initialize UDS connection pool")
+		}
+	})
 }

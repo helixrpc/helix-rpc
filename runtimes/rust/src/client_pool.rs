@@ -1,7 +1,58 @@
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
-use tokio::net::TcpStream;
+use tokio::net::{TcpStream, UnixStream};
+use tokio::io::{AsyncRead, AsyncWrite};
+use std::pin::Pin;
+
+pub enum AnyStream {
+    Tcp(TcpStream),
+    Unix(UnixStream),
+}
+
+impl AsyncRead for AnyStream {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &mut tokio::io::ReadBuf<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        match self.get_mut() {
+            AnyStream::Tcp(s) => Pin::new(s).poll_read(cx, buf),
+            AnyStream::Unix(s) => Pin::new(s).poll_read(cx, buf),
+        }
+    }
+}
+
+impl AsyncWrite for AnyStream {
+    fn poll_write(
+        self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &[u8],
+    ) -> std::task::Poll<std::io::Result<usize>> {
+        match self.get_mut() {
+            AnyStream::Tcp(s) => Pin::new(s).poll_write(cx, buf),
+            AnyStream::Unix(s) => Pin::new(s).poll_write(cx, buf),
+        }
+    }
+    fn poll_flush(
+        self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        match self.get_mut() {
+            AnyStream::Tcp(s) => Pin::new(s).poll_flush(cx),
+            AnyStream::Unix(s) => Pin::new(s).poll_flush(cx),
+        }
+    }
+    fn poll_shutdown(
+        self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        match self.get_mut() {
+            AnyStream::Tcp(s) => Pin::new(s).poll_shutdown(cx),
+            AnyStream::Unix(s) => Pin::new(s).poll_shutdown(cx),
+        }
+    }
+}
 
 pub struct ClientConnPool {
     addr: String,
@@ -16,15 +67,21 @@ impl ClientConnPool {
         }
     }
 
-    pub async fn get(&self) -> Result<TcpStream, std::io::Error> {
+    pub async fn get(&self) -> Result<AnyStream, std::io::Error> {
+        if crate::ebpf::has_unix_prefix(&self.addr) {
+            let path = crate::ebpf::strip_unix_prefix(&self.addr);
+            let stream = UnixStream::connect(path).await?;
+            return Ok(AnyStream::Unix(stream));
+        }
         let stream = {
             let mut guard = self.conns.lock().unwrap();
             guard.pop_front()
         };
         if let Some(conn) = stream {
-            Ok(conn)
+            Ok(AnyStream::Tcp(conn))
         } else {
-            TcpStream::connect(&self.addr).await
+            let stream = TcpStream::connect(&self.addr).await?;
+            Ok(AnyStream::Tcp(stream))
         }
     }
 

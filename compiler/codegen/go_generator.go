@@ -17,6 +17,7 @@ func GenerateGo(parsed *ast.AST) (string, error) {
 	sb.WriteString("import (\n")
 	sb.WriteString("\t\"context\"\n")
 	sb.WriteString("\t\"fmt\"\n")
+	sb.WriteString("\t\"unsafe\"\n")
 	sb.WriteString("\t\"github.com/golang/protobuf/proto\"\n")
 	sb.WriteString("\t\"github.com/apache/thrift/lib/go/thrift\"\n")
 	sb.WriteString("\truntime \"github.com/helix-rpc/helix/runtime-go\"\n")
@@ -49,6 +50,91 @@ func readVarint(buf []byte, offset int) (uint64, int, error) {
 		shift += 7
 	}
 	return v, offset, nil
+}
+
+func unsafeString(b []byte) string {
+	if len(b) == 0 {
+		return ""
+	}
+	return unsafe.String(&b[0], len(b))
+}
+
+func encodeZigZag32(n int32) uint32 {
+	return uint32((n << 1) ^ (n >> 31))
+}
+
+func writeThriftVarint(buf []byte, offset int, v uint64) int {
+	for {
+		if (v & ^uint64(0x7F)) == 0 {
+			buf[offset] = byte(v)
+			offset++
+			break
+		} else {
+			buf[offset] = byte((v & 0x7F) | 0x80)
+			offset++
+			v >>= 7
+		}
+	}
+	return offset
+}
+
+func writeThriftI16(buf []byte, offset int, v int16) int {
+	buf[offset] = byte(v >> 8)
+	buf[offset+1] = byte(v)
+	return offset + 2
+}
+
+func fastScanField(dAtA []byte, targetFieldNum int32) ([]byte, int, error) {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		var i uint64
+		var err error
+		i, iNdEx, err = readVarint(dAtA, iNdEx)
+		if err != nil {
+			return nil, 0, err
+		}
+		fieldNum := int32(i >> 3)
+		wireType := int(i & 0x7)
+		if fieldNum == targetFieldNum {
+			if wireType == 2 {
+				var length uint64
+				length, iNdEx, err = readVarint(dAtA, iNdEx)
+				if err != nil {
+					return nil, 0, err
+				}
+				postIndex := iNdEx + int(length)
+				if postIndex < 0 || postIndex > l {
+					return nil, 0, fmt.Errorf("unexpected EOF")
+				}
+				return dAtA[iNdEx:postIndex], wireType, nil
+			} else if wireType == 0 {
+				start := iNdEx
+				_, iNdEx, err = readVarint(dAtA, iNdEx)
+				if err != nil {
+					return nil, 0, err
+				}
+				return dAtA[start:iNdEx], wireType, nil
+			}
+			return nil, 0, fmt.Errorf("unsupported wireType for fast scan")
+		}
+		if wireType == 0 {
+			_, iNdEx, err = readVarint(dAtA, iNdEx)
+			if err != nil {
+				return nil, 0, err
+			}
+		} else if wireType == 2 {
+			var length uint64
+			length, iNdEx, err = readVarint(dAtA, iNdEx)
+			if err != nil {
+				return nil, 0, err
+			}
+			iNdEx += int(length)
+		} else {
+			return nil, 0, fmt.Errorf("unhandled wireType in fastScan skip")
+		}
+	}
+	return nil, 0, fmt.Errorf("field not found")
 }
 `)
 	sb.WriteString("\n")
@@ -191,7 +277,7 @@ func readVarint(buf []byte, offset int) (uint64, int, error) {
 				sb.WriteString("\t\t\tif postIndex < 0 || postIndex > l {\n")
 				sb.WriteString("\t\t\t\treturn fmt.Errorf(\"unexpected EOF\")\n")
 				sb.WriteString("\t\t\t}\n")
-				sb.WriteString(fmt.Sprintf("\t\t\tx.%s = string(dAtA[iNdEx:postIndex])\n", capName))
+				sb.WriteString(fmt.Sprintf("\t\t\tx.%s = unsafeString(dAtA[iNdEx:postIndex])\n", capName))
 				sb.WriteString("\t\t\tiNdEx = postIndex\n")
 			}
 		}
@@ -420,6 +506,105 @@ func readVarint(buf []byte, offset int) (uint64, int, error) {
 		sb.WriteString("\t\t}\n")
 		sb.WriteString("\t}\n")
 		sb.WriteString("\treturn iprot.ReadStructEnd(ctx)\n")
+		sb.WriteString("}\n\n")
+
+		// LazyStruct definition
+		sb.WriteString(fmt.Sprintf("type Lazy%s struct {\n\traw []byte\n}\n\n", str.Name))
+		sb.WriteString(fmt.Sprintf("func NewLazy%s(raw []byte) *Lazy%s {\n\treturn &Lazy%s{raw: raw}\n}\n\n", str.Name, str.Name, str.Name))
+		for _, f := range str.Fields {
+			capName := toCamelCase(f.Name)
+			goType := mapGoType(f.Type)
+			sb.WriteString(fmt.Sprintf("func (x *Lazy%s) Get%s() (%s, error) {\n", str.Name, capName, goType))
+			sb.WriteString(fmt.Sprintf("\tb, _, err := fastScanField(x.raw, %d)\n", f.ID))
+			sb.WriteString("\tif err != nil {\n\t\tvar zero " + goType + "\n\t\treturn zero, err\n\t}\n")
+			switch f.Type.Kind {
+			case ast.TypeInt32:
+				sb.WriteString("\tv, _, err := readVarint(b, 0)\n\tif err != nil {\n\t\treturn 0, err\n\t}\n\treturn int32(v), nil\n")
+			case ast.TypeInt64:
+				sb.WriteString("\tv, _, err := readVarint(b, 0)\n\tif err != nil {\n\t\treturn 0, err\n\t}\n\treturn int64(v), nil\n")
+			case ast.TypeString:
+				sb.WriteString("\treturn unsafeString(b), nil\n")
+			default:
+				sb.WriteString("\tvar zero " + goType + "\n\treturn zero, fmt.Errorf(\"unsupported lazy type\")\n")
+			}
+			sb.WriteString("}\n\n")
+		}
+
+		// TranspileProtobufToThriftCompact definition
+		sb.WriteString(fmt.Sprintf("func (x *%s) TranspileProtobufToThriftCompact(in []byte, out []byte) (int, error) {\n", str.Name))
+		sb.WriteString("\tl := len(in)\n")
+		sb.WriteString("\tiNdEx := 0\n")
+		sb.WriteString("\toutIdx := 0\n")
+		sb.WriteString("\tvar err error\n")
+		sb.WriteString("\tlastFieldID := int16(0)\n")
+		sb.WriteString("\tfor iNdEx < l {\n")
+		sb.WriteString("\t\tvar i uint64\n")
+		sb.WriteString("\t\ti, iNdEx, err = readVarint(in, iNdEx)\n")
+		sb.WriteString("\t\tif err != nil {\n\t\t\treturn 0, err\n\t\t}\n")
+		sb.WriteString("\t\tfieldNum := int16(i >> 3)\n")
+		sb.WriteString("\t\twireType := int(i & 0x7)\n")
+		sb.WriteString("\t\tswitch fieldNum {\n")
+		for _, f := range str.Fields {
+			sb.WriteString(fmt.Sprintf("\t\tcase %d:\n", f.ID))
+			switch f.Type.Kind {
+			case ast.TypeInt32, ast.TypeInt64:
+				typeCode := "0x05"
+				if f.Type.Kind == ast.TypeInt64 {
+					typeCode = "0x06"
+				}
+				sb.WriteString("\t\t\tvar v uint64\n")
+				sb.WriteString("\t\t\tv, iNdEx, err = readVarint(in, iNdEx)\n")
+				sb.WriteString("\t\t\tif err != nil {\n\t\t\t\treturn 0, err\n\t\t\t}\n")
+				sb.WriteString("\t\t\tdelta := fieldNum - lastFieldID\n")
+				sb.WriteString("\t\t\tif delta > 0 && delta <= 15 {\n")
+				sb.WriteString(fmt.Sprintf("\t\t\tout[outIdx] = byte((delta << 4) | %s)\n", typeCode))
+				sb.WriteString("\t\t\toutIdx++\n")
+				sb.WriteString("\t\t\t} else {\n")
+				sb.WriteString(fmt.Sprintf("\t\t\tout[outIdx] = byte(%s)\n", typeCode))
+				sb.WriteString("\t\t\toutIdx++\n")
+				sb.WriteString("\t\t\t\toutIdx = writeThriftI16(out, outIdx, fieldNum)\n")
+				sb.WriteString("\t\t\t}\n")
+				sb.WriteString("\t\t\tlastFieldID = fieldNum\n")
+				if f.Type.Kind == ast.TypeInt32 {
+					sb.WriteString("\t\t\toutIdx = writeThriftVarint(out, outIdx, uint64(encodeZigZag32(int32(v))))\n")
+				} else {
+					sb.WriteString("\t\t\tencodeZZ64 := uint64((int64(v) << 1) ^ (int64(v) >> 63))\n")
+					sb.WriteString("\t\t\toutIdx = writeThriftVarint(out, outIdx, encodeZZ64)\n")
+				}
+			case ast.TypeString:
+				sb.WriteString("\t\t\tvar stringLen uint64\n")
+				sb.WriteString("\t\t\tstringLen, iNdEx, err = readVarint(in, iNdEx)\n")
+				sb.WriteString("\t\t\tif err != nil {\n\t\t\t\treturn 0, err\n\t\t\t}\n")
+				sb.WriteString("\t\t\tdelta := fieldNum - lastFieldID\n")
+				sb.WriteString("\t\t\tif delta > 0 && delta <= 15 {\n")
+				sb.WriteString("\t\t\t\tout[outIdx] = byte((delta << 4) | 0x08)\n")
+				sb.WriteString("\t\t\t\toutIdx++\n")
+				sb.WriteString("\t\t\t} else {\n")
+				sb.WriteString("\t\t\t\tout[outIdx] = byte(0x08)\n")
+				sb.WriteString("\t\t\t\toutIdx++\n")
+				sb.WriteString("\t\t\t\toutIdx = writeThriftI16(out, outIdx, fieldNum)\n")
+				sb.WriteString("\t\t\t}\n")
+				sb.WriteString("\t\t\tlastFieldID = fieldNum\n")
+				sb.WriteString("\t\t\toutIdx = writeThriftVarint(out, outIdx, stringLen)\n")
+				sb.WriteString("\t\t\tcopy(out[outIdx:], in[iNdEx:iNdEx+int(stringLen)])\n")
+				sb.WriteString("\t\t\toutIdx += int(stringLen)\n")
+				sb.WriteString("\t\t\tiNdEx += int(stringLen)\n")
+			}
+		}
+		sb.WriteString("\t\tdefault:\n")
+		sb.WriteString("\t\t\tvar v uint64\n")
+		sb.WriteString("\t\t\tv, iNdEx, err = readVarint(in, iNdEx)\n")
+		sb.WriteString("\t\t\tif err != nil {\n\t\t\t\treturn 0, err\n\t\t\t}\n")
+		sb.WriteString("\t\t\tif wireType == 0 {\n")
+		sb.WriteString("\t\t\t\t// skip\n")
+		sb.WriteString("\t\t\t} else if wireType == 2 {\n")
+		sb.WriteString("\t\t\t\tiNdEx += int(v)\n")
+		sb.WriteString("\t\t\t}\n")
+		sb.WriteString("\t\t}\n")
+		sb.WriteString("\t}\n")
+		sb.WriteString("\tout[outIdx] = 0\n")
+		sb.WriteString("\toutIdx++\n")
+		sb.WriteString("\treturn outIdx, nil\n")
 		sb.WriteString("}\n\n")
 	}
 

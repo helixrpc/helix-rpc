@@ -12,7 +12,7 @@ pub mod retry;
 pub mod server;
 pub mod sniffer;
 
-pub use client_pool::{Balancer, ClientConnPool, RoundRobinBalancer};
+pub use client_pool::{AnyStream, Balancer, ClientConnPool, RoundRobinBalancer};
 pub use errors::{ErrorCode, HelixError};
 pub use metadata::get_metadata;
 pub use server::{
@@ -41,6 +41,8 @@ pub mod metrics;
 pub use metrics::{MetricsCollector, GLOBAL_METRICS};
 pub mod config;
 pub use config::{load_config, watch_config, Config};
+pub mod ebpf;
+pub use ebpf::{has_unix_prefix, load_bpf_sockmap, strip_unix_prefix};
 
 #[cfg(test)]
 mod tests_resilience;

@@ -143,6 +143,15 @@ func generate(idlPath, lang, outPath string) error {
 		return err
 	}
 
+	// Run style checks (linter warnings) during generation
+	violations := linter.Lint(parsed)
+	if len(violations) > 0 {
+		fmt.Printf("⚠️  Style warnings in %s:\n", filepath.Base(idlPath))
+		for _, v := range violations {
+			fmt.Printf("    - %s\n", v)
+		}
+	}
+
 	var generated string
 	switch lang {
 	case "go":

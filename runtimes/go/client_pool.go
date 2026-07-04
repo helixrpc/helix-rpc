@@ -28,7 +28,13 @@ func (p *ClientConnPool) Get() (net.Conn, error) {
 		return conn, nil
 	default:
 		// Dial new connection
-		conn, err := net.Dial("tcp", p.addr)
+		var conn net.Conn
+		var err error
+		if hasUnixPrefix(p.addr) || (len(p.addr) > 0 && (p.addr[0] == '/' || p.addr[0] == '.')) {
+			conn, err = net.Dial("unix", stripUnixPrefix(p.addr))
+		} else {
+			conn, err = net.Dial("tcp", p.addr)
+		}
 		if err != nil {
 			return nil, err
 		}

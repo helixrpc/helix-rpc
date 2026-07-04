@@ -4,8 +4,9 @@ package helix_example
 import (
 	"context"
 	"fmt"
-	"github.com/apache/thrift/lib/go/thrift"
+	"unsafe"
 	"github.com/golang/protobuf/proto"
+	"github.com/apache/thrift/lib/go/thrift"
 	runtime "github.com/helix-rpc/helix/runtime-go"
 )
 
@@ -37,10 +38,95 @@ func readVarint(buf []byte, offset int) (uint64, int, error) {
 	return v, offset, nil
 }
 
+func unsafeString(b []byte) string {
+	if len(b) == 0 {
+		return ""
+	}
+	return unsafe.String(&b[0], len(b))
+}
+
+func encodeZigZag32(n int32) uint32 {
+	return uint32((n << 1) ^ (n >> 31))
+}
+
+func writeThriftVarint(buf []byte, offset int, v uint64) int {
+	for {
+		if (v & ^uint64(0x7F)) == 0 {
+			buf[offset] = byte(v)
+			offset++
+			break
+		} else {
+			buf[offset] = byte((v & 0x7F) | 0x80)
+			offset++
+			v >>= 7
+		}
+	}
+	return offset
+}
+
+func writeThriftI16(buf []byte, offset int, v int16) int {
+	buf[offset] = byte(v >> 8)
+	buf[offset+1] = byte(v)
+	return offset + 2
+}
+
+func fastScanField(dAtA []byte, targetFieldNum int32) ([]byte, int, error) {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		var i uint64
+		var err error
+		i, iNdEx, err = readVarint(dAtA, iNdEx)
+		if err != nil {
+			return nil, 0, err
+		}
+		fieldNum := int32(i >> 3)
+		wireType := int(i & 0x7)
+		if fieldNum == targetFieldNum {
+			if wireType == 2 {
+				var length uint64
+				length, iNdEx, err = readVarint(dAtA, iNdEx)
+				if err != nil {
+					return nil, 0, err
+				}
+				postIndex := iNdEx + int(length)
+				if postIndex < 0 || postIndex > l {
+					return nil, 0, fmt.Errorf("unexpected EOF")
+				}
+				return dAtA[iNdEx:postIndex], wireType, nil
+			} else if wireType == 0 {
+				start := iNdEx
+				_, iNdEx, err = readVarint(dAtA, iNdEx)
+				if err != nil {
+					return nil, 0, err
+				}
+				return dAtA[start:iNdEx], wireType, nil
+			}
+			return nil, 0, fmt.Errorf("unsupported wireType for fast scan")
+		}
+		if wireType == 0 {
+			_, iNdEx, err = readVarint(dAtA, iNdEx)
+			if err != nil {
+				return nil, 0, err
+			}
+		} else if wireType == 2 {
+			var length uint64
+			length, iNdEx, err = readVarint(dAtA, iNdEx)
+			if err != nil {
+				return nil, 0, err
+			}
+			iNdEx += int(length)
+		} else {
+			return nil, 0, fmt.Errorf("unhandled wireType in fastScan skip")
+		}
+	}
+	return nil, 0, fmt.Errorf("field not found")
+}
+
 type UserProfile struct {
-	UserID   int64  `thrift:"user_id,1" json:"user_id" proto:"int64,1"`
+	UserID int64 `thrift:"user_id,1" json:"user_id" proto:"int64,1"`
 	Username string `thrift:"username,2" json:"username" proto:"string,2"`
-	Email    string `thrift:"email,3" json:"email" proto:"string,3"`
+	Email string `thrift:"email,3" json:"email" proto:"string,3"`
 }
 
 func (x *UserProfile) Reset()         { *x = UserProfile{} }
@@ -140,7 +226,7 @@ func (x *UserProfile) Unmarshal(dAtA []byte) error {
 			if postIndex < 0 || postIndex > l {
 				return fmt.Errorf("unexpected EOF")
 			}
-			x.Username = string(dAtA[iNdEx:postIndex])
+			x.Username = unsafeString(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 3:
 			if wireType != 2 {
@@ -155,7 +241,7 @@ func (x *UserProfile) Unmarshal(dAtA []byte) error {
 			if postIndex < 0 || postIndex > l {
 				return fmt.Errorf("unexpected EOF")
 			}
-			x.Email = string(dAtA[iNdEx:postIndex])
+			x.Email = unsafeString(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			var v uint64
@@ -388,6 +474,136 @@ func (x *UserProfile) Read(ctx context.Context, iprot thrift.TProtocol) error {
 	return iprot.ReadStructEnd(ctx)
 }
 
+type LazyUserProfile struct {
+	raw []byte
+}
+
+func NewLazyUserProfile(raw []byte) *LazyUserProfile {
+	return &LazyUserProfile{raw: raw}
+}
+
+func (x *LazyUserProfile) GetUserID() (int64, error) {
+	b, _, err := fastScanField(x.raw, 1)
+	if err != nil {
+		var zero int64
+		return zero, err
+	}
+	v, _, err := readVarint(b, 0)
+	if err != nil {
+		return 0, err
+	}
+	return int64(v), nil
+}
+
+func (x *LazyUserProfile) GetUsername() (string, error) {
+	b, _, err := fastScanField(x.raw, 2)
+	if err != nil {
+		var zero string
+		return zero, err
+	}
+	return unsafeString(b), nil
+}
+
+func (x *LazyUserProfile) GetEmail() (string, error) {
+	b, _, err := fastScanField(x.raw, 3)
+	if err != nil {
+		var zero string
+		return zero, err
+	}
+	return unsafeString(b), nil
+}
+
+func (x *UserProfile) TranspileProtobufToThriftCompact(in []byte, out []byte) (int, error) {
+	l := len(in)
+	iNdEx := 0
+	outIdx := 0
+	var err error
+	lastFieldID := int16(0)
+	for iNdEx < l {
+		var i uint64
+		i, iNdEx, err = readVarint(in, iNdEx)
+		if err != nil {
+			return 0, err
+		}
+		fieldNum := int16(i >> 3)
+		wireType := int(i & 0x7)
+		switch fieldNum {
+		case 1:
+			var v uint64
+			v, iNdEx, err = readVarint(in, iNdEx)
+			if err != nil {
+				return 0, err
+			}
+			delta := fieldNum - lastFieldID
+			if delta > 0 && delta <= 15 {
+			out[outIdx] = byte((delta << 4) | 0x06)
+			outIdx++
+			} else {
+			out[outIdx] = byte(0x06)
+			outIdx++
+				outIdx = writeThriftI16(out, outIdx, fieldNum)
+			}
+			lastFieldID = fieldNum
+			encodeZZ64 := uint64((int64(v) << 1) ^ (int64(v) >> 63))
+			outIdx = writeThriftVarint(out, outIdx, encodeZZ64)
+		case 2:
+			var stringLen uint64
+			stringLen, iNdEx, err = readVarint(in, iNdEx)
+			if err != nil {
+				return 0, err
+			}
+			delta := fieldNum - lastFieldID
+			if delta > 0 && delta <= 15 {
+				out[outIdx] = byte((delta << 4) | 0x08)
+				outIdx++
+			} else {
+				out[outIdx] = byte(0x08)
+				outIdx++
+				outIdx = writeThriftI16(out, outIdx, fieldNum)
+			}
+			lastFieldID = fieldNum
+			outIdx = writeThriftVarint(out, outIdx, stringLen)
+			copy(out[outIdx:], in[iNdEx:iNdEx+int(stringLen)])
+			outIdx += int(stringLen)
+			iNdEx += int(stringLen)
+		case 3:
+			var stringLen uint64
+			stringLen, iNdEx, err = readVarint(in, iNdEx)
+			if err != nil {
+				return 0, err
+			}
+			delta := fieldNum - lastFieldID
+			if delta > 0 && delta <= 15 {
+				out[outIdx] = byte((delta << 4) | 0x08)
+				outIdx++
+			} else {
+				out[outIdx] = byte(0x08)
+				outIdx++
+				outIdx = writeThriftI16(out, outIdx, fieldNum)
+			}
+			lastFieldID = fieldNum
+			outIdx = writeThriftVarint(out, outIdx, stringLen)
+			copy(out[outIdx:], in[iNdEx:iNdEx+int(stringLen)])
+			outIdx += int(stringLen)
+			iNdEx += int(stringLen)
+		default:
+			var v uint64
+			v, iNdEx, err = readVarint(in, iNdEx)
+			if err != nil {
+				return 0, err
+			}
+			if wireType == 0 {
+				// skip
+			} else if wireType == 2 {
+				iNdEx += int(v)
+			}
+		}
+	}
+	out[outIdx] = 0
+	outIdx++
+	return outIdx, nil
+}
+
 type UserProfileService interface {
 	GetUserProfile(ctx context.Context, req *UserProfile) (*UserProfile, error)
 }
@@ -495,3 +711,4 @@ func RegisterUserProfileService(server *runtime.Server, impl UserProfileService)
 		},
 	})
 }
+
