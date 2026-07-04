@@ -12,14 +12,14 @@ Helix RPC is designed around a multi-language philosophy, recognising that diffe
 | Graceful Shutdown | ✅ | ✅ | ✅ | ✅ |
 | gRPC / HTTP/2 | ✅ | ✅ | ✅ | ✅ |
 | REST / JSON Transcoding | ✅ | ✅ | ✅ | ✅ |
-| Server-Sent Events (SSE) | ✅ | ✅ | ✅ | — |
+| Server-Sent Events (SSE) | ✅ | ✅ | ✅ | ✅ |
 | Deadline Propagation (`grpc-timeout`) | ✅ | ✅ | ✅ (all 6 units) | ✅ |
 | Per-Message Compression (`gzip`) | ✅ | ✅ | ✅ | ✅ |
-| Health Checking (`grpc.health.v1`) | ✅ | ✅ | — | — |
+| Health Checking (`grpc.health.v1`) | ✅ | ✅ | ✅ | ✅ |
 | mTLS Transport Security | ✅ | ✅ | — | — |
 | OpenTelemetry Tracing | ✅ | ✅ | ✅ | ✅ |
 | Probabilistic Trace Sampling | ✅ | ✅ | ✅ | ✅ |
-| Circuit Breaker | ✅ | ✅ | ✅ | — |
+| Circuit Breaker | ✅ | ✅ | ✅ | ✅ |
 | Exponential Backoff Retry | ✅ | ✅ | ✅ | ✅ |
 | P99 Hedging (with Token Bucket) | ✅ | ✅ | ✅ | ✅ |
 | Least-Connections Load Balancing | ✅ | ✅ | — | — |

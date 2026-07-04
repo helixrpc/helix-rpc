@@ -163,6 +163,20 @@ export class HelixServer {
                     traceId
                 });
 
+                if (resp && (typeof resp[Symbol.asyncIterator] === 'function' || typeof (resp as any).next === 'function')) {
+                    res.writeHead(200, {
+                        'Content-Type': 'text/event-stream',
+                        'Cache-Control': 'no-cache',
+                        'Connection': 'keep-alive',
+                    });
+                    for await (const chunk of resp as any) {
+                        res.write(`data: ${JSON.stringify(chunk)}\n\n`);
+                    }
+                    res.write("data: [DONE]\n\n");
+                    res.end();
+                    return;
+                }
+
                 let respBody = JSON.stringify(resp);
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(respBody);
