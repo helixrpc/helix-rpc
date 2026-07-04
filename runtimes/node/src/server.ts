@@ -28,6 +28,17 @@ export class HelixServer {
 
     constructor(addr: string) {
         this.addr = addr;
+        // Default health checking service
+        this.registerMethod('/grpc.health.v1.Health/Check', {
+            Decoder: (dec) => {
+                const req = { service: "" };
+                dec(req);
+                return req;
+            },
+            Handler: async (ctx, req) => {
+                return { status: 1 }; // SERVING
+            }
+        });
     }
 
     public registerMethod(path: string, info: MethodInfo) {

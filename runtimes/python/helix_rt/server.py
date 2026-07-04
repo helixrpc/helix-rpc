@@ -121,6 +121,12 @@ class HelixServer:
         self._runner: web.AppRunner | None = None
         self._site:   web.TCPSite | None   = None
 
+        if not disable_health:
+            async def health_check_handler(body):
+                return {"status": 1}
+            self.register_route("POST", "/grpc.health.v1.Health/Check", health_check_handler)
+            self.register_route("GET", "/grpc.health.v1.Health/Check", health_check_handler)
+
     # ------------------------------------------------------------------
     # Middleware registration
     # ------------------------------------------------------------------

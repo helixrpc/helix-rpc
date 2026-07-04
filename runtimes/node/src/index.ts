@@ -5,3 +5,5 @@ export * from './metrics.js';
 export * from './ratelimit.js';
 export * from './retry.js';
 export * from './telemetry.js';
+export * from './circuitbreaker.js';
+export * from './balancer.js';
