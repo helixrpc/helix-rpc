@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/binary"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -13,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bytedance/sonic"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 )
@@ -109,11 +109,11 @@ func (s *sseServerStream) Recv(v interface{}) error {
 		return io.EOF
 	}
 	s.read = true
-	return json.Unmarshal(s.payload, v)
+	return sonic.Unmarshal(s.payload, v)
 }
 
 func (s *sseServerStream) Send(v interface{}) error {
-	respBytes, err := json.Marshal(v)
+	respBytes, err := sonic.Marshal(v)
 	if err != nil {
 		return err
 	}
@@ -262,7 +262,7 @@ func (h *GRPCHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if len(payload) == 0 {
 				payload = []byte("{}")
 			}
-			return json.Unmarshal(payload, v)
+			return sonic.Unmarshal(payload, v)
 		}
 
 		req, err := methodInfo.Decoder(dec)
@@ -292,7 +292,7 @@ func (h *GRPCHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		respBytes, err := json.Marshal(resp)
+		respBytes, err := sonic.Marshal(resp)
 		if err != nil {
 			http.Error(w, "failed to marshal json response", http.StatusInternalServerError)
 			return
@@ -331,7 +331,7 @@ func (h *GRPCHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 
 			if err := methodInfo.StreamHandler(stream); err != nil {
-				errBytes, _ := json.Marshal(map[string]string{"error": err.Error()})
+				errBytes, _ := sonic.Marshal(map[string]string{"error": err.Error()})
 				fmt.Fprintf(w, "data: %s\n\n", string(errBytes))
 			}
 			fmt.Fprintf(w, "data: [DONE]\n\n")

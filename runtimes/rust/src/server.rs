@@ -1,4 +1,5 @@
 use hyper::server::conn::Http;
+use simd_json::prelude::*;
 use hyper::service::Service;
 use hyper::{Body, Request, Response, StatusCode};
 use std::future::Future;
@@ -377,21 +378,22 @@ where
 
             // Merge path parameters into JSON body
             if is_json && !path_params.is_empty() {
-                let mut json_val: serde_json::Value = if request_payload.is_empty() {
-                    serde_json::Value::Object(serde_json::Map::new())
+                let mut request_payload_mut = request_payload.clone();
+                let mut json_val: simd_json::value::owned::Value = if request_payload_mut.is_empty() {
+                    simd_json::value::owned::Value::Object(Box::new(simd_json::value::owned::Object::new()))
                 } else {
-                    serde_json::from_slice(&request_payload).unwrap_or_else(|_| serde_json::Value::Object(serde_json::Map::new()))
+                    simd_json::from_slice(&mut request_payload_mut).unwrap_or_else(|_| simd_json::value::owned::Value::Object(Box::new(simd_json::value::owned::Object::new())))
                 };
 
                 if let Some(obj) = json_val.as_object_mut() {
                     for (k, v) in path_params {
                         if let Ok(num) = v.parse::<i64>() {
-                            obj.insert(k, serde_json::Value::Number(num.into()));
+                            obj.insert(k, simd_json::value::owned::Value::from(num));
                         } else {
-                            obj.insert(k, serde_json::Value::String(v));
+                            obj.insert(k, simd_json::value::owned::Value::from(v));
                         }
                     }
-                    if let Ok(new_body) = serde_json::to_vec(&json_val) {
+                    if let Ok(new_body) = simd_json::to_vec(&json_val) {
                         request_payload = new_body;
                     }
                 }
