@@ -368,6 +368,20 @@ Edit [schema.proto](./schema.proto) and run `+"`make gen`"+` to regenerate.
 }
 `, disableMetrics, disableHealth, disableGzip, disableDeadline))
 
+	// migrations directory & sample script
+	if dbType == "mysql" {
+		migrationsDir := filepath.Join(base, "migrations")
+		os.MkdirAll(migrationsDir, 0755) //nolint:errcheck
+		writeFile(filepath.Join(migrationsDir, "0001_init.sql"), `-- Migration: 0001_init.sql
+CREATE TABLE IF NOT EXISTS users (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(255) NOT NULL,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+`)
+	}
+
 	// Language-specific server entrypoint
 	switch lang {
 	case "go":
