@@ -43,7 +43,7 @@ server.registerMethod('/keyval.KVService/Set', {
 });
 
 // Register REST Routes (Transcoded to KVService endpoints)
-server.registerRESTRoute('GET', '/v1/kv/:key', '/keyval.KVService/Get');
+server.registerRESTRoute('GET', '/v1/kv/{key}', '/keyval.KVService/Get');
 server.registerRESTRoute('POST', '/v1/kv', '/keyval.KVService/Set');
 
 console.log('🧬 Starting Helix Unified Multi-Protocol Server on 127.0.0.1:9090...');
