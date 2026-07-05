@@ -10,3 +10,4 @@ export * from './balancer.js';
 export * from './ebpf.js';
 export * from './quic_transport.js';
 export * from './gateway.js';
+export * from './agent.js';

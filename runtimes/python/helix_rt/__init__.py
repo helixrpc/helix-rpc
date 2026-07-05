@@ -6,3 +6,4 @@ from .quic_transport import QuicListener, QuicVirtualStream
 from .gateway import MultiTenantRateLimiter
 from .multiplexer import MultiplexedServer, write_sse_chunk
 from .tensor import Tensor
+from .agent import AgenticStream
