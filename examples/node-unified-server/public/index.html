@@ -539,20 +539,26 @@
 
       updateComparison(key, value);
       
+      let payloadSize = 0;
       if (protocol === 'json') {
+        const jsonStr = JSON.stringify({ key, value });
+        payloadSize = new TextEncoder().encode(jsonStr).length;
         log(`📡 Sending [JSON REST] payload to same-port server...`, 'system');
-        log(`[Payload]: ${JSON.stringify({ key, value })}`);
+        log(`[Payload]: ${jsonStr} (${payloadSize} bytes)`);
       } else if (protocol === 'proto') {
         const bytes = serializeProtobuf(key, value);
+        payloadSize = bytes.length;
         log(`📡 Sending [gRPC / Protobuf] binary frame to same-port server...`, 'system');
-        log(`[Hex Stream]: ${toHex(bytes)}`, 'binary');
+        log(`[Hex Stream]: ${toHex(bytes)} (${payloadSize} bytes)`, 'binary');
       } else {
         const bytes = serializeThriftCompact(key, value);
+        payloadSize = bytes.length;
         log(`📡 Sending [Apache Thrift Compact] binary stream to same-port server...`, 'system');
-        log(`[Hex Stream]: ${toHex(bytes)}`, 'binary');
+        log(`[Hex Stream]: ${toHex(bytes)} (${payloadSize} bytes)`, 'binary');
         log(`[Bridge Action]: Same-Port Sniffer transcodes Thrift to Protobuf with Zero-Allocations.`, 'system');
       }
 
+      const startTime = performance.now();
       try {
         const res = await fetch('http://127.0.0.1:9090/v1/kv', {
           method: 'POST',
@@ -562,7 +568,8 @@
           body: JSON.stringify({ key, value })
         });
         const data = await res.json();
-        log(`Response from Server: ${JSON.stringify(data)}`, 'success');
+        const duration = (performance.now() - startTime).toFixed(2);
+        log(`Response from Server: ${JSON.stringify(data)} (Latency: ${duration} ms, Sent: ${payloadSize} bytes)`, 'success');
       } catch (err) {
         log(`Failed to store data: ${err.message}`, 'err');
       }
@@ -573,22 +580,28 @@
       const protocol = selectProtocolGet.value;
       if (!key) return alert('Key is required');
 
+      let payloadSize = 0;
       if (protocol === 'json') {
-        log(`📡 Sending [JSON REST] request to GET /v1/kv/${key}...`, 'system');
+        payloadSize = new TextEncoder().encode(JSON.stringify({ key })).length;
+        log(`📡 Sending [JSON REST] request to GET /v1/kv/${key}... (${payloadSize} bytes)`, 'system');
       } else if (protocol === 'proto') {
         const bytes = serializeProtobuf(key);
+        payloadSize = bytes.length;
         log(`📡 Sending [gRPC / Protobuf] GET request...`, 'system');
-        log(`[Hex Stream]: ${toHex(bytes)}`, 'binary');
+        log(`[Hex Stream]: ${toHex(bytes)} (${payloadSize} bytes)`, 'binary');
       } else {
         const bytes = serializeThriftCompact(key);
+        payloadSize = bytes.length;
         log(`📡 Sending [Thrift Compact] GET request...`, 'system');
-        log(`[Hex Stream]: ${toHex(bytes)}`, 'binary');
+        log(`[Hex Stream]: ${toHex(bytes)} (${payloadSize} bytes)`, 'binary');
       }
 
+      const startTime = performance.now();
       try {
         const res = await fetch(`http://127.0.0.1:9090/v1/kv/${key}`);
         const data = await res.json();
-        log(`Response from Server: ${JSON.stringify(data)}`, 'success');
+        const duration = (performance.now() - startTime).toFixed(2);
+        log(`Response from Server: ${JSON.stringify(data)} (Latency: ${duration} ms, Sent: ${payloadSize} bytes)`, 'success');
         if (data.found) {
           updateComparison(key, data.value);
         }
