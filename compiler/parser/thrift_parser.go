@@ -41,10 +41,14 @@ func (p *thriftParser) parseAST() (*ast.AST, error) {
 				if res.Namespace == "" {
 					res.Namespace = ns // Capture first valid namespace name as default
 				}
-			case "struct":
+			case "struct", "union", "exception":
+				blockType := p.tok.val
 				str, err := p.parseStruct()
 				if err != nil {
 					return nil, err
+				}
+				if blockType == "union" || blockType == "exception" {
+					str.HasFallback = true
 				}
 				res.Structs = append(res.Structs, str)
 			case "enum":
@@ -98,7 +102,7 @@ func (p *thriftParser) parseStruct() (*ast.StructNode, error) {
 	}
 	p.nextToken() // consume '{'
 
-	str := &ast.StructNode{Name: name, Fields: []*ast.FieldNode{}}
+	str := &ast.StructNode{Name: name, Fields: []*ast.FieldNode{}, HasFallback: false}
 	for p.tok.kind != tokEOF && !(p.tok.kind == tokPunct && p.tok.val == "}") {
 		if p.tok.kind == tokInt {
 			// Field specification: [FieldID]: [required/optional] [Type] [Name]
@@ -139,6 +143,17 @@ func (p *thriftParser) parseStruct() (*ast.StructNode, error) {
 				}
 				p.nextToken() // consume '>'
 				typeName = "list<" + subType + ">"
+			} else if typeName == "map" && p.tok.kind == tokPunct && p.tok.val == "<" {
+				p.nextToken() // consume '<'
+				p.nextToken() // key type
+				if p.tok.kind == tokPunct && p.tok.val == "," {
+					p.nextToken()
+				}
+				p.nextToken() // value type
+				if p.tok.kind == tokPunct && p.tok.val == ">" {
+					p.nextToken() // consume '>'
+				}
+				typeName = "map"
 			}
 
 			if p.tok.kind != tokIdent {
@@ -153,6 +168,9 @@ func (p *thriftParser) parseStruct() (*ast.StructNode, error) {
 			}
 
 			fType := parseTypeNode(typeName)
+			if fType.Kind == ast.TypeMap {
+				str.HasFallback = true
+			}
 			str.Fields = append(str.Fields, &ast.FieldNode{
 				Name:     fieldName,
 				ID:       int32(fieldId),

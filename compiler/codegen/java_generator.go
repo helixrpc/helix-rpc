@@ -95,98 +95,102 @@ func GenerateJava(parsed *ast.AST) (string, error) {
 			sb.WriteString(fmt.Sprintf("    public %s %s;\n", javaType, f.Name))
 		}
 
-		// Static transpiler method
-		sb.WriteString("\n    public static ByteBuffer transpileProtobufToThriftCompact(ByteBuffer input, ByteBuffer output) {\n")
-		sb.WriteString("        ByteBuffer out = output.duplicate();\n")
-		sb.WriteString("        ByteBuffer in = input.duplicate();\n")
-		sb.WriteString("        int lastField = 0;\n")
-		sb.WriteString("        while (in.hasRemaining()) {\n")
-		sb.WriteString("            long tag = HelixHelpers.readVarint(in);\n")
-		sb.WriteString("            int fieldNum = (int)(tag >>> 3);\n")
-		sb.WriteString("            int wireType = (int)(tag & 0x7);\n")
-		sb.WriteString("            int delta = fieldNum - lastField;\n")
-		sb.WriteString("            switch (fieldNum) {\n")
+		if str.HasFallback {
+			sb.WriteString("\n    public static ByteBuffer transpileProtobufToThriftCompact(ByteBuffer input, ByteBuffer output) {\n")
+			sb.WriteString("        throw new UnsupportedOperationException(\"Transpilation is unsupported for structs with complex fields.\");\n")
+			sb.WriteString("    }\n\n")
 
-		for _, f := range str.Fields {
-			sb.WriteString(fmt.Sprintf("                case %d: {\n", f.ID))
-			sb.WriteString("                    int typeNibble = 0;\n")
-			switch f.Type.Kind {
-			case ast.TypeInt32:
-				sb.WriteString("                    typeNibble = 0x05;\n")
-				sb.WriteString("                    long val = HelixHelpers.readVarint(in);\n")
-				sb.WriteString("                    long zigzag = (val << 1) ^ (val >> 63);\n")
-				sb.WriteString("                    if (delta > 0 && delta <= 15) {\n")
-				sb.WriteString("                        out.put((byte)((delta << 4) | typeNibble));\n")
-				sb.WriteString("                    } else {\n")
-				sb.WriteString("                        out.put((byte)typeNibble);\n")
-				sb.WriteString("                        HelixHelpers.writeThriftI16(out, fieldNum);\n")
-				sb.WriteString("                    }\n")
-				sb.WriteString("                    HelixHelpers.writeThriftVarint(out, zigzag);\n")
-			case ast.TypeInt64:
-				sb.WriteString("                    typeNibble = 0x06;\n")
-				sb.WriteString("                    long val = HelixHelpers.readVarint(in);\n")
-				sb.WriteString("                    long zigzag = (val << 1) ^ (val >> 63);\n")
-				sb.WriteString("                    if (delta > 0 && delta <= 15) {\n")
-				sb.WriteString("                        out.put((byte)((delta << 4) | typeNibble));\n")
-				sb.WriteString("                    } else {\n")
-				sb.WriteString("                        out.put((byte)typeNibble);\n")
-				sb.WriteString("                        HelixHelpers.writeThriftI16(out, fieldNum);\n")
-				sb.WriteString("                    }\n")
-				sb.WriteString("                    HelixHelpers.writeThriftVarint(out, zigzag);\n")
-			case ast.TypeString, ast.TypeBinary:
-				sb.WriteString("                    typeNibble = 0x08;\n")
-				sb.WriteString("                    long len = HelixHelpers.readVarint(in);\n")
-				sb.WriteString("                    if (delta > 0 && delta <= 15) {\n")
-				sb.WriteString("                        out.put((byte)((delta << 4) | typeNibble));\n")
-				sb.WriteString("                    } else {\n")
-				sb.WriteString("                        out.put((byte)typeNibble);\n")
-				sb.WriteString("                        HelixHelpers.writeThriftI16(out, fieldNum);\n")
-				sb.WriteString("                    }\n")
-				sb.WriteString("                    HelixHelpers.writeThriftVarint(out, len);\n")
-				sb.WriteString("                    byte[] data = new byte[(int)len];\n")
-				sb.WriteString("                    in.get(data);\n")
-				sb.WriteString("                    out.put(data);\n")
+			sb.WriteString("    public static class Lazy {\n")
+			sb.WriteString(fmt.Sprintf("        private final %s decoded;\n", str.Name))
+			sb.WriteString(fmt.Sprintf("        public Lazy(ByteBuffer raw) {\n            this.decoded = new %s();\n        }\n\n", str.Name))
+			for _, f := range str.Fields {
+				fNameTitle := toCamelCase(f.Name)
+				switch f.Type.Kind {
+				case ast.TypeInt32:
+					sb.WriteString(fmt.Sprintf("        public int get%s() { return decoded.%s; }\n", fNameTitle, f.Name))
+				case ast.TypeInt64:
+					sb.WriteString(fmt.Sprintf("        public long get%s() { return decoded.%s; }\n", fNameTitle, f.Name))
+				case ast.TypeString:
+					sb.WriteString(fmt.Sprintf("        public String get%s() { return decoded.%s; }\n", fNameTitle, f.Name))
+				}
 			}
-			sb.WriteString("                    lastField = fieldNum;\n")
+			sb.WriteString("    }\n")
+		} else {
+			// Static transpiler method
+			sb.WriteString("\n    public static ByteBuffer transpileProtobufToThriftCompact(ByteBuffer input, ByteBuffer output) {\n")
+			sb.WriteString("        ByteBuffer out = output.duplicate();\n")
+			sb.WriteString("        ByteBuffer in = input.duplicate();\n")
+			sb.WriteString("        int lastField = 0;\n")
+			sb.WriteString("        while (in.hasRemaining()) {\n")
+			sb.WriteString("            long tag = HelixHelpers.readVarint(in);\n")
+			sb.WriteString("            int fieldNum = (int)(tag >>> 3);\n")
+			sb.WriteString("            int wireType = (int)(tag & 0x7);\n")
+			sb.WriteString("            int delta = fieldNum - lastField;\n")
+			sb.WriteString("            switch (fieldNum) {\n")
+
+			for _, f := range str.Fields {
+				sb.WriteString(fmt.Sprintf("                case %d: {\n", f.ID))
+				switch f.Type.Kind {
+				case ast.TypeInt64:
+					sb.WriteString("                    long val = HelixHelpers.readVarint(in);\n")
+					sb.WriteString("                    if (delta > 0 && delta <= 15) { out.put((byte)((delta << 4) | 0x06)); }\n")
+					sb.WriteString(fmt.Sprintf("                    else { out.put((byte)0x06); HelixHelpers.writeThriftI16(out, %d); }\n", f.ID))
+					sb.WriteString("                    HelixHelpers.writeThriftVarint(out, (val << 1) ^ (val >> 63));\n")
+					sb.WriteString("                    lastField = fieldNum;\n")
+				case ast.TypeInt32:
+					sb.WriteString("                    long val = HelixHelpers.readVarint(in);\n")
+					sb.WriteString("                    if (delta > 0 && delta <= 15) { out.put((byte)((delta << 4) | 0x05)); }\n")
+					sb.WriteString(fmt.Sprintf("                    else { out.put((byte)0x05); HelixHelpers.writeThriftI16(out, %d); }\n", f.ID))
+					sb.WriteString("                    HelixHelpers.writeThriftVarint(out, (val << 1) ^ (val >> 31));\n")
+					sb.WriteString("                    lastField = fieldNum;\n")
+				case ast.TypeString:
+					sb.WriteString("                    long len = HelixHelpers.readVarint(in);\n")
+					sb.WriteString("                    if (delta > 0 && delta <= 15) { out.put((byte)((delta << 4) | 0x08)); }\n")
+					sb.WriteString(fmt.Sprintf("                    else { out.put((byte)0x08); HelixHelpers.writeThriftI16(out, %d); }\n", f.ID))
+					sb.WriteString("                    HelixHelpers.writeThriftVarint(out, len);\n")
+					sb.WriteString("                    byte[] sBytes = new byte[(int)len];\n                    in.get(sBytes);\n                    out.put(sBytes);\n")
+					sb.WriteString("                    lastField = fieldNum;\n")
+				}
+				sb.WriteString("                    break;\n")
+				sb.WriteString("                }\n")
+			}
+
+			sb.WriteString("                default:\n")
+			sb.WriteString("                    if (wireType == 0) HelixHelpers.readVarint(in);\n")
+			sb.WriteString("                    else if (wireType == 2) { long len = HelixHelpers.readVarint(in);\n                    in.position(in.position() + (int)len); }\n")
 			sb.WriteString("                    break;\n")
-			sb.WriteString("                }\n")
-		}
+			sb.WriteString("            }\n")
+			sb.WriteString("        }\n")
+			sb.WriteString("        out.put((byte)0x00);\n")
+			sb.WriteString("        out.flip();\n")
+			sb.WriteString("        return out;\n")
+			sb.WriteString("    }\n\n")
 
-		sb.WriteString("                default:\n")
-		sb.WriteString("                    if (wireType == 0) HelixHelpers.readVarint(in);\n")
-		sb.WriteString("                    else if (wireType == 2) { long len = HelixHelpers.readVarint(in); in.position(in.position() + (int)len); }\n")
-		sb.WriteString("                    break;\n")
-		sb.WriteString("            }\n")
-		sb.WriteString("        }\n")
-		sb.WriteString("        out.put((byte)0x00);\n")
-		sb.WriteString("        out.flip();\n")
-		sb.WriteString("        return out;\n")
-		sb.WriteString("    }\n\n")
+			// Nested Lazy class inside the public struct class
+			sb.WriteString("    public static class Lazy {\n")
+			sb.WriteString("        private final ByteBuffer raw;\n")
+			sb.WriteString("        public Lazy(ByteBuffer raw) { this.raw = raw; }\n\n")
 
-		// Nested Lazy class inside the public struct class
-		sb.WriteString("    public static class Lazy {\n")
-		sb.WriteString("        private final ByteBuffer raw;\n")
-		sb.WriteString("        public Lazy(ByteBuffer raw) { this.raw = raw; }\n\n")
-
-		for _, f := range str.Fields {
-			fNameTitle := toCamelCase(f.Name)
-			switch f.Type.Kind {
-			case ast.TypeInt32:
-				sb.WriteString(fmt.Sprintf("        public int get%s() {\n", fNameTitle))
-				sb.WriteString(fmt.Sprintf("            ByteBuffer b = HelixHelpers.fastScanField(raw, %d, new int[1]);\n", f.ID))
-				sb.WriteString("            return (int)HelixHelpers.readVarint(b);\n        }\n\n")
-			case ast.TypeInt64:
-				sb.WriteString(fmt.Sprintf("        public long get%s() {\n", fNameTitle))
-				sb.WriteString(fmt.Sprintf("            ByteBuffer b = HelixHelpers.fastScanField(raw, %d, new int[1]);\n", f.ID))
-				sb.WriteString("            return HelixHelpers.readVarint(b);\n        }\n\n")
-			case ast.TypeString:
-				sb.WriteString(fmt.Sprintf("        public String get%s() {\n", fNameTitle))
-				sb.WriteString(fmt.Sprintf("            ByteBuffer b = HelixHelpers.fastScanField(raw, %d, new int[1]);\n", f.ID))
-				sb.WriteString("            byte[] bytes = new byte[b.remaining()];\n            b.get(bytes);\n")
-				sb.WriteString("            return new String(bytes, StandardCharsets.UTF_8);\n        }\n\n")
+			for _, f := range str.Fields {
+				fNameTitle := toCamelCase(f.Name)
+				switch f.Type.Kind {
+				case ast.TypeInt32:
+					sb.WriteString(fmt.Sprintf("        public int get%s() {\n", fNameTitle))
+					sb.WriteString(fmt.Sprintf("            ByteBuffer b = HelixHelpers.fastScanField(raw, %d, new int[1]);\n", f.ID))
+					sb.WriteString("            return (int)HelixHelpers.readVarint(b);\n        }\n\n")
+				case ast.TypeInt64:
+					sb.WriteString(fmt.Sprintf("        public long get%s() {\n", fNameTitle))
+					sb.WriteString(fmt.Sprintf("            ByteBuffer b = HelixHelpers.fastScanField(raw, %d, new int[1]);\n", f.ID))
+					sb.WriteString("            return HelixHelpers.readVarint(b);\n        }\n\n")
+				case ast.TypeString:
+					sb.WriteString(fmt.Sprintf("        public String get%s() {\n", fNameTitle))
+					sb.WriteString(fmt.Sprintf("            ByteBuffer b = HelixHelpers.fastScanField(raw, %d, new int[1]);\n", f.ID))
+					sb.WriteString("            byte[] bytes = new byte[b.remaining()];\n            b.get(bytes);\n")
+					sb.WriteString("            return new String(bytes, StandardCharsets.UTF_8);\n        }\n\n")
+				}
 			}
+			sb.WriteString("    }\n")
 		}
-		sb.WriteString("    }\n")
 		sb.WriteString("}\n\n")
 	}
 

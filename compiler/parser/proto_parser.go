@@ -204,12 +204,29 @@ func (p *protoParser) parseMessage() (*ast.StructNode, error) {
 	}
 	p.nextToken() // consume '{'
 
-	str := &ast.StructNode{Name: name, Fields: []*ast.FieldNode{}}
+	str := &ast.StructNode{Name: name, Fields: []*ast.FieldNode{}, HasFallback: false}
 	for p.tok.kind != tokEOF && !(p.tok.kind == tokPunct && p.tok.val == "}") {
 		if p.tok.kind == tokIdent {
 			// Check if message-level optional/repeated modifiers exist
 			optional := false
 			typeName := p.tok.val
+			if typeName == "oneof" {
+				str.HasFallback = true
+				p.nextToken() // consume oneof
+				// skip oneof body
+				if p.tok.kind == tokIdent {
+					p.nextToken() // consume oneof block name
+				}
+				if p.tok.kind == tokPunct && p.tok.val == "{" {
+					p.nextToken()
+					for p.tok.kind != tokEOF && !(p.tok.kind == tokPunct && p.tok.val == "}") {
+						p.nextToken()
+					}
+					p.nextToken() // consume '}'
+				}
+				continue
+			}
+
 			if typeName == "optional" {
 				optional = true
 				p.nextToken()
@@ -243,6 +260,9 @@ func (p *protoParser) parseMessage() (*ast.StructNode, error) {
 			p.nextToken() // consume ';'
 
 			fType := parseTypeNode(typeName)
+			if fType.Kind == ast.TypeMap {
+				str.HasFallback = true
+			}
 			str.Fields = append(str.Fields, &ast.FieldNode{
 				Name:     fieldName,
 				ID:       int32(tagVal),

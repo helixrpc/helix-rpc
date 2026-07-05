@@ -95,100 +95,107 @@ inline const uint8_t* FastScanField(const uint8_t* buf, size_t size, int target_
 			sb.WriteString(fmt.Sprintf("    %s %s;\n", cppType, toLowerSnakeCase(f.Name)))
 		}
 
-		// Static transpiler method
-		sb.WriteString("\n    static std::vector<uint8_t> TranspileProtobufToThriftCompact(const uint8_t* input, size_t size) {\n")
-		sb.WriteString("        std::vector<uint8_t> out;\n")
-		sb.WriteString("        size_t idx = 0;\n")
-		sb.WriteString("        int last_field = 0;\n")
-		sb.WriteString("        while (idx < size) {\n")
-		sb.WriteString("            uint64_t tag = ReadVarint(input, size, idx);\n")
-		sb.WriteString("            int field_num = static_cast<int>(tag >> 3);\n")
-		sb.WriteString("            int wire_type = static_cast<int>(tag & 0x7);\n")
-		sb.WriteString("            int delta = field_num - last_field;\n")
-		sb.WriteString("            switch (field_num) {\n")
+		if str.HasFallback {
+			sb.WriteString("\n    static std::vector<uint8_t> TranspileProtobufToThriftCompact(const uint8_t* /*input*/, size_t /*size*/) {\n")
+			sb.WriteString("        throw std::runtime_error(\"Transpilation is unsupported for structs with complex fields.\");\n")
+			sb.WriteString("    }\n")
+			sb.WriteString("};\n\n")
 
-		for _, f := range str.Fields {
-			sb.WriteString(fmt.Sprintf("                case %d: {\n", f.ID))
-			sb.WriteString("                    int type_nibble = 0;\n")
-			switch f.Type.Kind {
-			case ast.TypeInt32:
-				sb.WriteString("                    type_nibble = 0x05;\n")
-				sb.WriteString("                    uint64_t val = ReadVarint(input, size, idx);\n")
-				sb.WriteString("                    uint64_t zigzag = (val << 1) ^ (static_cast<int64_t>(val) >> 63);\n")
-				sb.WriteString("                    if (delta > 0 && delta <= 15) {\n")
-				sb.WriteString("                        out.push_back(static_cast<uint8_t>((delta << 4) | type_nibble));\n")
-				sb.WriteString("                    } else {\n")
-				sb.WriteString("                        out.push_back(static_cast<uint8_t>(type_nibble));\n")
-				sb.WriteString("                        WriteThriftI16(out, field_num);\n")
-				sb.WriteString("                    }\n")
-				sb.WriteString("                    WriteThriftVarint(out, zigzag);\n")
-			case ast.TypeInt64:
-				sb.WriteString("                    type_nibble = 0x06;\n")
-				sb.WriteString("                    uint64_t val = ReadVarint(input, size, idx);\n")
-				sb.WriteString("                    uint64_t zigzag = (val << 1) ^ (static_cast<int64_t>(val) >> 63);\n")
-				sb.WriteString("                    if (delta > 0 && delta <= 15) {\n")
-				sb.WriteString("                        out.push_back(static_cast<uint8_t>((delta << 4) | type_nibble));\n")
-				sb.WriteString("                    } else {\n")
-				sb.WriteString("                        out.push_back(static_cast<uint8_t>(type_nibble));\n")
-				sb.WriteString("                        WriteThriftI16(out, field_num);\n")
-				sb.WriteString("                    }\n")
-				sb.WriteString("                    WriteThriftVarint(out, zigzag);\n")
-			case ast.TypeString, ast.TypeBinary:
-				sb.WriteString("                    type_nibble = 0x08;\n")
-				sb.WriteString("                    uint64_t len = ReadVarint(input, size, idx);\n")
-				sb.WriteString("                    if (delta > 0 && delta <= 15) {\n")
-				sb.WriteString("                        out.push_back(static_cast<uint8_t>((delta << 4) | type_nibble));\n")
-				sb.WriteString("                    } else {\n")
-				sb.WriteString("                        out.push_back(static_cast<uint8_t>(type_nibble));\n")
-				sb.WriteString("                        WriteThriftI16(out, field_num);\n")
-				sb.WriteString("                    }\n")
-				sb.WriteString("                    WriteThriftVarint(out, len);\n")
-				sb.WriteString("                    out.insert(out.end(), input + idx, input + idx + len);\n")
-				sb.WriteString("                    idx += len;\n")
+			sb.WriteString(fmt.Sprintf("class Lazy%s {\n", str.Name))
+			sb.WriteString("public:\n")
+			sb.WriteString(fmt.Sprintf("    Lazy%s(const uint8_t* /*raw*/, size_t /*size*/) {}\n\n", str.Name))
+			for _, f := range str.Fields {
+				fName := toLowerSnakeCase(f.Name)
+				switch f.Type.Kind {
+				case ast.TypeInt32:
+					sb.WriteString(fmt.Sprintf("    int32_t get_%s() const { return 0; }\n", fName))
+				case ast.TypeInt64:
+					sb.WriteString(fmt.Sprintf("    int64_t get_%s() const { return 0; }\n", fName))
+				case ast.TypeString:
+					sb.WriteString(fmt.Sprintf("    std::string_view get_%s() const { return \"\"; }\n", fName))
+				}
 			}
-			sb.WriteString("                    last_field = field_num;\n")
+			sb.WriteString("};\n\n")
+		} else {
+			// Static transpiler method
+			sb.WriteString("\n    static std::vector<uint8_t> TranspileProtobufToThriftCompact(const uint8_t* input, size_t size) {\n")
+			sb.WriteString("        std::vector<uint8_t> out;\n")
+			sb.WriteString("        size_t idx = 0;\n")
+			sb.WriteString("        int last_field = 0;\n")
+			sb.WriteString("        while (idx < size) {\n")
+			sb.WriteString("            uint64_t tag = ReadVarint(input, size, idx);\n")
+			sb.WriteString("            int field_num = static_cast<int>(tag >> 3);\n")
+			sb.WriteString("            int wire_type = static_cast<int>(tag & 0x7);\n")
+			sb.WriteString("            int delta = field_num - last_field;\n")
+			sb.WriteString("            switch (field_num) {\n")
+
+			for _, f := range str.Fields {
+				sb.WriteString(fmt.Sprintf("                case %d: {\n", f.ID))
+				switch f.Type.Kind {
+				case ast.TypeInt64:
+					sb.WriteString("                    uint64_t val = ReadVarint(input, size, idx);\n")
+					sb.WriteString("                    if (delta > 0 && delta <= 15) { out.push_back(static_cast<uint8_t>((delta << 4) | 0x06)); }\n")
+					sb.WriteString(fmt.Sprintf("                    else { out.push_back(0x06); WriteThriftI16(out, %d); }\n", f.ID))
+					sb.WriteString("                    WriteThriftVarint(out, (val << 1) ^ (val >> 63));\n")
+					sb.WriteString("                    last_field = field_num;\n")
+				case ast.TypeInt32:
+					sb.WriteString("                    uint64_t val = ReadVarint(input, size, idx);\n")
+					sb.WriteString("                    if (delta > 0 && delta <= 15) { out.push_back(static_cast<uint8_t>((delta << 4) | 0x05)); }\n")
+					sb.WriteString(fmt.Sprintf("                    else { out.push_back(0x05); WriteThriftI16(out, %d); }\n", f.ID))
+					sb.WriteString("                    WriteThriftVarint(out, (val << 1) ^ (val >> 31));\n")
+					sb.WriteString("                    last_field = field_num;\n")
+				case ast.TypeString:
+					sb.WriteString("                    uint64_t len = ReadVarint(input, size, idx);\n")
+					sb.WriteString("                    if (delta > 0 && delta <= 15) { out.push_back(static_cast<uint8_t>((delta << 4) | 0x08)); }\n")
+					sb.WriteString(fmt.Sprintf("                    else { out.push_back(0x08); WriteThriftI16(out, %d); }\n", f.ID))
+					sb.WriteString("                    WriteThriftVarint(out, len);\n")
+					sb.WriteString("                    out.insert(out.end(), input + idx, input + idx + len);\n")
+					sb.WriteString("                    idx += len;\n")
+					sb.WriteString("                    last_field = field_num;\n")
+				}
+				sb.WriteString("                    break;\n")
+				sb.WriteString("                }\n")
+			}
+
+			sb.WriteString("                default:\n")
+			sb.WriteString("                    if (wire_type == 0) ReadVarint(input, size, idx);\n")
+			sb.WriteString("                    else if (wire_type == 2) { uint64_t len = ReadVarint(input, size, idx); idx += len; }\n")
 			sb.WriteString("                    break;\n")
-			sb.WriteString("                }\n")
-		}
+			sb.WriteString("            }\n")
+			sb.WriteString("        }\n")
+			sb.WriteString("        out.push_back(0x00);\n")
+			sb.WriteString("        return out;\n")
+			sb.WriteString("    }\n")
+			sb.WriteString("};\n\n")
 
-		sb.WriteString("                default:\n")
-		sb.WriteString("                    if (wire_type == 0) ReadVarint(input, size, idx);\n")
-		sb.WriteString("                    else if (wire_type == 2) { uint64_t len = ReadVarint(input, size, idx); idx += len; }\n")
-		sb.WriteString("                    break;\n")
-		sb.WriteString("            }\n")
-		sb.WriteString("        }\n")
-		sb.WriteString("        out.push_back(0x00);\n")
-		sb.WriteString("        return out;\n")
-		sb.WriteString("    }\n")
-		sb.WriteString("};\n\n")
+			// Lazy class
+			sb.WriteString(fmt.Sprintf("class Lazy%s {\n", str.Name))
+			sb.WriteString("public:\n")
+			sb.WriteString(fmt.Sprintf("    Lazy%s(const uint8_t* raw, size_t size) : raw_(raw), size_(size) {}\n\n", str.Name))
 
-		// Lazy class
-		sb.WriteString(fmt.Sprintf("class Lazy%s {\n", str.Name))
-		sb.WriteString("public:\n")
-		sb.WriteString(fmt.Sprintf("    Lazy%s(const uint8_t* raw, size_t size) : raw_(raw), size_(size) {}\n\n", str.Name))
-
-		for _, f := range str.Fields {
-			fName := toLowerSnakeCase(f.Name)
-			switch f.Type.Kind {
-			case ast.TypeInt32:
-				sb.WriteString(fmt.Sprintf("    int32_t get_%s() const {\n", fName))
-				sb.WriteString(fmt.Sprintf("        size_t len = 0; int wt = 0;\n        const uint8_t* ptr = FastScanField(raw_, size_, %d, len, wt);\n", f.ID))
-				sb.WriteString("        size_t idx = 0;\n        return static_cast<int32_t>(ReadVarint(ptr, len, idx));\n    }\n\n")
-			case ast.TypeInt64:
-				sb.WriteString(fmt.Sprintf("    int64_t get_%s() const {\n", fName))
-				sb.WriteString(fmt.Sprintf("        size_t len = 0; int wt = 0;\n        const uint8_t* ptr = FastScanField(raw_, size_, %d, len, wt);\n", f.ID))
-				sb.WriteString("        size_t idx = 0;\n        return static_cast<int64_t>(ReadVarint(ptr, len, idx));\n    }\n\n")
-			case ast.TypeString:
-				sb.WriteString(fmt.Sprintf("    std::string_view get_%s() const {\n", fName))
-				sb.WriteString(fmt.Sprintf("        size_t len = 0; int wt = 0;\n        const uint8_t* ptr = FastScanField(raw_, size_, %d, len, wt);\n", f.ID))
-				sb.WriteString("        return std::string_view(reinterpret_cast<const char*>(ptr), len);\n    }\n\n")
+			for _, f := range str.Fields {
+				fName := toLowerSnakeCase(f.Name)
+				switch f.Type.Kind {
+				case ast.TypeInt32:
+					sb.WriteString(fmt.Sprintf("    int32_t get_%s() const {\n", fName))
+					sb.WriteString(fmt.Sprintf("        size_t len = 0; int wt = 0;\n        const uint8_t* ptr = FastScanField(raw_, size_, %d, len, wt);\n", f.ID))
+					sb.WriteString("        size_t idx = 0;\n        return static_cast<int32_t>(ReadVarint(ptr, len, idx));\n    }\n\n")
+				case ast.TypeInt64:
+					sb.WriteString(fmt.Sprintf("    int64_t get_%s() const {\n", fName))
+					sb.WriteString(fmt.Sprintf("        size_t len = 0; int wt = 0;\n        const uint8_t* ptr = FastScanField(raw_, size_, %d, len, wt);\n", f.ID))
+					sb.WriteString("        size_t idx = 0;\n        return static_cast<int64_t>(ReadVarint(ptr, len, idx));\n    }\n\n")
+				case ast.TypeString:
+					sb.WriteString(fmt.Sprintf("    std::string_view get_%s() const {\n", fName))
+					sb.WriteString(fmt.Sprintf("        size_t len = 0; int wt = 0;\n        const uint8_t* ptr = FastScanField(raw_, size_, %d, len, wt);\n", f.ID))
+					sb.WriteString("        return std::string_view(reinterpret_cast<const char*>(ptr), len);\n    }\n\n")
+				}
 			}
-		}
 
-		sb.WriteString("private:\n")
-		sb.WriteString("    const uint8_t* raw_;\n")
-		sb.WriteString("    size_t size_;\n")
-		sb.WriteString("};\n\n")
+			sb.WriteString("private:\n")
+			sb.WriteString("    const uint8_t* raw_;\n")
+			sb.WriteString("    size_t size_;\n")
+			sb.WriteString("};\n\n")
+		}
 	}
 
 	sb.WriteString("} // namespace helix\n")

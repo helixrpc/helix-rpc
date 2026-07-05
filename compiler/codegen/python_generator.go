@@ -279,149 +279,167 @@ func GeneratePython(parsed *ast.AST) (string, error) {
 		sb.WriteString("                elif wire_type == 2:\n")
 		sb.WriteString("                    _l, idx = _read_varint(raw, idx); idx += _l\n")
 		sb.WriteString("                elif wire_type == 5: idx += 4\n")
-		sb.WriteString("                elif wire_type == 1: idx += 8\n")
+			sb.WriteString("                elif wire_type == 1: idx += 8\n")
 		sb.WriteString(fmt.Sprintf("        return cls(\n"))
 		for _, f := range str.Fields {
 			sb.WriteString(fmt.Sprintf("            %s=val_%s,\n", f.Name, f.Name))
 		}
 		sb.WriteString("        )\n\n")
 
-		// Lazy class — field access triggers _fast_scan_field on demand
-		sb.WriteString(fmt.Sprintf("class Lazy%s:\n", str.Name))
-		sb.WriteString("    __slots__ = ('_raw',)\n")
-		sb.WriteString("    def __init__(self, raw: bytes) -> None:\n")
-		sb.WriteString("        self._raw = memoryview(raw)\n")
-		for fieldIdx, f := range str.Fields {
-			protoFieldNum := fieldIdx + 1
-			switch f.Type.Kind {
-			case ast.TypeInt32, ast.TypeInt64:
-				sb.WriteString(fmt.Sprintf("    def get_%s(self) -> int:\n", f.Name))
-				sb.WriteString(fmt.Sprintf("        b, _ = _fast_scan_field(self._raw, %d)\n", protoFieldNum))
-				sb.WriteString("        v, _ = _read_varint(b, 0)\n")
-				sb.WriteString("        return v\n")
-			case ast.TypeString:
-				sb.WriteString(fmt.Sprintf("    def get_%s(self) -> str:\n", f.Name))
-				sb.WriteString(fmt.Sprintf("        b, _ = _fast_scan_field(self._raw, %d)\n", protoFieldNum))
-				sb.WriteString("        return bytes(b).decode('utf-8')\n")
-			case ast.TypeBinary:
-				sb.WriteString(fmt.Sprintf("    def get_%s(self) -> bytes:\n", f.Name))
-				sb.WriteString(fmt.Sprintf("        b, _ = _fast_scan_field(self._raw, %d)\n", protoFieldNum))
-				sb.WriteString("        return bytes(b)\n")
-			case ast.TypeBool:
-				sb.WriteString(fmt.Sprintf("    def get_%s(self) -> bool:\n", f.Name))
-				sb.WriteString(fmt.Sprintf("        b, _ = _fast_scan_field(self._raw, %d)\n", protoFieldNum))
-				sb.WriteString("        v, _ = _read_varint(b, 0)\n")
-				sb.WriteString("        return bool(v)\n")
-			case ast.TypeDouble:
-				sb.WriteString(fmt.Sprintf("    def get_%s(self) -> float:\n", f.Name))
-				sb.WriteString(fmt.Sprintf("        b, _ = _fast_scan_field(self._raw, %d)\n", protoFieldNum))
-				sb.WriteString("        return _struct.unpack_from('<d', bytes(b))[0]\n")
-			default:
+		if str.HasFallback {
+			sb.WriteString(fmt.Sprintf("class Lazy%s:\n", str.Name))
+			sb.WriteString("    __slots__ = ('_decoded',)\n")
+			sb.WriteString("    def __init__(self, raw: bytes) -> None:\n")
+			sb.WriteString(fmt.Sprintf("        self._decoded = %s.from_proto(raw)\n", str.Name))
+			for _, f := range str.Fields {
 				sb.WriteString(fmt.Sprintf("    def get_%s(self):\n", f.Name))
-				sb.WriteString(fmt.Sprintf("        b, _ = _fast_scan_field(self._raw, %d)\n", protoFieldNum))
-				sb.WriteString("        return bytes(b)\n")
+				sb.WriteString(fmt.Sprintf("        return self._decoded.%s\n", f.Name))
 			}
-		}
-		sb.WriteString("\n")
+			sb.WriteString("\n")
+			sb.WriteString("    @classmethod\n")
+			sb.WriteString("    def transpile_protobuf_to_thrift_compact(cls, data: bytes) -> bytes:\n")
+			sb.WriteString("        raise NotImplementedError(\"Transpilation is unsupported for structs with complex fields.\")\n\n")
+		} else {
+			// Lazy class — field access triggers _fast_scan_field on demand
+			sb.WriteString(fmt.Sprintf("class Lazy%s:\n", str.Name))
+			sb.WriteString("    __slots__ = ('_raw',)\n")
+			sb.WriteString("    def __init__(self, raw: bytes) -> None:\n")
+			sb.WriteString("        self._raw = memoryview(raw)\n")
+			for fieldIdx, f := range str.Fields {
+				protoFieldNum := fieldIdx + 1
+				switch f.Type.Kind {
+				case ast.TypeInt32, ast.TypeInt64:
+					sb.WriteString(fmt.Sprintf("    def get_%s(self) -> int:\n", f.Name))
+					sb.WriteString(fmt.Sprintf("        b, _ = _fast_scan_field(self._raw, %d)\n", protoFieldNum))
+					sb.WriteString("        v, _ = _read_varint(b, 0)\n")
+					sb.WriteString("        return v\n")
+				case ast.TypeString:
+					sb.WriteString(fmt.Sprintf("    def get_%s(self) -> str:\n", f.Name))
+					sb.WriteString(fmt.Sprintf("        b, _ = _fast_scan_field(self._raw, %d)\n", protoFieldNum))
+					sb.WriteString("        return bytes(b).decode('utf-8')\n")
+				case ast.TypeBinary:
+					sb.WriteString(fmt.Sprintf("    def get_%s(self) -> bytes:\n", f.Name))
+					sb.WriteString(fmt.Sprintf("        b, _ = _fast_scan_field(self._raw, %d)\n", protoFieldNum))
+					sb.WriteString("        return bytes(b)\n")
+				case ast.TypeBool:
+					sb.WriteString(fmt.Sprintf("    def get_%s(self) -> bool:\n", f.Name))
+					sb.WriteString(fmt.Sprintf("        b, _ = _fast_scan_field(self._raw, %d)\n", protoFieldNum))
+					sb.WriteString("        v, _ = _read_varint(b, 0)\n")
+					sb.WriteString("        return v != 0\n")
+				default:
+					sb.WriteString(fmt.Sprintf("    def get_%s(self):\n", f.Name))
+					sb.WriteString(fmt.Sprintf("        b, _ = _fast_scan_field(self._raw, %d)\n", protoFieldNum))
+					sb.WriteString("        return bytes(b)\n")
+				}
+			}
+			sb.WriteString("\n")
 
-		// transpile_protobuf_to_thrift_compact classmethod
-		sb.WriteString(fmt.Sprintf("    @classmethod\n"))
-		sb.WriteString("    def transpile_protobuf_to_thrift_compact(cls, data: bytes) -> bytes:\n")
-		sb.WriteString("        raw = memoryview(data)\n")
-		sb.WriteString("        out = bytearray()\n")
-		for _, f := range str.Fields {
-			defaultVal := "0"
-			if f.Type.Kind == ast.TypeString || f.Type.Kind == ast.TypeBinary {
-				defaultVal = "None"
-			} else if f.Type.Kind == ast.TypeBool {
-				defaultVal = "False"
-			} else if f.Type.Kind == ast.TypeDouble {
-				defaultVal = "0.0"
-			}
-			sb.WriteString(fmt.Sprintf("        _f_%s = %s\n", f.Name, defaultVal))
-		}
-		sb.WriteString("        idx = 0\n")
-		sb.WriteString("        while idx < len(raw):\n")
-		sb.WriteString("            tag, idx = _read_varint(raw, idx)\n")
-		sb.WriteString("            field_num = tag >> 3\n")
-		sb.WriteString("            wire_type = tag & 0x7\n")
-		for fieldIdx, f := range str.Fields {
-			protoFieldNum := fieldIdx + 1
-			if fieldIdx == 0 {
-				sb.WriteString(fmt.Sprintf("            if field_num == %d:\n", protoFieldNum))
-			} else {
-				sb.WriteString(fmt.Sprintf("            elif field_num == %d:\n", protoFieldNum))
-			}
-			switch f.Type.Kind {
-			case ast.TypeInt32, ast.TypeInt64:
-				sb.WriteString(fmt.Sprintf("                _f_%s, idx = _read_varint(raw, idx)\n", f.Name))
-			case ast.TypeBool:
-				sb.WriteString(fmt.Sprintf("                _v, idx = _read_varint(raw, idx); _f_%s = bool(_v)\n", f.Name))
-			case ast.TypeDouble:
-				sb.WriteString(fmt.Sprintf("                _f_%s = _struct.unpack_from('<d', bytes(raw[idx:idx+8]))[0]; idx += 8\n", f.Name))
-			case ast.TypeString:
-				sb.WriteString(fmt.Sprintf("                _l, idx = _read_varint(raw, idx); _f_%s = bytes(raw[idx:idx+_l]).decode('utf-8'); idx += _l\n", f.Name))
-			case ast.TypeBinary:
-				sb.WriteString(fmt.Sprintf("                _l, idx = _read_varint(raw, idx); _f_%s = bytes(raw[idx:idx+_l]); idx += _l\n", f.Name))
-			default:
-				sb.WriteString("                _, idx = _read_varint(raw, idx)\n")
-			}
-		}
-		sb.WriteString("            else:\n")
-		sb.WriteString("                if wire_type == 0: _, idx = _read_varint(raw, idx)\n")
-		sb.WriteString("                elif wire_type == 2:\n")
-		sb.WriteString("                    _l, idx = _read_varint(raw, idx); idx += _l\n")
-		sb.WriteString("                elif wire_type == 5: idx += 4\n")
-		sb.WriteString("                elif wire_type == 1: idx += 8\n")
-		// Now emit Thrift Compact encoding
-		sb.WriteString("        prev_field = 0\n")
-		for fieldIdx, f := range str.Fields {
-			thriftFieldNum := fieldIdx + 1
-			switch f.Type.Kind {
-			case ast.TypeInt32, ast.TypeInt64:
-				// Thrift compact type=5 (i32 varint) or 6 (i64 varint), delta-encoded header
-				thriftType := 5
-				if f.Type.Kind == ast.TypeInt64 {
-					thriftType = 6
+			// transpile_protobuf_to_thrift_compact classmethod
+			sb.WriteString(fmt.Sprintf("    @classmethod\n"))
+			sb.WriteString("    def transpile_protobuf_to_thrift_compact(cls, data: bytes) -> bytes:\n")
+			sb.WriteString("        raw = memoryview(data)\n")
+			sb.WriteString("        out = bytearray()\n")
+			for _, f := range str.Fields {
+				defaultVal := "0"
+				if f.Type.Kind == ast.TypeString || f.Type.Kind == ast.TypeBinary {
+					defaultVal = "None"
+				} else if f.Type.Kind == ast.TypeBool {
+					defaultVal = "False"
+				} else if f.Type.Kind == ast.TypeDouble {
+					defaultVal = "0.0"
 				}
-				sb.WriteString(fmt.Sprintf("        _delta = %d - prev_field\n", thriftFieldNum))
-				sb.WriteString(fmt.Sprintf("        if 0 < _delta <= 15: out.append((_delta << 4) | %d)\n", thriftType))
-				sb.WriteString(fmt.Sprintf("        else: out.append(%d); _write_thrift_i16(out, %d)\n", thriftType, thriftFieldNum))
-				sb.WriteString(fmt.Sprintf("        _zz = (_f_%s << 1) ^ (_f_%s >> 63) if _f_%s < 0 else _f_%s << 1\n", f.Name, f.Name, f.Name, f.Name))
-				sb.WriteString("        _write_thrift_varint(out, _zz)\n")
-				sb.WriteString(fmt.Sprintf("        prev_field = %d\n", thriftFieldNum))
-			case ast.TypeString, ast.TypeBinary:
-				// Thrift compact type=8 (binary/string)
-				sb.WriteString(fmt.Sprintf("        if _f_%s is not None:\n", f.Name))
-				sb.WriteString(fmt.Sprintf("            _delta = %d - prev_field\n", thriftFieldNum))
-				sb.WriteString("            if 0 < _delta <= 15: out.append((_delta << 4) | 8)\n")
-				sb.WriteString(fmt.Sprintf("            else: out.append(8); _write_thrift_i16(out, %d)\n", thriftFieldNum))
-				if f.Type.Kind == ast.TypeString {
-					sb.WriteString(fmt.Sprintf("            _enc = _f_%s.encode('utf-8')\n", f.Name))
+				sb.WriteString(fmt.Sprintf("        _f_%s = %s\n", f.Name, defaultVal))
+			}
+			sb.WriteString("        idx = 0\n")
+			sb.WriteString("        while idx < len(raw):\n")
+			sb.WriteString("            tag, idx = _read_varint(raw, idx)\n")
+			sb.WriteString("            field_num = tag >> 3\n")
+			sb.WriteString("            wire_type = tag & 0x7\n")
+			for fieldIdx, f := range str.Fields {
+				protoFieldNum := fieldIdx + 1
+				if fieldIdx == 0 {
+					sb.WriteString(fmt.Sprintf("            if field_num == %d:\n", protoFieldNum))
 				} else {
-					sb.WriteString(fmt.Sprintf("            _enc = _f_%s\n", f.Name))
+					sb.WriteString(fmt.Sprintf("            elif field_num == %d:\n", protoFieldNum))
 				}
-				sb.WriteString("            _write_thrift_varint(out, len(_enc))\n")
-				sb.WriteString("            out.extend(_enc)\n")
-				sb.WriteString(fmt.Sprintf("            prev_field = %d\n", thriftFieldNum))
-			case ast.TypeBool:
-				// Thrift compact type=1 (true) or 2 (false)
-				sb.WriteString(fmt.Sprintf("        _delta = %d - prev_field\n", thriftFieldNum))
-				sb.WriteString(fmt.Sprintf("        _ttype = 1 if _f_%s else 2\n", f.Name))
-				sb.WriteString("        if 0 < _delta <= 15: out.append((_delta << 4) | _ttype)\n")
-				sb.WriteString(fmt.Sprintf("        else: out.append(_ttype); _write_thrift_i16(out, %d)\n", thriftFieldNum))
-				sb.WriteString(fmt.Sprintf("        prev_field = %d\n", thriftFieldNum))
-			case ast.TypeDouble:
-				// Thrift compact type=7 (double)
-				sb.WriteString(fmt.Sprintf("        _delta = %d - prev_field\n", thriftFieldNum))
-				sb.WriteString("        if 0 < _delta <= 15: out.append((_delta << 4) | 7)\n")
-				sb.WriteString(fmt.Sprintf("        else: out.append(7); _write_thrift_i16(out, %d)\n", thriftFieldNum))
-				sb.WriteString(fmt.Sprintf("        out.extend(_struct.pack('<d', _f_%s))\n", f.Name))
-				sb.WriteString(fmt.Sprintf("        prev_field = %d\n", thriftFieldNum))
+				switch f.Type.Kind {
+				case ast.TypeInt32, ast.TypeInt64:
+					sb.WriteString("                v, idx = _read_varint(raw, idx)\n")
+					sb.WriteString(fmt.Sprintf("                _f_%s = v\n", f.Name))
+				case ast.TypeString, ast.TypeBinary:
+					sb.WriteString("                _l, idx = _read_varint(raw, idx)\n")
+					sb.WriteString(fmt.Sprintf("                _f_%s = bytes(raw[idx:idx+_l])\n", f.Name))
+					sb.WriteString("                idx += _l\n")
+					if f.Type.Kind == ast.TypeString {
+						sb.WriteString(fmt.Sprintf("                _f_%s = _f_%s.decode('utf-8')\n", f.Name, f.Name))
+					}
+				case ast.TypeBool:
+					sb.WriteString("                v, idx = _read_varint(raw, idx)\n")
+					sb.WriteString(fmt.Sprintf("                _f_%s = (v != 0)\n", f.Name))
+				case ast.TypeDouble:
+					sb.WriteString(fmt.Sprintf("                _f_%s = _struct.unpack('<d', raw[idx:idx+8])[0]\n", f.Name))
+					sb.WriteString("                idx += 8\n")
+				}
 			}
+			sb.WriteString("            else:\n")
+			sb.WriteString("                if wire_type == 0: _, idx = _read_varint(raw, idx)\n")
+			sb.WriteString("                elif wire_type == 2:\n")
+			sb.WriteString("                    _l, idx = _read_varint(raw, idx); idx += _l\n")
+			sb.WriteString("                elif wire_type == 5: idx += 4\n")
+			sb.WriteString("                elif wire_type == 1: idx += 8\n")
+
+			sb.WriteString("        prev_field = 0\n")
+			for fieldIdx, f := range str.Fields {
+				thriftFieldNum := fieldIdx + 1
+				switch f.Type.Kind {
+				case ast.TypeInt32, ast.TypeInt64:
+					sb.WriteString(fmt.Sprintf("        _delta = %d - prev_field\n", thriftFieldNum))
+					ttype := 5
+					if f.Type.Kind == ast.TypeInt64 {
+						ttype = 6
+					}
+					sb.WriteString(fmt.Sprintf("        if 0 < _delta <= 15: out.append((_delta << 4) | %d)\n", ttype))
+					sb.WriteString(fmt.Sprintf("        else: out.append(%d); _write_thrift_i16(out, %d)\n", ttype, thriftFieldNum))
+					if f.Type.Kind == ast.TypeInt32 {
+						sb.WriteString(fmt.Sprintf("        _zz = (_f_%s << 1) ^ (_f_%s >> 31) if _f_%s < 0 else _f_%s << 1\n", f.Name, f.Name, f.Name, f.Name))
+					} else {
+						sb.WriteString(fmt.Sprintf("        _zz = (_f_%s << 1) ^ (_f_%s >> 63) if _f_%s < 0 else _f_%s << 1\n", f.Name, f.Name, f.Name, f.Name))
+					}
+					sb.WriteString("        _write_thrift_varint(out, _zz)\n")
+					sb.WriteString(fmt.Sprintf("        prev_field = %d\n", thriftFieldNum))
+				case ast.TypeString, ast.TypeBinary:
+					// Thrift compact type=8 (binary/string)
+					sb.WriteString(fmt.Sprintf("        if _f_%s is not None:\n", f.Name))
+					sb.WriteString(fmt.Sprintf("            _delta = %d - prev_field\n", thriftFieldNum))
+					sb.WriteString("            if 0 < _delta <= 15: out.append((_delta << 4) | 8)\n")
+					sb.WriteString(fmt.Sprintf("            else: out.append(8); _write_thrift_i16(out, %d)\n", thriftFieldNum))
+					if f.Type.Kind == ast.TypeString {
+						sb.WriteString(fmt.Sprintf("            _enc = _f_%s.encode('utf-8')\n", f.Name))
+					} else {
+						sb.WriteString(fmt.Sprintf("            _enc = _f_%s\n", f.Name))
+					}
+					sb.WriteString("            _write_thrift_varint(out, len(_enc))\n")
+					sb.WriteString("            out.extend(_enc)\n")
+					sb.WriteString(fmt.Sprintf("            prev_field = %d\n", thriftFieldNum))
+				case ast.TypeBool:
+					// Thrift compact type=1 (true) or 2 (false)
+					sb.WriteString(fmt.Sprintf("        _delta = %d - prev_field\n", thriftFieldNum))
+					sb.WriteString(fmt.Sprintf("        _ttype = 1 if _f_%s else 2\n", f.Name))
+					sb.WriteString("        if 0 < _delta <= 15: out.append((_delta << 4) | _ttype)\n")
+					sb.WriteString(fmt.Sprintf("        else: out.append(_ttype); _write_thrift_i16(out, %d)\n", thriftFieldNum))
+					sb.WriteString(fmt.Sprintf("        prev_field = %d\n", thriftFieldNum))
+				case ast.TypeDouble:
+					// Thrift compact type=7 (double)
+					sb.WriteString(fmt.Sprintf("        _delta = %d - prev_field\n", thriftFieldNum))
+					sb.WriteString("        if 0 < _delta <= 15: out.append((_delta << 4) | 7)\n")
+					sb.WriteString(fmt.Sprintf("        else: out.append(7); _write_thrift_i16(out, %d)\n", thriftFieldNum))
+					sb.WriteString(fmt.Sprintf("        out.extend(_struct.pack('<d', _f_%s))\n", f.Name))
+					sb.WriteString(fmt.Sprintf("        prev_field = %d\n", thriftFieldNum))
+				}
+			}
+			sb.WriteString("        out.append(0x00)  # Thrift STOP byte\n")
+			sb.WriteString("        return bytes(out)\n\n")
 		}
-		sb.WriteString("        out.append(0x00)  # Thrift STOP byte\n")
-		sb.WriteString("        return bytes(out)\n\n")
 	}
 
 	// Generate Service ABCs

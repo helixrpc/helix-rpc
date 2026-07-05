@@ -36,8 +36,9 @@ type FieldNode struct {
 
 // StructNode represents a data structure.
 type StructNode struct {
-	Name   string
-	Fields []*FieldNode
+	Name        string
+	Fields      []*FieldNode
+	HasFallback bool
 }
 
 // EnumNode represents a sequence of key-value integer enums.

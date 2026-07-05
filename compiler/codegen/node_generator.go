@@ -237,109 +237,126 @@ function fastScanField(buf: Uint8Array, targetFieldNum: number): [Uint8Array, nu
 		sb.WriteString("        return result;\n")
 		sb.WriteString("    }\n")
 
-		// -----------------------------------------------------------------------
-		// transpileProtobufToThriftCompact static method
-		// -----------------------------------------------------------------------
-		sb.WriteString("\n    public static transpileProtobufToThriftCompact(input: Uint8Array): Uint8Array {\n")
-		sb.WriteString("        const out: number[] = [];\n")
-		sb.WriteString("        let idx = 0;\n")
-		sb.WriteString("        let lastField = 0;\n")
-		sb.WriteString("        while (idx < input.length) {\n")
-		sb.WriteString("            const [tag, ni] = readVarint(input, idx); idx = ni;\n")
-		sb.WriteString("            const fieldNum = Number(tag >> BigInt(3));\n")
-		sb.WriteString("            const wireType = Number(tag & BigInt(7));\n")
-		sb.WriteString("            switch (fieldNum) {\n")
+		if str.HasFallback {
+			sb.WriteString("\n    public static transpileProtobufToThriftCompact(input: Uint8Array): Uint8Array {\n")
+			sb.WriteString("        throw new Error(\"Transpilation is unsupported for structs with complex fields.\");\n")
+			sb.WriteString("    }\n")
+			sb.WriteString("}\n\n")
 
-		for _, f := range str.Fields {
-			fieldID := int(f.ID)
-			sb.WriteString(fmt.Sprintf("                case %d: {\n", fieldID))
-			switch f.Type.Kind {
-			case ast.TypeInt64:
-				sb.WriteString("                    const [rawVal, ni2] = readVarint(input, idx); idx = ni2;\n")
-				sb.WriteString(fmt.Sprintf("                    const delta%d = %d - lastField;\n", fieldID, fieldID))
-				sb.WriteString(fmt.Sprintf("                    if (delta%d > 0 && delta%d <= 15) {\n", fieldID, fieldID))
-				sb.WriteString(fmt.Sprintf("                        out.push((delta%d << 4) | 0x06);\n", fieldID))
-				sb.WriteString("                    } else {\n")
-				sb.WriteString("                        out.push(0x06);\n")
-				sb.WriteString(fmt.Sprintf("                        writeThriftI16(out, %d);\n", fieldID))
-				sb.WriteString("                    }\n")
-				// zigzag64
-				sb.WriteString("                    const zz = (rawVal << BigInt(1)) ^ (rawVal >> BigInt(63));\n")
-				sb.WriteString("                    writeThriftVarint(out, zz);\n")
-				sb.WriteString(fmt.Sprintf("                    lastField = %d;\n", fieldID))
-			case ast.TypeInt32:
-				sb.WriteString("                    const [rawVal, ni2] = readVarint(input, idx); idx = ni2;\n")
-				sb.WriteString(fmt.Sprintf("                    const delta%d = %d - lastField;\n", fieldID, fieldID))
-				sb.WriteString(fmt.Sprintf("                    if (delta%d > 0 && delta%d <= 15) {\n", fieldID, fieldID))
-				sb.WriteString(fmt.Sprintf("                        out.push((delta%d << 4) | 0x05);\n", fieldID))
-				sb.WriteString("                    } else {\n")
-				sb.WriteString("                        out.push(0x05);\n")
-				sb.WriteString(fmt.Sprintf("                        writeThriftI16(out, %d);\n", fieldID))
-				sb.WriteString("                    }\n")
-				// zigzag32
-				sb.WriteString("                    const n32 = Number(rawVal);\n")
-				sb.WriteString("                    const zz32 = BigInt((n32 << 1) ^ (n32 >> 31));\n")
-				sb.WriteString("                    writeThriftVarint(out, zz32);\n")
-				sb.WriteString(fmt.Sprintf("                    lastField = %d;\n", fieldID))
-			case ast.TypeString:
-				sb.WriteString("                    const [strLen, ni2] = readVarint(input, idx); idx = ni2;\n")
-				sb.WriteString("                    const strBytes = input.subarray(idx, idx + Number(strLen)); idx += Number(strLen);\n")
-				sb.WriteString(fmt.Sprintf("                    const delta%d = %d - lastField;\n", fieldID, fieldID))
-				sb.WriteString(fmt.Sprintf("                    if (delta%d > 0 && delta%d <= 15) {\n", fieldID, fieldID))
-				sb.WriteString(fmt.Sprintf("                        out.push((delta%d << 4) | 0x08);\n", fieldID))
-				sb.WriteString("                    } else {\n")
-				sb.WriteString("                        out.push(0x08);\n")
-				sb.WriteString(fmt.Sprintf("                        writeThriftI16(out, %d);\n", fieldID))
-				sb.WriteString("                    }\n")
-				sb.WriteString("                    writeThriftVarint(out, strLen);\n")
-				sb.WriteString("                    for (let i = 0; i < strBytes.length; i++) out.push(strBytes[i]);\n")
-				sb.WriteString(fmt.Sprintf("                    lastField = %d;\n", fieldID))
-			default:
-				// Skip unsupported wire types
-				sb.WriteString("                    if (wireType === 0) { const [, ni2] = readVarint(input, idx); idx = ni2; }\n")
-				sb.WriteString("                    else if (wireType === 2) { const [l, ni2] = readVarint(input, idx); idx = ni2 + Number(l); }\n")
+			sb.WriteString(fmt.Sprintf("export class Lazy%s {\n", str.Name))
+			sb.WriteString(fmt.Sprintf("    private readonly decoded: %s;\n", str.Name))
+			sb.WriteString(fmt.Sprintf("    constructor(raw: Uint8Array) { this.decoded = %s.unmarshalProtobuf(raw); }\n", str.Name))
+			for _, f := range str.Fields {
+				fName := toJSFieldName(f.Name)
+				getterName := "get" + strings.Title(fName)
+				sb.WriteString(fmt.Sprintf("    %s(): any { return this.decoded.%s; }\n", getterName, fName))
 			}
+			sb.WriteString("}\n\n")
+		} else {
+			// -----------------------------------------------------------------------
+			// transpileProtobufToThriftCompact static method
+			// -----------------------------------------------------------------------
+			sb.WriteString("\n    public static transpileProtobufToThriftCompact(input: Uint8Array): Uint8Array {\n")
+			sb.WriteString("        const out: number[] = [];\n")
+			sb.WriteString("        let idx = 0;\n")
+			sb.WriteString("        let lastField = 0;\n")
+			sb.WriteString("        while (idx < input.length) {\n")
+			sb.WriteString("            const [tag, ni] = readVarint(input, idx); idx = ni;\n")
+			sb.WriteString("            const fieldNum = Number(tag >> BigInt(3));\n")
+			sb.WriteString("            const wireType = Number(tag & BigInt(7));\n")
+			sb.WriteString("            switch (fieldNum) {\n")
+
+			for _, f := range str.Fields {
+				fieldID := int(f.ID)
+				sb.WriteString(fmt.Sprintf("                case %d: {\n", fieldID))
+				switch f.Type.Kind {
+				case ast.TypeInt64:
+					sb.WriteString("                    const [rawVal, ni2] = readVarint(input, idx); idx = ni2;\n")
+					sb.WriteString(fmt.Sprintf("                    const delta%d = %d - lastField;\n", fieldID, fieldID))
+					sb.WriteString(fmt.Sprintf("                    if (delta%d > 0 && delta%d <= 15) {\n", fieldID, fieldID))
+					sb.WriteString(fmt.Sprintf("                        out.push((delta%d << 4) | 0x06);\n", fieldID))
+					sb.WriteString("                    } else {\n")
+					sb.WriteString("                        out.push(0x06);\n")
+					sb.WriteString(fmt.Sprintf("                        writeThriftI16(out, %d);\n", fieldID))
+					sb.WriteString("                    }\n")
+					// zigzag64
+					sb.WriteString("                    const zz = (rawVal << BigInt(1)) ^ (rawVal >> BigInt(63));\n")
+					sb.WriteString("                    writeThriftVarint(out, zz);\n")
+					sb.WriteString(fmt.Sprintf("                    lastField = %d;\n", fieldID))
+				case ast.TypeInt32:
+					sb.WriteString("                    const [rawVal, ni2] = readVarint(input, idx); idx = ni2;\n")
+					sb.WriteString(fmt.Sprintf("                    const delta%d = %d - lastField;\n", fieldID, fieldID))
+					sb.WriteString(fmt.Sprintf("                    if (delta%d > 0 && delta%d <= 15) {\n", fieldID, fieldID))
+					sb.WriteString(fmt.Sprintf("                        out.push((delta%d << 4) | 0x05);\n", fieldID))
+					sb.WriteString("                    } else {\n")
+					sb.WriteString("                        out.push(0x05);\n")
+					sb.WriteString(fmt.Sprintf("                        writeThriftI16(out, %d);\n", fieldID))
+					sb.WriteString("                    }\n")
+					// zigzag32
+					sb.WriteString("                    const zz = (rawVal << 1) ^ (rawVal >> 31);\n")
+					sb.WriteString("                    writeThriftVarint(out, BigInt(zz));\n")
+					sb.WriteString(fmt.Sprintf("                    lastField = %d;\n", fieldID))
+				case ast.TypeString:
+					sb.WriteString("                    const [len, ni2] = readVarint(input, idx); idx = ni2;\n")
+					sb.WriteString("                    const strVal = input.subarray(idx, idx + Number(len)); idx += Number(len);\n")
+					sb.WriteString(fmt.Sprintf("                    const delta%d = %d - lastField;\n", fieldID, fieldID))
+					sb.WriteString(fmt.Sprintf("                    if (delta%d > 0 && delta%d <= 15) {\n", fieldID, fieldID))
+					sb.WriteString(fmt.Sprintf("                        out.push((delta%d << 4) | 0x08);\n", fieldID))
+					sb.WriteString("                    } else {\n")
+					sb.WriteString("                        out.push(0x08);\n")
+					sb.WriteString(fmt.Sprintf("                        writeThriftI16(out, %d);\n", fieldID))
+					sb.WriteString("                    }\n")
+					sb.WriteString("                    writeThriftVarint(out, len);\n")
+					sb.WriteString("                    const strBytes = Array.from(strVal);\n")
+					sb.WriteString("                    for (let i = 0; i < strBytes.length; i++) out.push(strBytes[i]);\n")
+					sb.WriteString(fmt.Sprintf("                    lastField = %d;\n", fieldID))
+				default:
+					// Skip unsupported wire types
+					sb.WriteString("                    if (wireType === 0) { const [, ni2] = readVarint(input, idx); idx = ni2; }\n")
+					sb.WriteString("                    else if (wireType === 2) { const [l, ni2] = readVarint(input, idx); idx = ni2 + Number(l); }\n")
+				}
+				sb.WriteString("                    break;\n")
+				sb.WriteString("                }\n")
+			}
+
+			sb.WriteString("                default:\n")
+			sb.WriteString("                    if (wireType === 0) { const [, ni2] = readVarint(input, idx); idx = ni2; }\n")
+			sb.WriteString("                    else if (wireType === 2) { const [l, ni2] = readVarint(input, idx); idx = ni2 + Number(l); }\n")
 			sb.WriteString("                    break;\n")
-			sb.WriteString("                }\n")
-		}
+			sb.WriteString("            }\n")
+			sb.WriteString("        }\n")
+			sb.WriteString("        out.push(0); // Thrift STOP\n")
+			sb.WriteString("        return new Uint8Array(out);\n")
+			sb.WriteString("    }\n")
 
-		sb.WriteString("                default:\n")
-		sb.WriteString("                    if (wireType === 0) { const [, ni2] = readVarint(input, idx); idx = ni2; }\n")
-		sb.WriteString("                    else if (wireType === 2) { const [l, ni2] = readVarint(input, idx); idx = ni2 + Number(l); }\n")
-		sb.WriteString("                    break;\n")
-		sb.WriteString("            }\n")
-		sb.WriteString("        }\n")
-		sb.WriteString("        out.push(0); // Thrift STOP\n")
-		sb.WriteString("        return new Uint8Array(out);\n")
-		sb.WriteString("    }\n")
+			// Close the main class
+			sb.WriteString("}\n\n")
 
-		// Close the main class
-		sb.WriteString("}\n\n")
+			// -----------------------------------------------------------------------
+			// LazyXxx class — zero-copy protobuf field access
+			// -----------------------------------------------------------------------
+			sb.WriteString(fmt.Sprintf("export class Lazy%s {\n", str.Name))
+			sb.WriteString("    private readonly raw: Uint8Array;\n")
+			sb.WriteString("    constructor(raw: Uint8Array) { this.raw = raw; }\n")
 
-		// -----------------------------------------------------------------------
-		// LazyXxx class — zero-copy protobuf field access
-		// -----------------------------------------------------------------------
-		sb.WriteString(fmt.Sprintf("export class Lazy%s {\n", str.Name))
-		sb.WriteString("    private readonly raw: Uint8Array;\n")
-		sb.WriteString("    constructor(raw: Uint8Array) { this.raw = raw; }\n")
-
-		for _, f := range str.Fields {
-			fName := toJSFieldName(f.Name)
-			getterName := "get" + strings.Title(fName)
-			fieldID := int(f.ID)
-			switch f.Type.Kind {
-			case ast.TypeInt32, ast.TypeInt64:
-				sb.WriteString(fmt.Sprintf("    %s(): number { const [b,] = fastScanField(this.raw, %d); const [v,] = readVarint(b, 0); return Number(v); }\n", getterName, fieldID))
-			case ast.TypeString:
-				sb.WriteString(fmt.Sprintf("    %s(): string { const [b,] = fastScanField(this.raw, %d); return new TextDecoder().decode(b); }\n", getterName, fieldID))
-			case ast.TypeBool:
-				sb.WriteString(fmt.Sprintf("    %s(): boolean { const [b,] = fastScanField(this.raw, %d); const [v,] = readVarint(b, 0); return Number(v) !== 0; }\n", getterName, fieldID))
-			default:
-				sb.WriteString(fmt.Sprintf("    %s(): Uint8Array { const [b,] = fastScanField(this.raw, %d); return b; }\n", getterName, fieldID))
+			for _, f := range str.Fields {
+				fName := toJSFieldName(f.Name)
+				getterName := "get" + strings.Title(fName)
+				fieldID := int(f.ID)
+				switch f.Type.Kind {
+				case ast.TypeInt32, ast.TypeInt64:
+					sb.WriteString(fmt.Sprintf("    %s(): number { const [b,] = fastScanField(this.raw, %d); const [v,] = readVarint(b, 0); return Number(v); }\n", getterName, fieldID))
+				case ast.TypeString:
+					sb.WriteString(fmt.Sprintf("    %s(): string { const [b,] = fastScanField(this.raw, %d); return new TextDecoder().decode(b); }\n", getterName, fieldID))
+				case ast.TypeBool:
+					sb.WriteString(fmt.Sprintf("    %s(): boolean { const [b,] = fastScanField(this.raw, %d); const [v,] = readVarint(b, 0); return Number(v) !== 0; }\n", getterName, fieldID))
+				default:
+					sb.WriteString(fmt.Sprintf("    %s(): Uint8Array { const [b,] = fastScanField(this.raw, %d); return b; }\n", getterName, fieldID))
+				}
 			}
-		}
 
-		sb.WriteString("}\n\n")
+			sb.WriteString("}\n\n")
+		}
 	}
 
 	return sb.String(), nil
