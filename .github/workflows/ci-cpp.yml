@@ -1,0 +1,30 @@
+name: C++ CI
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'runtimes/cpp/**'
+      - '.github/workflows/ci-cpp.yml'
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - 'runtimes/cpp/**'
+      - '.github/workflows/ci-cpp.yml'
+
+jobs:
+  cpp-tests:
+    name: C++ Compilation & Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Build Tools
+        run: sudo apt-get update && sudo apt-get install -y build-essential g++
+
+      - name: Build & Run C++ Tests
+        working-directory: ./runtimes/cpp
+        run: |
+          mkdir -p tests
+          g++ -std=c++17 -I./include ./tests/test_runtime.cpp -o ./tests/test_runtime
+          ./tests/test_runtime

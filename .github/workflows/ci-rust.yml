@@ -1,0 +1,33 @@
+name: Rust CI
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'runtimes/rust/**'
+      - '.github/workflows/ci-rust.yml'
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - 'runtimes/rust/**'
+      - '.github/workflows/ci-rust.yml'
+
+jobs:
+  rust-tests:
+    name: Rust Clippy & Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Rust (Stable)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Rust Runtime Clippy Check
+        working-directory: ./runtimes/rust
+        run: cargo clippy -- -D warnings
+
+      - name: Rust Runtime Tests
+        working-directory: ./runtimes/rust
+        run: cargo test

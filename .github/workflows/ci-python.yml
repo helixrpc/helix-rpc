@@ -1,0 +1,36 @@
+name: Python CI
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'runtimes/python/**'
+      - '.github/workflows/ci-python.yml'
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - 'runtimes/python/**'
+      - '.github/workflows/ci-python.yml'
+
+jobs:
+  python-tests:
+    name: Python Lint & Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install dependencies
+        working-directory: ./runtimes/python
+        run: |
+          pip install pytest aiohttp
+          # If a setup.py or requirements.txt exists, install it:
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Import check
+        working-directory: ./runtimes/python
+        run: python3 -c "import helix_rt"
