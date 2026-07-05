@@ -11,7 +11,9 @@ pub mod metadata;
 pub mod retry;
 pub mod server;
 pub mod sniffer;
+pub mod quic_transport;
 
+pub use quic_transport::{QuicListener, QuicStream};
 pub use client_pool::{AnyStream, Balancer, ClientConnPool, RoundRobinBalancer, ConsistentHashBalancer};
 pub use errors::{ErrorCode, HelixError};
 pub use metadata::get_metadata;

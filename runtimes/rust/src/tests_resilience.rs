@@ -412,5 +412,48 @@ mod resilience_tests {
             assert_eq!(choice, choice2);
         }
     }
+
+    #[tokio::test]
+    async fn test_quic_transport() {
+        use crate::quic_transport::QuicListener;
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        use tokio::net::UdpSocket;
+
+        let addr: std::net::SocketAddr = "127.0.0.1:0".parse().unwrap();
+        let (listener, mut rx) = QuicListener::bind(addr).await.unwrap();
+        let bound_addr = listener.local_addr().unwrap();
+
+        // Start server accept in background task
+        let server_handle = tokio::spawn(async move {
+            let mut stream = rx.recv().await.unwrap();
+            let mut buf = vec![0u8; 1024];
+            let n = stream.read(&mut buf).await.unwrap();
+            assert_eq!(&buf[..n], b"hello-from-udp-client");
+            stream.write_all(b"hello-from-udp-server").await.unwrap();
+        });
+
+        // Client dials UDP
+        let client_socket = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+        client_socket.connect(bound_addr).await.unwrap();
+
+        // Write virtual stream packet (Stream ID = 42)
+        let payload = b"hello-from-udp-client";
+        let mut packet = Vec::with_capacity(4 + payload.len());
+        packet.extend_from_slice(&42u32.to_be_bytes());
+        packet.extend_from_slice(payload);
+
+        client_socket.send(&packet).await.unwrap();
+
+        // Wait for server accept and processing
+        server_handle.await.unwrap();
+
+        // Client reads response packet
+        let mut resp_buf = vec![0u8; 1024];
+        let n = client_socket.recv(&mut resp_buf).await.unwrap();
+        assert!(n >= 4);
+        let stream_id = u32::from_be_bytes([resp_buf[0], resp_buf[1], resp_buf[2], resp_buf[3]]);
+        assert_eq!(stream_id, 42);
+        assert_eq!(&resp_buf[4..n], b"hello-from-udp-server");
+    }
 }
 
