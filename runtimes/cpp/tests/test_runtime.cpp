@@ -6,6 +6,7 @@
 #include "helix/quic_transport.h"
 #include "helix/gateway.h"
 #include "helix/multiplexer.h"
+#include "helix/tensor.h"
 #include <iostream>
 #include <cassert>
 
@@ -112,6 +113,30 @@ void TestMultiplexer() {
     std::cout << "✓ TestMultiplexer passed (bound on port " << port << ")!" << std::endl;
 }
 
+void TestTensor() {
+    helix::Tensor t;
+    t.dtype = "float32";
+    t.shape = {1, 4};
+    
+    // Allocate space for 4 floats
+    t.data.resize(4 * sizeof(float));
+    float* raw = reinterpret_cast<float*>(t.data.data());
+    raw[0] = 1.0f;
+    raw[1] = 2.0f;
+    raw[2] = 3.0f;
+    raw[3] = 4.0f;
+
+    // Verify zero-copy retrieval
+    const float* data = helix::GetTensorData<float>(t);
+    assert(data != nullptr);
+    assert(data[0] == 1.0f);
+    assert(data[1] == 2.0f);
+    assert(data[2] == 3.0f);
+    assert(data[3] == 4.0f);
+
+    std::cout << "✓ TestTensor passed!" << std::endl;
+}
+
 int main() {
     TestConsistentHashBalancer();
     TestSniffer();
@@ -121,6 +146,7 @@ int main() {
     TestQuicTransport();
     TestGateway();
     TestMultiplexer();
+    TestTensor();
     std::cout << "All C++ Parity tests passed successfully!" << std::endl;
     return 0;
 }
