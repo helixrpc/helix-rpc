@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"encoding/base64"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -268,6 +269,13 @@ func (h *GRPCHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	contentType := r.Header.Get("Content-Type")
 	grpcEncoding := r.Header.Get("grpc-encoding")
 
+	isGrpcWebText := strings.Contains(contentType, "application/grpc-web-text")
+	isGrpcWeb := isGrpcWebText || strings.Contains(contentType, "application/grpc-web")
+
+	if isGrpcWebText {
+		r.Body = io.NopCloser(base64.NewDecoder(base64.StdEncoding, r.Body))
+	}
+
 	// If HTTP/1.1 REST is caller, default to application/json if Content-Type is missing
 	if contentType == "" {
 		contentType = "application/json"
@@ -416,6 +424,10 @@ func (h *GRPCHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	req, err := methodInfo.Decoder(dec)
 	if err != nil {
+		if isGrpcWeb {
+			h.writeGrpcWebError(w, isGrpcWebText, "3", err.Error())
+			return
+		}
 		w.Header().Set("grpc-status", "3") // INVALID_ARGUMENT
 		w.Header().Set("grpc-message", err.Error())
 		w.WriteHeader(http.StatusOK)
@@ -431,6 +443,10 @@ func (h *GRPCHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil {
+		if isGrpcWeb {
+			h.writeGrpcWebError(w, isGrpcWebText, "13", err.Error())
+			return
+		}
 		w.Header().Set("grpc-status", "13") // INTERNAL
 		w.Header().Set("grpc-message", err.Error())
 		w.WriteHeader(http.StatusOK)
@@ -439,14 +455,23 @@ func (h *GRPCHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	marshaler, ok := resp.(ProtoMarshaler)
 	if !ok {
+		errStr := "response does not implement ProtoMarshaler"
+		if isGrpcWeb {
+			h.writeGrpcWebError(w, isGrpcWebText, "13", errStr)
+			return
+		}
 		w.Header().Set("grpc-status", "13")
-		w.Header().Set("grpc-message", "response does not implement ProtoMarshaler")
+		w.Header().Set("grpc-message", errStr)
 		w.WriteHeader(http.StatusOK)
 		return
 	}
 
 	payload, err := marshaler.Marshal()
 	if err != nil {
+		if isGrpcWeb {
+			h.writeGrpcWebError(w, isGrpcWebText, "13", err.Error())
+			return
+		}
 		w.Header().Set("grpc-status", "13")
 		w.Header().Set("grpc-message", err.Error())
 		w.WriteHeader(http.StatusOK)
@@ -475,6 +500,38 @@ func (h *GRPCHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	_, _ = buf.Write(header[:])
 	_, _ = buf.Write(respPayload)
 
+	if isGrpcWeb {
+		var respContentType string
+		if isGrpcWebText {
+			respContentType = "application/grpc-web-text"
+		} else {
+			respContentType = "application/grpc-web"
+		}
+		w.Header().Set("Content-Type", respContentType)
+		if compressFlag == 1 {
+			w.Header().Set("grpc-encoding", grpcEncoding)
+		}
+
+		trailersStr := "grpc-status: 0\r\ngrpc-message: \r\n"
+		trailersHeader := make([]byte, 5)
+		trailersHeader[0] = 0x80
+		binary.BigEndian.PutUint32(trailersHeader[1:5], uint32(len(trailersStr)))
+		_, _ = buf.Write(trailersHeader)
+		_, _ = buf.Write([]byte(trailersStr))
+
+		var outBytes []byte
+		if isGrpcWebText {
+			encodedLen := base64.StdEncoding.EncodedLen(buf.Len())
+			outBytes = make([]byte, encodedLen)
+			base64.StdEncoding.Encode(outBytes, buf.Bytes())
+		} else {
+			outBytes = buf.Bytes()
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(outBytes)
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/grpc")
 	if compressFlag == 1 {
 		w.Header().Set("grpc-encoding", grpcEncoding)
@@ -483,6 +540,37 @@ func (h *GRPCHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 
 	_, _ = w.Write(buf.Bytes())
+}
+
+func (h *GRPCHandler) writeGrpcWebError(w http.ResponseWriter, isGrpcWebText bool, status string, msg string) {
+	var respContentType string
+	if isGrpcWebText {
+		respContentType = "application/grpc-web-text"
+	} else {
+		respContentType = "application/grpc-web"
+	}
+	w.Header().Set("Content-Type", respContentType)
+	trailersStr := fmt.Sprintf("grpc-status: %s\r\ngrpc-message: %s\r\n", status, msg)
+	trailersHeader := make([]byte, 5)
+	trailersHeader[0] = 0x80
+	binary.BigEndian.PutUint32(trailersHeader[1:5], uint32(len(trailersStr)))
+
+	buf := responseBufferPool.Get().(*bytes.Buffer)
+	buf.Reset()
+	defer responseBufferPool.Put(buf)
+	_, _ = buf.Write(trailersHeader)
+	_, _ = buf.Write([]byte(trailersStr))
+
+	var outBytes []byte
+	if isGrpcWebText {
+		encodedLen := base64.StdEncoding.EncodedLen(buf.Len())
+		outBytes = make([]byte, encodedLen)
+		base64.StdEncoding.Encode(outBytes, buf.Bytes())
+	} else {
+		outBytes = buf.Bytes()
+	}
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(outBytes)
 }
 
 func matchREST(method, path string, routes []RESTRoute) (*RESTRoute, map[string]string) {

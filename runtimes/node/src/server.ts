@@ -145,6 +145,149 @@ export class HelixServer {
             return;
         }
 
+        const contentType = req.headers['content-type'] || '';
+        const isGrpcWebText = contentType.startsWith('application/grpc-web-text');
+        const isGrpcWeb = isGrpcWebText || contentType.startsWith('application/grpc-web');
+
+        if (isGrpcWeb) {
+            const methodInfo = this.methods.get(path);
+            if (!methodInfo) {
+                const respContentType = isGrpcWebText ? 'application/grpc-web-text' : 'application/grpc-web';
+                const trailersStr = 'grpc-status: 12\r\ngrpc-message: unimplemented\r\n';
+                const trailersPayload = Buffer.from(trailersStr, 'ascii');
+                const trailersHeader = Buffer.alloc(5);
+                trailersHeader[0] = 0x80;
+                trailersHeader.writeUInt32BE(trailersPayload.length, 1);
+                const trailersFrame = Buffer.concat([trailersHeader, trailersPayload]);
+                
+                let responseBody: Buffer | string = trailersFrame;
+                if (isGrpcWebText) {
+                    responseBody = trailersFrame.toString('base64');
+                }
+                res.writeHead(200, { 'Content-Type': respContentType });
+                res.end(responseBody);
+                return;
+            }
+
+            const chunks: Buffer[] = [];
+            let totalLength = 0;
+            req.on('data', chunk => {
+                chunks.push(chunk);
+                totalLength += chunk.length;
+            });
+            req.on('end', async () => {
+                try {
+                    let bodyBytes: Buffer;
+                    if (isGrpcWebText) {
+                        const fullBuf = Buffer.concat(chunks);
+                        bodyBytes = Buffer.from(fullBuf.toString('utf8'), 'base64');
+                    } else {
+                        bodyBytes = Buffer.concat(chunks);
+                    }
+
+                    if (bodyBytes.length < 5) {
+                        throw new Error('grpc frame too small');
+                    }
+                    const compressedFlag = bodyBytes[0];
+                    const len = bodyBytes.readUInt32BE(1);
+                    let payload = bodyBytes.subarray(5, 5 + len);
+
+                    if (compressedFlag === 1) {
+                        payload = zlib.gunzipSync(payload);
+                    }
+
+                    let decodedReq: any;
+                    if (payload[0] === 4) {
+                        decodedReq = methodInfo.Decoder((target: any) => {
+                            if (target.constructor && typeof target.constructor.unmarshalFlatBuffers === 'function') {
+                                Object.assign(target, target.constructor.unmarshalFlatBuffers(new Uint8Array(payload)));
+                            }
+                        });
+                    } else {
+                        const str = payload.toString('utf8');
+                        const json = str ? JSON.parse(str) : {};
+                        decodedReq = methodInfo.Decoder((target: any) => {
+                            Object.assign(target, json);
+                        });
+                    }
+
+                    const traceId = getOrCreateTraceId(req.headers);
+                    globalRegistry.recordRequest(path);
+                    const startTime = Date.now();
+
+                    const resp = await methodInfo.Handler({ traceId }, decodedReq);
+
+                    const duration = Date.now() - startTime;
+                    globalRegistry.recordLatency(path, duration);
+                    logStructured('INFO', 'gRPC-Web request processed', {
+                        method: path,
+                        latencyMs: duration,
+                        traceId
+                    });
+
+                    let respBytes: Uint8Array;
+                    if (resp.marshalFlatBuffers && typeof resp.marshalFlatBuffers === 'function') {
+                        respBytes = resp.marshalFlatBuffers();
+                    } else {
+                        const respStr = JSON.stringify(resp);
+                        respBytes = Buffer.from(respStr, 'utf8');
+                    }
+
+                    let finalBytes = respBytes;
+                    let finalCompressed = 0;
+                    if (req.headers['grpc-accept-encoding'] && req.headers['grpc-accept-encoding'].toString().includes('gzip')) {
+                        finalBytes = zlib.gzipSync(respBytes);
+                        finalCompressed = 1;
+                    }
+
+                    const messageHeader = Buffer.alloc(5);
+                    messageHeader[0] = finalCompressed;
+                    messageHeader.writeUInt32BE(finalBytes.length, 1);
+                    const messageFrame = Buffer.concat([messageHeader, Buffer.from(finalBytes)]);
+
+                    const trailersStr = 'grpc-status: 0\r\ngrpc-message: \r\n';
+                    const trailersPayload = Buffer.from(trailersStr, 'ascii');
+                    const trailersHeader = Buffer.alloc(5);
+                    trailersHeader[0] = 0x80;
+                    trailersHeader.writeUInt32BE(trailersPayload.length, 1);
+                    const trailersFrame = Buffer.concat([trailersHeader, trailersPayload]);
+
+                    const combinedBuffer = Buffer.concat([messageFrame, trailersFrame]);
+
+                    let responseBody: Buffer | string = combinedBuffer;
+                    if (isGrpcWebText) {
+                        responseBody = combinedBuffer.toString('base64');
+                    }
+
+                    const respContentType = isGrpcWebText ? 'application/grpc-web-text' : 'application/grpc-web';
+                    res.writeHead(200, { 'Content-Type': respContentType });
+                    res.end(responseBody);
+                } catch (err: any) {
+                    try {
+                        const trailersStr = `grpc-status: 13\r\ngrpc-message: ${err.message || 'unknown'}\r\n`;
+                        const trailersPayload = Buffer.from(trailersStr, 'ascii');
+                        const trailersHeader = Buffer.alloc(5);
+                        trailersHeader[0] = 0x80;
+                        trailersHeader.writeUInt32BE(trailersPayload.length, 1);
+                        const trailersFrame = Buffer.concat([trailersHeader, trailersPayload]);
+
+                        let responseBody: Buffer | string = trailersFrame;
+                        if (isGrpcWebText) {
+                            responseBody = trailersFrame.toString('base64');
+                        }
+
+                        const respContentType = isGrpcWebText ? 'application/grpc-web-text' : 'application/grpc-web';
+                        res.writeHead(200, { 'Content-Type': respContentType });
+                        res.end(responseBody);
+                    } catch (innerErr) {
+                        res.writeHead(500, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({ error: err.message }));
+                    }
+                }
+            });
+            return;
+        }
+
         const match = matchREST(method, path, this.restRoutes);
         if (!match) {
             res.writeHead(404, { 'Content-Type': 'application/json' });

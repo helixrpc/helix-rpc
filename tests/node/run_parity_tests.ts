@@ -235,7 +235,102 @@ async function runParityTests() {
         assert(ebpfResult === false, 'loadBpfSockmap should return false on non-Linux');
     }
 
-    console.log('✅ Advanced performance optimization tests passed!');
+    console.log("--- 10. Testing gRPC-Web and gRPC-Web-Text ---");
+    const webServer = new HelixServer("127.0.0.1:0");
+    webServer.registerMethod("/test.Service/SayHello", {
+        Decoder: (dec) => {
+            const req = { name: "" };
+            dec(req);
+            return req;
+        },
+        Handler: async (ctx, req) => {
+            return { message: `Hello ${req.name}` };
+        }
+    });
+    await webServer.start();
+    const webAddr = webServer.getAddr();
+    const webPort = parseInt(webAddr.split(':')[1]);
+
+    // Construct gRPC-Web payload
+    // format: 1 byte compressed-flag (0), 4 bytes length, then data
+    const requestJsonStr = JSON.stringify({ name: "World" });
+    const payloadBytes = Buffer.from(requestJsonStr, 'utf8');
+    const headerBytes = Buffer.alloc(5);
+    headerBytes[0] = 0;
+    headerBytes.writeUInt32BE(payloadBytes.length, 1);
+    const grpcWebPayload = Buffer.concat([headerBytes, payloadBytes]);
+
+    // Test 10a: application/grpc-web
+    const responseBinary = await new Promise<Buffer>((resolve, reject) => {
+        const req = http.request({
+            hostname: "127.0.0.1",
+            port: webPort,
+            path: "/test.Service/SayHello",
+            method: "POST",
+            headers: {
+                'Content-Type': 'application/grpc-web',
+                'Content-Length': grpcWebPayload.length
+            }
+        }, (res) => {
+            assert(res.headers['content-type'] === 'application/grpc-web', `Expected content-type application/grpc-web, got ${res.headers['content-type']}`);
+            const chunks: Buffer[] = [];
+            res.on('data', chunk => chunks.push(chunk));
+            res.on('end', () => resolve(Buffer.concat(chunks)));
+        });
+        req.on('error', reject);
+        req.write(grpcWebPayload);
+        req.end();
+    });
+
+    // Verify binary response
+    // Message frame length
+    assert(responseBinary.length >= 5, "Response too short");
+    const respCompressed = responseBinary[0];
+    assert(respCompressed === 0, "Expected compressed flag to be 0");
+    const respLen = responseBinary.readUInt32BE(1);
+    const respPayload = responseBinary.subarray(5, 5 + respLen);
+    const decodedResp = JSON.parse(respPayload.toString('utf8'));
+    assert(decodedResp.message === "Hello World", `Expected "Hello World", got ${decodedResp.message}`);
+
+    // Trailer frame
+    const trailerOffset = 5 + respLen;
+    assert(responseBinary.length >= trailerOffset + 5, "Trailer frame missing or too short");
+    const trailerType = responseBinary[trailerOffset];
+    assert(trailerType === 0x80, `Expected trailer type 0x80, got ${trailerType}`);
+    const trailerLen = responseBinary.readUInt32BE(trailerOffset + 1);
+    const trailerPayload = responseBinary.subarray(trailerOffset + 5, trailerOffset + 5 + trailerLen);
+    const trailerStr = trailerPayload.toString('ascii');
+    assert(trailerStr.includes("grpc-status: 0"), `Expected grpc-status: 0 in trailer, got ${trailerStr}`);
+
+    // Test 10b: application/grpc-web-text
+    const grpcWebTextPayload = grpcWebPayload.toString('base64');
+    const responseText = await new Promise<string>((resolve, reject) => {
+        const req = http.request({
+            hostname: "127.0.0.1",
+            port: webPort,
+            path: "/test.Service/SayHello",
+            method: "POST",
+            headers: {
+                'Content-Type': 'application/grpc-web-text',
+                'Content-Length': Buffer.byteLength(grpcWebTextPayload)
+            }
+        }, (res) => {
+            assert(res.headers['content-type'] === 'application/grpc-web-text', `Expected content-type application/grpc-web-text, got ${res.headers['content-type']}`);
+            let data = "";
+            res.on('data', chunk => data += chunk);
+            res.on('end', () => resolve(data));
+        });
+        req.on('error', reject);
+        req.write(grpcWebTextPayload);
+        req.end();
+    });
+
+    // Verify base64 decoded response matches binary response
+    const responseTextBinary = Buffer.from(responseText, 'base64');
+    assert(responseTextBinary.equals(responseBinary), "Decoded grpc-web-text response should be equal to binary response");
+    
+    webServer.shutdown();
+    console.log("✅ gRPC-Web and gRPC-Web-Text tests passed!");
 
     console.log("🎉 ALL PARITY TESTS COMPLETED SUCCESSFULLY!");
 }

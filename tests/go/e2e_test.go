@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -761,3 +762,148 @@ func TestBidirectionalStreaming(t *testing.T) {
 		}
 	}
 }
+
+func TestE2EGRPCWeb(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to listen: %v", err)
+	}
+	addr := ln.Addr().String()
+	ln.Close()
+
+	s := runtime.NewServer("127.0.0.1:0")
+	s.Addr = addr
+
+	generated.RegisterUserProfileService(s, &myUserProfileService{})
+
+	go func() {
+		if err := s.Start(); err != nil {
+			panic(err)
+		}
+	}()
+	defer s.Shutdown(context.Background())
+
+	port := strings.Split(addr, ":")[1]
+
+	// Form Protobuf request
+	reqObj := &generated.UserProfile{
+		UserID:   888,
+		Username: "grpc_web_client",
+		Email:    "test@grpcweb.com",
+	}
+	payload, _ := reqObj.Marshal()
+	
+	// Create gRPC frame: 5-byte header [compressed=0, length=4-bytes] + payload
+	frame := make([]byte, 5+len(payload))
+	frame[0] = 0
+	binary.BigEndian.PutUint32(frame[1:5], uint32(len(payload)))
+	copy(frame[5:], payload)
+
+	t.Run("Binary Mode (application/grpc-web)", func(t *testing.T) {
+		url := fmt.Sprintf("http://127.0.0.1:%s/helix_example.UserProfileService/GetUserProfile", port)
+		httpReq, _ := http.NewRequest("POST", url, bytes.NewReader(frame))
+		httpReq.Header.Set("Content-Type", "application/grpc-web")
+
+		client := &http.Client{}
+		resp, err := client.Do(httpReq)
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("unexpected status: %d", resp.StatusCode)
+		}
+		if resp.Header.Get("Content-Type") != "application/grpc-web" {
+			t.Errorf("unexpected content-type: %s", resp.Header.Get("Content-Type"))
+		}
+
+		respBytes, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatalf("failed to read response: %v", err)
+		}
+
+		// Response should have:
+		// 1. Message frame: 5 bytes header + message payload
+		// 2. Trailers frame: 5 bytes header (byte 0 = 0x80) + trailers payload
+		if len(respBytes) < 10 {
+			t.Fatalf("response too short: %d", len(respBytes))
+		}
+
+		// Read message frame
+		msgLen := binary.BigEndian.Uint32(respBytes[1:5])
+		msgPayload := respBytes[5 : 5+int(msgLen)]
+		var decodedResponse generated.UserProfile
+		if err := decodedResponse.Unmarshal(msgPayload); err != nil {
+			t.Fatalf("failed to unmarshal message: %v", err)
+		}
+		if decodedResponse.UserID != 888 || !strings.HasPrefix(decodedResponse.Username, "grpc_web_client-response") {
+			t.Errorf("unexpected payload content: %+v", decodedResponse)
+		}
+
+		// Read trailers frame
+		trailersHeader := respBytes[5+int(msgLen) : 5+int(msgLen)+5]
+		if trailersHeader[0] != 0x80 {
+			t.Errorf("expected trailers frame flag 0x80, got 0x%02x", trailersHeader[0])
+		}
+		trailersLen := binary.BigEndian.Uint32(trailersHeader[1:5])
+		trailersStr := string(respBytes[5+int(msgLen)+5 : 5+int(msgLen)+5+int(trailersLen)])
+		if !strings.Contains(trailersStr, "grpc-status: 0") {
+			t.Errorf("trailers missing success status: %s", trailersStr)
+		}
+	})
+
+	t.Run("Text Mode (application/grpc-web-text)", func(t *testing.T) {
+		encodedFrame := make([]byte, base64.StdEncoding.EncodedLen(len(frame)))
+		base64.StdEncoding.Encode(encodedFrame, frame)
+
+		url := fmt.Sprintf("http://127.0.0.1:%s/helix_example.UserProfileService/GetUserProfile", port)
+		httpReq, _ := http.NewRequest("POST", url, bytes.NewReader(encodedFrame))
+		httpReq.Header.Set("Content-Type", "application/grpc-web-text")
+
+		client := &http.Client{}
+		resp, err := client.Do(httpReq)
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("unexpected status: %d", resp.StatusCode)
+		}
+		if resp.Header.Get("Content-Type") != "application/grpc-web-text" {
+			t.Errorf("unexpected content-type: %s", resp.Header.Get("Content-Type"))
+		}
+
+		respTextBytes, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatalf("failed to read response: %v", err)
+		}
+
+		// Decode base64 response
+		respBytes := make([]byte, base64.StdEncoding.DecodedLen(len(respTextBytes)))
+		n, err := base64.StdEncoding.Decode(respBytes, respTextBytes)
+		if err != nil {
+			t.Fatalf("failed to decode base64 response: %v", err)
+		}
+		respBytes = respBytes[:n]
+
+		// Read message frame
+		msgLen := binary.BigEndian.Uint32(respBytes[1:5])
+		msgPayload := respBytes[5 : 5+int(msgLen)]
+		var decodedResponse generated.UserProfile
+		if err := decodedResponse.Unmarshal(msgPayload); err != nil {
+			t.Fatalf("failed to unmarshal message: %v", err)
+		}
+		if decodedResponse.UserID != 888 || !strings.HasPrefix(decodedResponse.Username, "grpc_web_client-response") {
+			t.Errorf("unexpected payload content: %+v", decodedResponse)
+		}
+
+		// Read trailers frame
+		trailersHeader := respBytes[5+int(msgLen) : 5+int(msgLen)+5]
+		if trailersHeader[0] != 0x80 {
+			t.Errorf("expected trailers frame flag 0x80, got 0x%02x", trailersHeader[0])
+		}
+	})
+}
+
