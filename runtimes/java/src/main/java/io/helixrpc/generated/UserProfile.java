@@ -146,30 +146,30 @@ public class UserProfile {
         out.flip();
         return out;
     }
-}
 
-public class LazyUserProfile {
-    private final ByteBuffer raw;
-    public LazyUserProfile(ByteBuffer raw) { this.raw = raw; }
+    public static class Lazy {
+        private final ByteBuffer raw;
+        public Lazy(ByteBuffer raw) { this.raw = raw; }
 
-    public long getUser_id() {
-        ByteBuffer b = HelixHelpers.fastScanField(raw, 1, new int[1]);
-        return HelixHelpers.readVarint(b);
+        public long getUserID() {
+            ByteBuffer b = HelixHelpers.fastScanField(raw, 1, new int[1]);
+            return HelixHelpers.readVarint(b);
+        }
+
+        public String getUsername() {
+            ByteBuffer b = HelixHelpers.fastScanField(raw, 2, new int[1]);
+            byte[] bytes = new byte[b.remaining()];
+            b.get(bytes);
+            return new String(bytes, StandardCharsets.UTF_8);
+        }
+
+        public String getEmail() {
+            ByteBuffer b = HelixHelpers.fastScanField(raw, 3, new int[1]);
+            byte[] bytes = new byte[b.remaining()];
+            b.get(bytes);
+            return new String(bytes, StandardCharsets.UTF_8);
+        }
+
     }
-
-    public String getUsername() {
-        ByteBuffer b = HelixHelpers.fastScanField(raw, 2, new int[1]);
-        byte[] bytes = new byte[b.remaining()];
-        b.get(bytes);
-        return new String(bytes, StandardCharsets.UTF_8);
-    }
-
-    public String getEmail() {
-        ByteBuffer b = HelixHelpers.fastScanField(raw, 3, new int[1]);
-        byte[] bytes = new byte[b.remaining()];
-        b.get(bytes);
-        return new String(bytes, StandardCharsets.UTF_8);
-    }
-
 }
 

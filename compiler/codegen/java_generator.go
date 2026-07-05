@@ -161,32 +161,32 @@ func GenerateJava(parsed *ast.AST) (string, error) {
 		sb.WriteString("        out.put((byte)0x00);\n")
 		sb.WriteString("        out.flip();\n")
 		sb.WriteString("        return out;\n")
-		sb.WriteString("    }\n")
-		sb.WriteString("}\n\n")
+		sb.WriteString("    }\n\n")
 
-		// Lazy class
-		sb.WriteString(fmt.Sprintf("public class Lazy%s {\n", str.Name))
-		sb.WriteString("    private final ByteBuffer raw;\n")
-		sb.WriteString(fmt.Sprintf("    public Lazy%s(ByteBuffer raw) { this.raw = raw; }\n\n", str.Name))
+		// Nested Lazy class inside the public struct class
+		sb.WriteString("    public static class Lazy {\n")
+		sb.WriteString("        private final ByteBuffer raw;\n")
+		sb.WriteString("        public Lazy(ByteBuffer raw) { this.raw = raw; }\n\n")
 
 		for _, f := range str.Fields {
-			fNameTitle := strings.Title(f.Name)
+			fNameTitle := toCamelCase(f.Name)
 			switch f.Type.Kind {
 			case ast.TypeInt32:
-				sb.WriteString(fmt.Sprintf("    public int get%s() {\n", fNameTitle))
-				sb.WriteString(fmt.Sprintf("        ByteBuffer b = HelixHelpers.fastScanField(raw, %d, new int[1]);\n", f.ID))
-				sb.WriteString("        return (int)HelixHelpers.readVarint(b);\n    }\n\n")
+				sb.WriteString(fmt.Sprintf("        public int get%s() {\n", fNameTitle))
+				sb.WriteString(fmt.Sprintf("            ByteBuffer b = HelixHelpers.fastScanField(raw, %d, new int[1]);\n", f.ID))
+				sb.WriteString("            return (int)HelixHelpers.readVarint(b);\n        }\n\n")
 			case ast.TypeInt64:
-				sb.WriteString(fmt.Sprintf("    public long get%s() {\n", fNameTitle))
-				sb.WriteString(fmt.Sprintf("        ByteBuffer b = HelixHelpers.fastScanField(raw, %d, new int[1]);\n", f.ID))
-				sb.WriteString("        return HelixHelpers.readVarint(b);\n    }\n\n")
+				sb.WriteString(fmt.Sprintf("        public long get%s() {\n", fNameTitle))
+				sb.WriteString(fmt.Sprintf("            ByteBuffer b = HelixHelpers.fastScanField(raw, %d, new int[1]);\n", f.ID))
+				sb.WriteString("            return HelixHelpers.readVarint(b);\n        }\n\n")
 			case ast.TypeString:
-				sb.WriteString(fmt.Sprintf("    public String get%s() {\n", fNameTitle))
-				sb.WriteString(fmt.Sprintf("        ByteBuffer b = HelixHelpers.fastScanField(raw, %d, new int[1]);\n", f.ID))
-				sb.WriteString("        byte[] bytes = new byte[b.remaining()];\n        b.get(bytes);\n")
-				sb.WriteString("        return new String(bytes, StandardCharsets.UTF_8);\n    }\n\n")
+				sb.WriteString(fmt.Sprintf("        public String get%s() {\n", fNameTitle))
+				sb.WriteString(fmt.Sprintf("            ByteBuffer b = HelixHelpers.fastScanField(raw, %d, new int[1]);\n", f.ID))
+				sb.WriteString("            byte[] bytes = new byte[b.remaining()];\n            b.get(bytes);\n")
+				sb.WriteString("            return new String(bytes, StandardCharsets.UTF_8);\n        }\n\n")
 			}
 		}
+		sb.WriteString("    }\n")
 		sb.WriteString("}\n\n")
 	}
 

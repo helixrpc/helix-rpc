@@ -1,7 +1,6 @@
 package io.helixrpc.runtime;
 
 import io.helixrpc.generated.UserProfile;
-import io.helixrpc.generated.LazyUserProfile;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
@@ -27,7 +26,7 @@ public class OptimizationTest {
         protoBuf.flip();
 
         // 1. Verify Lazy Smart Fields
-        LazyUserProfile lazy = new LazyUserProfile(protoBuf.duplicate());
+        UserProfile.Lazy lazy = new UserProfile.Lazy(protoBuf.duplicate());
         if (lazy.getUserId() != 42) {
             throw new RuntimeException("failed lazy getUserId");
         }
