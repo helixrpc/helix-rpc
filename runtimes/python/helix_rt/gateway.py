@@ -35,3 +35,14 @@ class MultiTenantRateLimiter:
             limiter = TenantLimiter(self.default_capacity, self.default_rate)
             self.limiters[tenant_id] = limiter
         return limiter.consume(count)
+
+    def allow_jwt_request(self, token: str, secret: str, count: float) -> bool:
+        try:
+            import jwt
+            payload = jwt.decode(token, secret, algorithms=["HS256"])
+            tenant_id = payload.get("tenant_id")
+            if not tenant_id:
+                return False
+            return self.allow(tenant_id, count)
+        except Exception:
+            return False

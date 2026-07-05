@@ -1,3 +1,5 @@
+import { decodeAndVerifyJWT } from './auth.js';
+
 class TenantLimiter {
     private tokens: number;
     private lastRefill: number;
@@ -37,5 +39,13 @@ export class MultiTenantRateLimiter {
             this.limiters.set(tenantId, limiter);
         }
         return limiter.consume(count);
+    }
+
+    public allowJWTRequest(token: string, secret: string, count: number): boolean {
+        const payload = decodeAndVerifyJWT(token, secret);
+        if (!payload || !payload.tenant_id) {
+            return false;
+        }
+        return this.allow(payload.tenant_id, count);
     }
 }

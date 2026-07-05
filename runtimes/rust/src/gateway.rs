@@ -61,4 +61,17 @@ impl MultiTenantRateLimiter {
         });
         limiter.consume(count)
     }
+
+    pub fn allow_jwt_request<B>(&self, req: &hyper::Request<B>, validator: &crate::auth::JwtValidator, count: f64) -> Result<(), crate::errors::HelixError> {
+        let claims = validator.validate_request(req)?;
+        let tenant_id = claims.get("tenant_id")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| crate::errors::HelixError::new(crate::errors::ErrorCode::PermissionDenied, "missing tenant_id in JWT claims"))?;
+
+        if self.allow(tenant_id, count) {
+            Ok(())
+        } else {
+            Err(crate::errors::HelixError::new(crate::errors::ErrorCode::PermissionDenied, "rate limit exceeded for tenant"))
+        }
+    }
 }

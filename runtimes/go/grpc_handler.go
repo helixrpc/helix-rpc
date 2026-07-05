@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -600,9 +601,24 @@ func (s *Server) AddInterceptor(interceptor UnaryServerInterceptor) {
 }
 
 func (s *Server) Start() error {
-	ln, err := net.Listen("tcp", s.Addr)
+	network := "tcp"
+	addr := s.Addr
+	if hasUnixPrefix(addr) {
+		network = "unix"
+		addr = stripUnixPrefix(addr)
+		_ = os.Remove(addr)
+	}
+
+	ln, err := net.Listen(network, addr)
 	if err != nil {
 		return err
+	}
+
+	if network == "unix" {
+		if err := os.Chmod(addr, 0600); err != nil {
+			ln.Close()
+			return fmt.Errorf("failed to chmod UDS: %w", err)
+		}
 	}
 
 	s.mu.Lock()

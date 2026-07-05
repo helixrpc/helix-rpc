@@ -332,6 +332,51 @@ mod resilience_tests {
     }
 
     #[test]
+    fn test_jwt_rate_limiting() {
+        use crate::auth::JwtValidator;
+        use crate::gateway::MultiTenantRateLimiter;
+        use hyper::Request;
+        use jsonwebtoken::{encode, EncodingKey, Header};
+        use serde_json::Value;
+        use std::collections::HashMap;
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let secret = b"my_test_secret_key_1234567890_long";
+        let validator = JwtValidator::new_hmac(secret, vec!["sub".to_string()]);
+        let limiter = MultiTenantRateLimiter::new(2.0, 10.0);
+
+        let mut claims = HashMap::new();
+        claims.insert("sub".to_string(), Value::String("user123".to_string()));
+        claims.insert("tenant_id".to_string(), Value::String("premium-tenant-1".to_string()));
+        let exp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs()
+            + 3600;
+        claims.insert("exp".to_string(), Value::Number(exp.into()));
+
+        let token = encode(
+            &Header::default(),
+            &claims,
+            &EncodingKey::from_secret(secret),
+        )
+        .unwrap();
+
+        let req = Request::builder()
+            .header("authorization", format!("Bearer {}", token))
+            .body(())
+            .unwrap();
+
+        // 1. First two rate limit check requests succeed
+        assert!(limiter.allow_jwt_request(&req, &validator, 1.0).is_ok());
+        assert!(limiter.allow_jwt_request(&req, &validator, 1.0).is_ok());
+
+        // 2. Third check fails with PermissionDenied error
+        let err = limiter.allow_jwt_request(&req, &validator, 1.0).unwrap_err();
+        assert_eq!(err.code, crate::errors::ErrorCode::PermissionDenied);
+    }
+
+    #[test]
     fn test_validate_api_key() {
         use crate::auth::validate_api_key;
         use hyper::header::HeaderMap;

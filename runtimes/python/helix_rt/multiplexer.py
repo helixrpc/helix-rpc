@@ -1,4 +1,5 @@
 import asyncio
+import os
 
 
 class MultiplexedServer:
@@ -8,12 +9,25 @@ class MultiplexedServer:
         self.server = None
 
     async def start(self, grpc_handler, http_handler):
-        self.server = await asyncio.start_server(
-            lambda r, w: self.handle_connection(r, w, grpc_handler, http_handler),
-            self.host,
-            self.port
-        )
-        self.port = self.server.sockets[0].getsockname()[1]
+        if self.host.startswith("unix://"):
+            path = self.host[7:]
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
+            self.server = await asyncio.start_unix_server(
+                lambda r, w: self.handle_connection(r, w, grpc_handler, http_handler),
+                path
+            )
+            os.chmod(path, 0o600)
+            self.port = 0
+        else:
+            self.server = await asyncio.start_server(
+                lambda r, w: self.handle_connection(r, w, grpc_handler, http_handler),
+                self.host,
+                self.port
+            )
+            self.port = self.server.sockets[0].getsockname()[1]
 
     async def handle_connection(self, reader, writer, grpc_handler, http_handler):
         try:

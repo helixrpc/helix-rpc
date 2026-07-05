@@ -2,6 +2,7 @@ import * as net from 'net';
 import * as http from 'http';
 import * as http2 from 'http2';
 import * as zlib from 'zlib';
+import * as fs from 'fs';
 import { globalRegistry } from './metrics.js';
 import { getOrCreateTraceId, logStructured } from './telemetry.js';
 
@@ -67,11 +68,7 @@ export class HelixServer {
         await new Promise<void>(resolve => this.httpServer2!.listen(0, '127.0.0.1', resolve));
         const http2Addr = this.httpServer2.address() as net.AddressInfo;
 
-        // Sniffing TCP listener
-        const parts = this.addr.split(':');
-        const host = parts[0];
-        const portVal = parseInt(parts[1] || '0');
-
+        const isUnix = this.addr.startsWith('unix://');
         this.tcpServer = net.createServer((socket) => {
             socket.once('data', (chunk) => {
                 const preface = chunk.toString('utf8', 0, Math.min(chunk.length, 24));
@@ -94,8 +91,19 @@ export class HelixServer {
             });
         });
 
-        await new Promise<void>(resolve => this.tcpServer!.listen(portVal, host, resolve));
-        this.port = (this.tcpServer.address() as net.AddressInfo).port;
+        if (isUnix) {
+            const path = this.addr.slice(7);
+            try { fs.unlinkSync(path); } catch (e) {}
+            await new Promise<void>(resolve => this.tcpServer!.listen(path, resolve));
+            fs.chmodSync(path, 0o600);
+            this.port = 0;
+        } else {
+            const parts = this.addr.split(':');
+            const host = parts[0];
+            const portVal = parseInt(parts[1] || '0');
+            await new Promise<void>(resolve => this.tcpServer!.listen(portVal, host, resolve));
+            this.port = (this.tcpServer.address() as net.AddressInfo).port;
+        }
     }
 
     public shutdown() {
