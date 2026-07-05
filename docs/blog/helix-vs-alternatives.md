@@ -4,6 +4,7 @@
 **Author**: Marketing & Architecture Team  
 
 Choosing the right communication protocol for your microservices is a long-term architectural commitment. For years, the choice has been polarized between three main paradigms:
+
 1. **JSON over HTTP/1.1 (REST)**: Simple, readable, but slow and lacks strict typing.
 2. **gRPC over HTTP/2 (Protobuf)**: Strongly typed, efficient, but difficult to consume directly from web apps.
 3. **Apache Thrift**: Highly performant, compact, but lacks native JSON transcoding and features a fragmented ecosystem.
