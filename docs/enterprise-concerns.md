@@ -107,3 +107,81 @@ High-throughput AI applications must share a single, thread-safe database connec
   async with db_pool.acquire() as conn:
       result = await conn.fetch("SELECT * FROM models")
   ```
+
+---
+
+## 5. KVCache Consistent-Hash Prefix Routing
+
+In large-scale AI deployment settings, serving models concurrently requires optimizing key-value (KV) prompt caching. Helix RPC provides a `ConsistentHashBalancer` that hashes the prompt prefix metadata to direct traffic to corresponding nodes.
+
+### Configuration
+
+**Go Usage:**
+```go
+import "github.com/helix-rpc/helix/runtime-go"
+
+balancer := runtime.NewConsistentHashBalancer(50) // 50 virtual nodes
+targets := []string{"10.0.0.1:9090", "10.0.0.2:9090", "10.0.0.3:9090"}
+
+// Consistent selection based on prompt prefix hash
+target, err := balancer.NextWithKey(targets, "system-prompt-v1")
+```
+
+**Rust Usage:**
+```rust
+use helix_rt::{ConsistentHashBalancer, Balancer};
+
+let balancer = ConsistentHashBalancer::new(50);
+let targets = vec!["10.0.0.1:9090".to_string(), "10.0.0.2:9090".to_string()];
+
+let target = balancer.next_with_key(&targets, "system-prompt-v1").unwrap();
+```
+
+---
+
+## 6. QUIC / HTTP/3 Sniffing Transport
+
+Mobile clients running under lossy connections experience head-of-line blocking using traditional TCP/HTTP2 multiplexing. Helix runtimes support high-performance UDP-based QUIC stream transport.
+
+- **Go**: Binds to UDP port to listen for virtual stream frames using `QUICTransportListener`.
+- **Rust**: Uses a tokio-based `QuicListener` running on a separate thread socket accept loop.
+
+---
+
+## 7. Multi-Tenant Rate Limiting & Auth
+
+To manage traffic limits dynamically across multiple consumer tiers, use `MultiTenantRateLimiter`.
+
+```go
+limiter := runtime.NewMultiTenantRateLimiter(
+    runtime.TenantConfig{RequestsPerSecond: 5, BurstSize: 5}, // Default fallback
+    func(r *http.Request) (string, runtime.TenantConfig, error) {
+        tenantID := r.Header.Get("x-tenant-id")
+        // Resolve and return tenant configuration dynamically...
+        return tenantID, runtime.TenantConfig{RequestsPerSecond: 100, BurstSize: 100}, nil
+    },
+)
+```
+
+---
+
+## 8. Kubernetes Controller & Schema CRD
+
+Helix RPC features a Kubernetes Custom Resource Definition (`HelixSchema`) and watch controller to compile service contracts dynamically inside K8s clusters.
+
+### HelixSchema Resource
+```yaml
+apiVersion: helixrpc.io/v1alpha1
+kind: HelixSchema
+metadata:
+  name: user-profile-service
+  namespace: production
+spec:
+  idlContent: |
+    syntax = "proto3";
+    package user;
+    message ProfileRequest { int64 user_id = 1; }
+  language: rust
+  outputDirectory: /app/generated
+```
+
