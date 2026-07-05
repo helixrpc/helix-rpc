@@ -133,6 +133,17 @@ public class RuntimeTest {
         System.out.println("✓ testGateway passed!");
     }
 
+    public static void testMultiplexer() throws Exception {
+        try (MultiplexedServer server = new MultiplexedServer(0)) {
+            int port = server.getPort();
+            if (port <= 0) {
+                throw new RuntimeException("failed to bind Java multiplexer socket");
+            }
+            server.start(sock -> {}, sock -> {});
+        }
+        System.out.println("✓ testMultiplexer passed!");
+    }
+
     public static void main(String[] args) throws Exception {
         testConsistentHashBalancer();
         testSniffer();
@@ -141,6 +152,7 @@ public class RuntimeTest {
         testHealth();
         testQuicTransport();
         testGateway();
+        testMultiplexer();
         System.out.println("All Java Parity tests passed successfully!");
     }
 }

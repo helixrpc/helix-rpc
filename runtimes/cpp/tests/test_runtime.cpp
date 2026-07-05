@@ -5,6 +5,7 @@
 #include "helix/health.h"
 #include "helix/quic_transport.h"
 #include "helix/gateway.h"
+#include "helix/multiplexer.h"
 #include <iostream>
 #include <cassert>
 
@@ -100,6 +101,17 @@ void TestGateway() {
     std::cout << "✓ TestGateway passed!" << std::endl;
 }
 
+void TestMultiplexer() {
+    helix::MultiplexedServer server(0);
+    int port = server.GetPort();
+    assert(port > 0);
+
+    server.Start([](int fd) {}, [](int fd) {});
+    server.Stop();
+
+    std::cout << "✓ TestMultiplexer passed (bound on port " << port << ")!" << std::endl;
+}
+
 int main() {
     TestConsistentHashBalancer();
     TestSniffer();
@@ -108,6 +120,7 @@ int main() {
     TestHealth();
     TestQuicTransport();
     TestGateway();
+    TestMultiplexer();
     std::cout << "All C++ Parity tests passed successfully!" << std::endl;
     return 0;
 }
