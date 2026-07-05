@@ -1,15 +1,16 @@
-# Helix RPC vs. The Alternatives: gRPC, Thrift, and JSON
+# Helix RPC: Unifying gRPC, Thrift, and JSON under One Meta-Framework
 
 **Date**: July 4, 2026  
 **Author**: Marketing & Architecture Team  
 
-Choosing the right communication protocol for your microservices is a long-term architectural commitment. For years, the choice has been polarized between three main paradigms:
+Choosing the right communication protocol for your microservices is a long-term architectural commitment. Rather than trying to compete with or replace existing standards, **Helix RPC** acts as a unified meta-framework that combines **gRPC, Thrift, and JSON/REST** into a single, high-performance runtime.
 
-1. **JSON over HTTP/1.1 (REST)**: Simple, readable, but slow and lacks strict typing.
-2. **gRPC over HTTP/2 (Protobuf)**: Strongly typed, efficient, but difficult to consume directly from web apps.
-3. **Apache Thrift**: Highly performant, compact, but lacks native JSON transcoding and features a fragmented ecosystem.
+Instead of forcing you to choose one or maintain complex custom proxies, Helix unifies all three paradigms:
+1. **JSON over HTTP/1.1 (REST)**: Simple and universally accessible.
+2. **gRPC over HTTP/2 (Protobuf)**: Strongly typed and standard for internal communication.
+3. **Apache Thrift**: Compact and highly performant.
 
-**Helix RPC** represents a new paradigm, combining the best properties of each while adding modern runtime optimizations natively.
+Helix sits on top of these protocols, enabling them to coexist on a same port via a Same-Port Multiplexer, and adding modern runtime optimizations natively.
 
 ---
 
