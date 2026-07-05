@@ -1200,9 +1200,11 @@
 <p>Consider a gateway transcoding a Protobuf payload into Thrift Compact before forwarding it to a backend service. A naive implementation would allocate a struct, decode the Protobuf bytes into it, and then serialize that struct into Thrift bytes. This causes multiple heap allocations and memory copies.</p>
 <p>Helix RPC avoids this entirely through <strong>Zero-Allocation Wire-Transpiling</strong>. The compiler builds a Static Tag Translation Map (STTM) based on the common AST. At runtime, the transpiler runs an in-memory loop over the incoming Protobuf buffer, reads field tags, performs inline tag translation on the fly, and writes directly into the output network buffer.</p>
 <h3 id="binary-layout-mapping-zigzag-encoding">Binary Layout Mapping &amp; ZigZag Encoding<a class="headerlink" href="#binary-layout-mapping-zigzag-encoding" title="Permanent link">&para;</a></h3>
-<p>Helix maps Protobuf Varint tags and wire types directly to Thrift Compact Nibble Types:
-- <strong>Protobuf wire type 0 (varint)</strong> maps to <strong>Thrift Compact 0x05 (I32)</strong> or <strong>0x06 (I64)</strong>.
-- <strong>Protobuf wire type 2 (length-delimited)</strong> maps to <strong>Thrift Compact 0x08 (Binary/String)</strong>.</p>
+<p>Helix maps Protobuf Varint tags and wire types directly to Thrift Compact Nibble Types:</p>
+<ul>
+<li><strong>Protobuf wire type 0 (varint)</strong> maps to <strong>Thrift Compact 0x05 (I32)</strong> or <strong>0x06 (I64)</strong>.</li>
+<li><strong>Protobuf wire type 2 (length-delimited)</strong> maps to <strong>Thrift Compact 0x08 (Binary/String)</strong>.</li>
+</ul>
 <p>To transpile integer values, we must account for different signed variable-length representations. Protobuf represents signed numbers using ZigZag encoding in Sint32/Sint64 formats, while Thrift Compact represents all I16/I32/I64 types using ZigZag. The translation applies bitwise transformations inline:</p>
 <div class="arithmatex">\[\text{ZigZagEncode}(v) = (v \ll 1) \oplus (v \gg 63)\]</div>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>Protobuf Stream:    [ 0x08 ] [ 0x2A ] -&gt; Tag 1 (varint), Value 42
@@ -1245,10 +1247,12 @@
 <hr />
 <h2 id="2-zero-copy-stringbytes-slicing">2. Zero-Copy String/Bytes Slicing<a class="headerlink" href="#2-zero-copy-stringbytes-slicing" title="Permanent link">&para;</a></h2>
 <p>When parsing payload strings, standard runtimes allocate a new heap string and copy bytes from the network read buffer. </p>
-<p>Helix RPC bypasses copies using lifetime-bound slice referencing:
-- <strong>Rust</strong>: The generator creates a View struct (e.g. <code>UserProfileView&lt;'a&gt;</code>) where string and binary fields are represented as <code>&amp;'a str</code> and <code>&amp;'a [u8]</code>, referencing the network buffer lifetime directly.
-- <strong>Go</strong>: The runtime makes use of <code>unsafe.String</code> pointing to the underlying slice backing the read buffer.
-- <strong>Python / Node.js</strong>: We map fields directly to <code>memoryview</code> slices and <code>Uint8Array.subarray()</code> views.</p>
+<p>Helix RPC bypasses copies using lifetime-bound slice referencing:</p>
+<ul>
+<li><strong>Rust</strong>: The generator creates a View struct (e.g. <code>UserProfileView&lt;'a&gt;</code>) where string and binary fields are represented as <code>&amp;'a str</code> and <code>&amp;'a [u8]</code>, referencing the network buffer lifetime directly.</li>
+<li><strong>Go</strong>: The runtime makes use of <code>unsafe.String</code> pointing to the underlying slice backing the read buffer.</li>
+<li><strong>Python / Node.js</strong>: We map fields directly to <code>memoryview</code> slices and <code>Uint8Array.subarray()</code> views.</li>
+</ul>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>Incoming Buffer: [ ... | 0x12 | 0x0E | z | e | r | o | _ | c | o | p | y | ... ]
 </span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>                         |      |      ^
 </span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>                         |      |      |
