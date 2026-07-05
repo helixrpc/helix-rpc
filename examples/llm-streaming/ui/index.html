@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Helix LLM Streaming</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-container">
+    <aside class="sidebar">
+      <div class="logo">
+        <span class="icon">⚡</span>
+        <h1>Helix RPC</h1>
+      </div>
+      
+      <div class="info-card">
+        <h3>Model Info</h3>
+        <p class="model-name">GPT-2 (or Demo Mode)</p>
+        <span class="badge">SSE Streaming</span>
+      </div>
+      
+      <div class="stats-card">
+        <h3>Performance</h3>
+        <div class="stat-row">
+          <span>TTFT:</span>
+          <span id="ttft" class="stat-value">-- ms</span>
+        </div>
+        <div class="stat-row">
+          <span>Speed:</span>
+          <span id="tokens-sec" class="stat-value">-- t/s</span>
+        </div>
+      </div>
+    </aside>
+
+    <main class="chat-container">
+      <div id="messages" class="messages-area">
+        <!-- Messages will appear here -->
+        <div class="message assistant">
+          <div class="avatar">⚡</div>
+          <div class="content">
+            <p>Hello! I'm running on Helix RPC. How can I help you today?</p>
+          </div>
+        </div>
+      </div>
+      
+      <div class="input-area">
+        <form id="chat-form">
+          <textarea id="chat-input" placeholder="Ask anything..." rows="1" required></textarea>
+          <button type="submit" id="send-btn">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M2.01 21L23 12L2.01 3L2 10L17 12L2 14L2.01 21Z" fill="currentColor"/>
+            </svg>
+          </button>
+        </form>
+      </div>
+    </main>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
