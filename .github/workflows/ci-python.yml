@@ -27,10 +27,17 @@ jobs:
       - name: Install dependencies
         working-directory: ./runtimes/python
         run: |
-          pip install pytest aiohttp opentelemetry-api opentelemetry-sdk
+          pip install pytest aiohttp opentelemetry-api opentelemetry-sdk numpy
           # If a setup.py or requirements.txt exists, install it:
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
       - name: Import check
         working-directory: ./runtimes/python
-        run: python3 -c "import helix_rt"
+        run: |
+          python3 -c "import helix_rt"
+          python3 -c "from helix_rt import HelixServer, HelixError, Tensor"
+
+      - name: Run unit tests
+        working-directory: ./runtimes/python
+        run: |
+          if [ -d tests ]; then pytest tests/ -v; fi
