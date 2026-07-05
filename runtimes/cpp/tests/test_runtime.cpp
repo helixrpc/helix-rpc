@@ -4,6 +4,7 @@
 #include "helix/compression.h"
 #include "helix/health.h"
 #include "helix/quic_transport.h"
+#include "helix/gateway.h"
 #include <iostream>
 #include <cassert>
 
@@ -83,6 +84,22 @@ void TestQuicTransport() {
     std::cout << "✓ TestQuicTransport passed (UDP bound on port " << port << ")!" << std::endl;
 }
 
+void TestGateway() {
+    helix::MultiTenantRateLimiter limiter(2.0, 10.0);
+
+    // Default configuration allows 2 and rejects 3rd
+    assert(limiter.Allow("tenant-1", 1.0) == true);
+    assert(limiter.Allow("tenant-1", 1.0) == true);
+    assert(limiter.Allow("tenant-1", 1.0) == false);
+
+    // Custom limit configuration overrides
+    limiter.SetTenantLimit("tenant-2", 5.0, 50.0);
+    assert(limiter.Allow("tenant-2", 5.0) == true);
+    assert(limiter.Allow("tenant-2", 1.0) == false);
+
+    std::cout << "✓ TestGateway passed!" << std::endl;
+}
+
 int main() {
     TestConsistentHashBalancer();
     TestSniffer();
@@ -90,6 +107,7 @@ int main() {
     TestCompression();
     TestHealth();
     TestQuicTransport();
+    TestGateway();
     std::cout << "All C++ Parity tests passed successfully!" << std::endl;
     return 0;
 }

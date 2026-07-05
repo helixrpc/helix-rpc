@@ -107,6 +107,32 @@ public class RuntimeTest {
         System.out.println("✓ testQuicTransport passed!");
     }
 
+    public static void testGateway() {
+        Gateway.MultiTenantRateLimiter limiter = new Gateway.MultiTenantRateLimiter(2.0, 10.0);
+
+        // Default config allows 2 and rejects 3rd
+        if (!limiter.allow("tenant-1", 1.0)) {
+            throw new RuntimeException("failed gateway allow 1");
+        }
+        if (!limiter.allow("tenant-1", 1.0)) {
+            throw new RuntimeException("failed gateway allow 2");
+        }
+        if (limiter.allow("tenant-1", 1.0)) {
+            throw new RuntimeException("failed gateway block 3");
+        }
+
+        // Custom config overrides
+        limiter.setTenantLimit("tenant-2", 5.0, 50.0);
+        if (!limiter.allow("tenant-2", 5.0)) {
+            throw new RuntimeException("failed gateway custom allow");
+        }
+        if (limiter.allow("tenant-2", 1.0)) {
+            throw new RuntimeException("failed gateway custom block");
+        }
+
+        System.out.println("✓ testGateway passed!");
+    }
+
     public static void main(String[] args) throws Exception {
         testConsistentHashBalancer();
         testSniffer();
@@ -114,6 +140,7 @@ public class RuntimeTest {
         testCompression();
         testHealth();
         testQuicTransport();
+        testGateway();
         System.out.println("All Java Parity tests passed successfully!");
     }
 }

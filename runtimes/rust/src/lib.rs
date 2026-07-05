@@ -45,6 +45,8 @@ pub mod config;
 pub use config::{load_config, watch_config, Config};
 pub mod ebpf;
 pub use ebpf::{has_unix_prefix, load_bpf_sockmap, strip_unix_prefix};
+pub mod gateway;
+pub use gateway::MultiTenantRateLimiter;
 
 #[cfg(test)]
 mod tests_resilience;

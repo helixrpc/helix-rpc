@@ -365,6 +365,22 @@ mod resilience_tests {
     }
 
     #[test]
+    fn test_multi_tenant_rate_limiter() {
+        use crate::gateway::MultiTenantRateLimiter;
+        let limiter = MultiTenantRateLimiter::new(2.0, 10.0);
+
+        // Verify default config works
+        assert!(limiter.allow("tenant-1", 1.0));
+        assert!(limiter.allow("tenant-1", 1.0));
+        assert!(!limiter.allow("tenant-1", 1.0));
+
+        // Verify specific tenant configuration overrides defaults
+        limiter.set_tenant_limit("tenant-2", 5.0, 50.0);
+        assert!(limiter.allow("tenant-2", 5.0));
+        assert!(!limiter.allow("tenant-2", 1.0));
+    }
+
+    #[test]
     fn test_metrics_collection() {
         use crate::metrics::MetricsCollector;
         use std::time::Duration;
