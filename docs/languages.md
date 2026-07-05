@@ -27,8 +27,8 @@ Helix RPC is designed around a multi-language philosophy, recognising that diffe
 | Structured Errors (`HelixError`) | ✅ | ✅ | ✅ | ✅ | — | — |
 | Shared Memory Transport (SHM) | ✅ | ✅ | — | — | — | — |
 | PyO3 Zero-Serialization Embedding | — | ✅ | — | — | — | — |
-| Thrift Protocol Support | ✅ | — | — | — | — | — |
-| Code Generation | ✅ | — | ✅ | ✅ | ✅ | ✅ |
+| Thrift Protocol Support | ✅ | ✅ | — | — | — | — |
+| Code Generation | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 > **Note:** `—` means the feature is not applicable to that runtime's role (e.g. SHM is not relevant to Python/Node.js as a standalone server; PyO3 is a Rust-only capability).
 
@@ -98,6 +98,8 @@ C++ is the ultimate language for performance-critical systems, system integratio
 **Key Strengths:**
 - **Zero-Copy Sniffing** — High-performance TCP parser inspecting bytes directly from input stream.
 - **ConsistentHashBalancer** — Virtual node ring for distributed KVCache prompt routing.
+- **MultiplexedServer** — Same-port connection multiplexing and routing.
+- **SSE Streaming** — Chunk-writer utilities supporting `text/event-stream` format.
 - **Header-Only Integration** — Clean compile and include flow.
 
 *Use C++ when writing latency-critical microservices or model serving wrappers.*
@@ -111,5 +113,7 @@ Java is the bedrock of enterprise backends and big-data streaming.
 **Key Strengths:**
 - **ByteBuffer Sniffing** — Stream-sniffing utilizing zero-allocation ByteBuffers.
 - **ConsistentHashBalancer** — High-efficiency thread-safe virtual node ring using `java.util.TreeMap`.
+- **MultiplexedServer** — Non-blocking multi-protocol single-port server loop.
+- **SSE Streaming** — Streaming chunk-writing helpers for generative response streams.
 
 *Use Java when deploying Helix RPC inside enterprise JVM environments.*
