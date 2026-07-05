@@ -18,6 +18,7 @@ Helix RPC avoids this entirely through **Zero-Allocation Wire-Transpiling**. The
 ### Binary Layout Mapping & ZigZag Encoding
 
 Helix maps Protobuf Varint tags and wire types directly to Thrift Compact Nibble Types:
+
 - **Protobuf wire type 0 (varint)** maps to **Thrift Compact 0x05 (I32)** or **0x06 (I64)**.
 - **Protobuf wire type 2 (length-delimited)** maps to **Thrift Compact 0x08 (Binary/String)**.
 
@@ -76,6 +77,7 @@ No intermediate structs are allocated on the heap. This reduces allocations to *
 When parsing payload strings, standard runtimes allocate a new heap string and copy bytes from the network read buffer. 
 
 Helix RPC bypasses copies using lifetime-bound slice referencing:
+
 - **Rust**: The generator creates a View struct (e.g. `UserProfileView<'a>`) where string and binary fields are represented as `&'a str` and `&'a [u8]`, referencing the network buffer lifetime directly.
 - **Go**: The runtime makes use of `unsafe.String` pointing to the underlying slice backing the read buffer.
 - **Python / Node.js**: We map fields directly to `memoryview` slices and `Uint8Array.subarray()` views.
