@@ -24,7 +24,9 @@ Helix maps Protobuf Varint tags and wire types directly to Thrift Compact Nibble
 
 To transpile integer values, we must account for different signed variable-length representations. Protobuf represents signed numbers using ZigZag encoding in Sint32/Sint64 formats, while Thrift Compact represents all I16/I32/I64 types using ZigZag. The translation applies bitwise transformations inline:
 
-$$\text{ZigZagEncode}(v) = (v \ll 1) \oplus (v \gg 63)$$
+$$
+\text{ZigZagEncode}(v) = (v \ll 1) \oplus (v \gg 63)
+$$
 
 ```
 Protobuf Stream:    [ 0x08 ] [ 0x2A ] -> Tag 1 (varint), Value 42
