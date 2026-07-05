@@ -21,7 +21,7 @@ use tokio::sync::mpsc;
 pub trait ServerStream: Send + Sync {
     /// Receive the next raw protobuf payload (without the 5-byte gRPC header).
     /// Returns `Ok(None)` when the client has finished sending.
-    async fn recv(&mut self) -> Result<Option<Vec<u8>>, String>;
+    async fn recv(&mut self) -> Result<Option<bytes::Bytes>, String>;
 
     /// Send a raw protobuf payload back to the client, wrapped in a 5-byte
     /// gRPC frame header.
@@ -33,7 +33,7 @@ pub trait ServerStream: Send + Sync {
 /// over a single HTTP/2 connection.
 pub struct GrpcServerStream {
     body: Body,
-    buf: Vec<u8>,
+    buf: bytes::BytesMut,
     tx: mpsc::Sender<Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>>>,
 }
 
@@ -44,14 +44,14 @@ impl GrpcServerStream {
     ) -> Self {
         GrpcServerStream {
             body,
-            buf: Vec::new(),
+            buf: bytes::BytesMut::new(),
             tx,
         }
     }
 
     /// Pull exactly `n` bytes from the internal buffer, reading more chunks
     /// from the body if necessary.
-    async fn read_exact(&mut self, n: usize) -> Result<Vec<u8>, String> {
+    async fn read_exact(&mut self, n: usize) -> Result<bytes::Bytes, String> {
         use hyper::body::HttpBody;
         while self.buf.len() < n {
             match Pin::new(&mut self.body).data().await {
@@ -60,7 +60,7 @@ impl GrpcServerStream {
                 None => return Err("unexpected end of stream".to_string()),
             }
         }
-        let data = self.buf.drain(..n).collect();
+        let data = self.buf.split_to(n).freeze();
         Ok(data)
     }
 
@@ -82,7 +82,7 @@ impl GrpcServerStream {
 
 #[async_trait::async_trait]
 impl ServerStream for GrpcServerStream {
-    async fn recv(&mut self) -> Result<Option<Vec<u8>>, String> {
+    async fn recv(&mut self) -> Result<Option<bytes::Bytes>, String> {
         // Try to read the 5-byte gRPC frame header.
         // If the body is exhausted, return None (clean EOF).
         if !self.has_more().await {
@@ -776,6 +776,11 @@ impl<H: HttpServiceHandler + Send + Sync + 'static> HelixServer<H> {
         loop {
             tokio::select! {
                 Ok((stream, _)) = listener.accept() => {
+                    let keepalive = socket2::TcpKeepalive::new()
+                        .with_time(std::time::Duration::from_secs(60))
+                        .with_interval(std::time::Duration::from_secs(10));
+                    let _ = socket2::SockRef::from(&stream).set_tcp_keepalive(&keepalive);
+
                     let tls_acceptor = self.tls_acceptor.clone();
                     let handler = self.handler.clone();
                     let rest_routes = self.rest_routes.clone();

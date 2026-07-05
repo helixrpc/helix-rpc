@@ -2,6 +2,7 @@
 
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <unistd.h>
 #include <thread>
 #include <functional>
@@ -62,6 +63,10 @@ public:
                     if (!running_) break;
                     continue;
                 }
+
+                int flag = 1;
+                setsockopt(client_fd, IPPROTO_TCP, TCP_NODELAY, (char*)&flag, sizeof(int));
+                setsockopt(client_fd, SOL_SOCKET, SO_KEEPALIVE, (char*)&flag, sizeof(int));
 
                 std::thread([client_fd, grpc_handler, http_handler]() {
                     std::vector<char> peek_buf(8);

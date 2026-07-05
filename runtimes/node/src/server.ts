@@ -26,6 +26,9 @@ export class HelixServer {
     private tcpServer: net.Server | null = null;
     private httpServer1: http.Server | null = null;
     private httpServer2: http2.Http2Server | null = null;
+    private requestBufferPool = new BufferPool(1024 * 1024, 10);
+    private responseBufferPool = new BufferPool(1024 * 1024, 10);
+    private headerBufferPool = new BufferPool(5, 10);
 
     constructor(addr: string) {
         this.addr = addr;
@@ -60,16 +63,23 @@ export class HelixServer {
     public async start(): Promise<void> {
         // Start local internal servers
         this.httpServer1 = http.createServer((req, res) => this.handleHTTP1(req, res));
+        this.httpServer1.on('connection', (socket) => {
+            socket.setKeepAlive(true, 1000);
+        });
         await new Promise<void>(resolve => this.httpServer1!.listen(0, '127.0.0.1', resolve));
         const http1Addr = this.httpServer1.address() as net.AddressInfo;
 
         this.httpServer2 = http2.createServer();
+        this.httpServer2.on('connection', (socket) => {
+            socket.setKeepAlive(true, 1000);
+        });
         this.httpServer2.on('stream', (stream, headers) => this.handleHTTP2(stream as http2.ServerHttp2Stream, headers));
         await new Promise<void>(resolve => this.httpServer2!.listen(0, '127.0.0.1', resolve));
         const http2Addr = this.httpServer2.address() as net.AddressInfo;
 
         const isUnix = this.addr.startsWith('unix://');
         this.tcpServer = net.createServer((socket) => {
+            socket.setKeepAlive(true, 1000);
             socket.once('data', (chunk) => {
                 const preface = chunk.toString('utf8', 0, Math.min(chunk.length, 24));
                 let targetAddr = http1Addr; // fallback to HTTP/1.1
@@ -82,6 +92,7 @@ export class HelixServer {
 
                 // Proxy socket to local target
                 const targetSocket = net.connect(targetAddr.port, targetAddr.address, () => {
+                    targetSocket.setKeepAlive(true, 1000);
                     targetSocket.write(chunk);
                     socket.pipe(targetSocket).pipe(socket);
                 });
@@ -150,11 +161,33 @@ export class HelixServer {
 
         // Buffer the request body
         const chunks: Buffer[] = [];
-        req.on('data', chunk => chunks.push(chunk));
+        let totalLength = 0;
+        req.on('data', chunk => {
+            chunks.push(chunk);
+            totalLength += chunk.length;
+        });
         req.on('end', async () => {
+            let bodyBytes: Buffer | null = null;
+            let rentedReqBuf: Buffer | null = null;
+            let rentedRespBuf: Buffer | null = null;
             try {
-                const bodyBytes = Buffer.concat(chunks);
+                if (totalLength <= 1024 * 1024) {
+                    rentedReqBuf = this.requestBufferPool.acquire();
+                    let offset = 0;
+                    for (const chunk of chunks) {
+                        chunk.copy(rentedReqBuf, offset);
+                        offset += chunk.length;
+                    }
+                    bodyBytes = rentedReqBuf.subarray(0, totalLength);
+                } else {
+                    bodyBytes = Buffer.concat(chunks);
+                }
                 const reqJson = bodyBytes.length > 0 ? JSON.parse(bodyBytes.toString('utf8')) : {};
+
+                if (rentedReqBuf) {
+                    this.requestBufferPool.release(rentedReqBuf);
+                    rentedReqBuf = null;
+                }
 
                 // Path & query params extraction
                 const params: Record<string, string> = { ...match.params };
@@ -197,10 +230,30 @@ export class HelixServer {
                     return;
                 }
 
-                let respBody = JSON.stringify(resp);
+                const respStr = JSON.stringify(resp);
+                const byteLength = Buffer.byteLength(respStr, 'utf8');
+                let respBuffer: Buffer;
+                if (byteLength <= 1024 * 1024) {
+                    rentedRespBuf = this.responseBufferPool.acquire();
+                    rentedRespBuf.write(respStr, 0, byteLength, 'utf8');
+                    respBuffer = rentedRespBuf.subarray(0, byteLength);
+                } else {
+                    respBuffer = Buffer.from(respStr, 'utf8');
+                }
+
                 res.writeHead(200, { 'Content-Type': 'application/json' });
-                res.end(respBody);
+                res.end(respBuffer, () => {
+                    if (rentedRespBuf) {
+                        this.responseBufferPool.release(rentedRespBuf);
+                    }
+                });
             } catch (err: any) {
+                if (rentedReqBuf) {
+                    this.requestBufferPool.release(rentedReqBuf);
+                }
+                if (rentedRespBuf) {
+                    this.responseBufferPool.release(rentedRespBuf);
+                }
                 res.writeHead(500, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ error: err.message }));
             }
@@ -223,10 +276,29 @@ export class HelixServer {
         }
 
         const chunks: any[] = [];
-        stream.on('data', chunk => chunks.push(chunk));
+        let totalLength = 0;
+        stream.on('data', chunk => {
+            chunks.push(chunk);
+            totalLength += chunk.length;
+        });
         stream.on('end', async () => {
+            let rawFrame: Buffer;
+            let rentedReqBuf: Buffer | null = null;
+            let rentedRespBuf: Buffer | null = null;
+            let rentedHeaderBuf: Buffer | null = null;
             try {
-                const rawFrame = Buffer.concat(chunks);
+                if (totalLength <= 1024 * 1024) {
+                    rentedReqBuf = this.requestBufferPool.acquire();
+                    let offset = 0;
+                    for (const chunk of chunks) {
+                        chunk.copy(rentedReqBuf, offset);
+                        offset += chunk.length;
+                    }
+                    rawFrame = rentedReqBuf.subarray(0, totalLength);
+                } else {
+                    rawFrame = Buffer.concat(chunks);
+                }
+
                 // gRPC frame parsing: byte 0 = compressed-flag, bytes 1-4 = message length
                 if (rawFrame.length < 5) {
                     throw new Error('grpc frame too small');
@@ -257,6 +329,11 @@ export class HelixServer {
                     });
                 }
 
+                if (rentedReqBuf) {
+                    this.requestBufferPool.release(rentedReqBuf);
+                    rentedReqBuf = null;
+                }
+
                 const traceId = getOrCreateTraceId(headers);
                 globalRegistry.recordRequest(path);
                 const startTime = Date.now();
@@ -276,7 +353,15 @@ export class HelixServer {
                 if (resp.marshalFlatBuffers && typeof resp.marshalFlatBuffers === 'function') {
                     respBytes = resp.marshalFlatBuffers();
                 } else {
-                    respBytes = Buffer.from(JSON.stringify(resp));
+                    const respStr = JSON.stringify(resp);
+                    const byteLength = Buffer.byteLength(respStr, 'utf8');
+                    if (byteLength <= 1024 * 1024) {
+                        rentedRespBuf = this.responseBufferPool.acquire();
+                        rentedRespBuf.write(respStr, 0, byteLength, 'utf8');
+                        respBytes = rentedRespBuf.subarray(0, byteLength);
+                    } else {
+                        respBytes = Buffer.from(respStr, 'utf8');
+                    }
                 }
 
                 let finalBytes = respBytes;
@@ -284,21 +369,44 @@ export class HelixServer {
                 if (headers['grpc-accept-encoding'] && headers['grpc-accept-encoding'].toString().includes('gzip')) {
                     finalBytes = zlib.gzipSync(respBytes);
                     finalCompressed = 1;
+                    if (rentedRespBuf) {
+                        this.responseBufferPool.release(rentedRespBuf);
+                        rentedRespBuf = null;
+                    }
                 }
 
-                const headerFrame = Buffer.alloc(5);
-                headerFrame[0] = finalCompressed;
-                headerFrame.writeUInt32BE(finalBytes.length, 1);
+                rentedHeaderBuf = this.headerBufferPool.acquire();
+                rentedHeaderBuf[0] = finalCompressed;
+                rentedHeaderBuf.writeUInt32BE(finalBytes.length, 1);
 
                 stream.respond({
                     ':status': 200,
                     'content-type': 'application/grpc',
                     'grpc-status': '0'
                 });
-                stream.write(headerFrame);
-                stream.write(finalBytes);
-                stream.end();
+                
+                stream.write(rentedHeaderBuf, () => {
+                    if (rentedHeaderBuf) {
+                        this.headerBufferPool.release(rentedHeaderBuf);
+                        rentedHeaderBuf = null;
+                    }
+                });
+
+                stream.end(finalBytes, () => {
+                    if (rentedRespBuf) {
+                        this.responseBufferPool.release(rentedRespBuf);
+                    }
+                });
             } catch (err: any) {
+                if (rentedReqBuf) {
+                    this.requestBufferPool.release(rentedReqBuf);
+                }
+                if (rentedRespBuf) {
+                    this.responseBufferPool.release(rentedRespBuf);
+                }
+                if (rentedHeaderBuf) {
+                    this.headerBufferPool.release(rentedHeaderBuf);
+                }
                 stream.respond({
                     ':status': 200,
                     'content-type': 'application/grpc',
@@ -342,4 +450,26 @@ function matchREST(method: string, path: string, routes: RESTRoute[]): { route: 
 function splitPath(path: string): string[] {
     const trimmed = path.replace(/^\/+|\/+$/g, '');
     return trimmed === '' ? [] : trimmed.split('/');
+}
+
+class BufferPool {
+    private pool: Buffer[] = [];
+    private bufferSize: number;
+
+    constructor(bufferSize: number, initialCount: number = 10) {
+        this.bufferSize = bufferSize;
+        for (let i = 0; i < initialCount; i++) {
+            this.pool.push(Buffer.alloc(bufferSize));
+        }
+    }
+
+    public acquire(): Buffer {
+        return this.pool.pop() || Buffer.alloc(this.bufferSize);
+    }
+
+    public release(buf: Buffer) {
+        if (buf.length === this.bufferSize) {
+            this.pool.push(buf);
+        }
+    }
 }

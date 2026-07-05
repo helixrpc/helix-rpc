@@ -33,6 +33,10 @@ func (l *SniffingListener) Start() {
 		if err != nil {
 			break
 		}
+		if tcpConn, ok := conn.(*net.TCPConn); ok {
+			_ = tcpConn.SetKeepAlive(true)
+			_ = tcpConn.SetKeepAlivePeriod(3 * time.Minute)
+		}
 		wg.Add(1)
 		go func(c net.Conn) {
 			defer wg.Done()

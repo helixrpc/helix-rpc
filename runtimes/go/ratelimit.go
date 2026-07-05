@@ -194,3 +194,95 @@ func max64(a, b int64) int64 {
 	}
 	return b
 }
+
+// AdaptiveConcurrencyLimiter implements a concurrency limiter that dynamically
+// adjusts the concurrency limit based on measured latency durations (Vegas algorithm).
+type AdaptiveConcurrencyLimiter struct {
+	mu             sync.Mutex
+	limit          int32
+	minLimit       int32
+	maxLimit       int32
+	rttNoLoad      time.Duration
+	rttActual      time.Duration
+	activeRequests int32
+	alpha          float64
+	beta           float64
+}
+
+// NewAdaptiveConcurrencyLimiter creates a new AdaptiveConcurrencyLimiter.
+func NewAdaptiveConcurrencyLimiter(initialLimit, minLimit, maxLimit int32) *AdaptiveConcurrencyLimiter {
+	return &AdaptiveConcurrencyLimiter{
+		limit:    initialLimit,
+		minLimit: minLimit,
+		maxLimit: maxLimit,
+		alpha:    3.0,
+		beta:     6.0,
+	}
+}
+
+func (acl *AdaptiveConcurrencyLimiter) Acquire() bool {
+	for {
+		active := atomic.LoadInt32(&acl.activeRequests)
+		limit := atomic.LoadInt32(&acl.limit)
+		if active >= limit {
+			return false
+		}
+		if atomic.CompareAndSwapInt32(&acl.activeRequests, active, active+1) {
+			return true
+		}
+	}
+}
+
+func (acl *AdaptiveConcurrencyLimiter) Release(rtt time.Duration) {
+	atomic.AddInt32(&acl.activeRequests, -1)
+	acl.updateLimit(rtt)
+}
+
+func (acl *AdaptiveConcurrencyLimiter) updateLimit(rtt time.Duration) {
+	acl.mu.Lock()
+	defer acl.mu.Unlock()
+
+	if acl.rttNoLoad == 0 || rtt < acl.rttNoLoad {
+		acl.rttNoLoad = rtt
+	}
+
+	if acl.rttActual == 0 {
+		acl.rttActual = rtt
+	} else {
+		acl.rttActual = time.Duration(0.9*float64(acl.rttActual) + 0.1*float64(rtt))
+	}
+
+	limitFloat := float64(acl.limit)
+	expected := limitFloat * (float64(acl.rttNoLoad) / float64(acl.rttActual))
+	queue := limitFloat - expected
+
+	if queue < acl.alpha {
+		if acl.limit < acl.maxLimit {
+			acl.limit++
+		}
+	} else if queue > acl.beta {
+		if acl.limit > acl.minLimit {
+			acl.limit--
+		}
+	}
+}
+
+func (acl *AdaptiveConcurrencyLimiter) Limit() int32 {
+	return atomic.LoadInt32(&acl.limit)
+}
+
+// Interceptor returns a UnaryServerInterceptor that enforces the adaptive concurrency limit.
+func (acl *AdaptiveConcurrencyLimiter) Interceptor() UnaryServerInterceptor {
+	return func(ctx context.Context, req interface{}, info *UnaryServerInfo, handler UnaryHandler) (interface{}, error) {
+		if !acl.Acquire() {
+			return nil, &HelixError{
+				Code:    CodeResourceExhausted,
+				Message: "concurrency limit exceeded (adaptive)",
+			}
+		}
+		start := time.Now()
+		resp, err := handler(ctx, req)
+		acl.Release(time.Since(start))
+		return resp, err
+	}
+}

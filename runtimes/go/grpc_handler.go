@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"encoding/binary"
@@ -17,6 +18,12 @@ import (
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 )
+
+var responseBufferPool = sync.Pool{
+	New: func() interface{} {
+		return new(bytes.Buffer)
+	},
+}
 
 type ProtoMarshaler interface {
 	Marshal() ([]byte, error)
@@ -114,12 +121,25 @@ func (s *sseServerStream) Recv(v interface{}) error {
 }
 
 func (s *sseServerStream) Send(v interface{}) error {
-	respBytes, err := sonic.Marshal(v)
-	if err != nil {
+	buf := responseBufferPool.Get().(*bytes.Buffer)
+	buf.Reset()
+	defer responseBufferPool.Put(buf)
+
+	enc := sonic.ConfigDefault.NewEncoder(buf)
+	if err := enc.Encode(v); err != nil {
 		return err
 	}
-	msg := fmt.Sprintf("data: %s\n\n", string(respBytes))
-	if _, err := s.w.Write([]byte(msg)); err != nil {
+	if _, err := s.w.Write([]byte("data: ")); err != nil {
+		return err
+	}
+	serialized := buf.Bytes()
+	if len(serialized) > 0 && serialized[len(serialized)-1] == '\n' {
+		serialized = serialized[:len(serialized)-1]
+	}
+	if _, err := s.w.Write(serialized); err != nil {
+		return err
+	}
+	if _, err := s.w.Write([]byte("\n\n")); err != nil {
 		return err
 	}
 	if flusher, ok := s.w.(http.Flusher); ok {
@@ -292,16 +312,19 @@ func (h *GRPCHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "method execution failed: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
+		buf := responseBufferPool.Get().(*bytes.Buffer)
+		buf.Reset()
+		defer responseBufferPool.Put(buf)
 
-		respBytes, err := sonic.Marshal(resp)
-		if err != nil {
+		enc := sonic.ConfigDefault.NewEncoder(buf)
+		if err := enc.Encode(resp); err != nil {
 			http.Error(w, "failed to marshal json response", http.StatusInternalServerError)
 			return
 		}
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write(respBytes)
+		_, _ = w.Write(buf.Bytes())
 		return
 	}
 
@@ -443,10 +466,14 @@ func (h *GRPCHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	buf := responseBufferPool.Get().(*bytes.Buffer)
+	buf.Reset()
+	defer responseBufferPool.Put(buf)
 
-	respFrame := make([]byte, 5+len(respPayload))
-	respFrame[0] = compressFlag
-	binary.BigEndian.PutUint32(respFrame[1:5], uint32(len(respPayload)))
+	header := [5]byte{compressFlag}
+	binary.BigEndian.PutUint32(header[1:5], uint32(len(respPayload)))
+	_, _ = buf.Write(header[:])
+	_, _ = buf.Write(respPayload)
 
 	w.Header().Set("Content-Type", "application/grpc")
 	if compressFlag == 1 {
@@ -455,8 +482,7 @@ func (h *GRPCHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("grpc-status", "0") // OK
 	w.WriteHeader(http.StatusOK)
 
-	w.Write(respFrame[:5])
-	w.Write(respPayload)
+	_, _ = w.Write(buf.Bytes())
 }
 
 func matchREST(method, path string, routes []RESTRoute) (*RESTRoute, map[string]string) {

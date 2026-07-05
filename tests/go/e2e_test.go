@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -139,7 +140,7 @@ func TestE2EMultiProtocol(t *testing.T) {
 		}
 
 		expectedJSON := `{"user_id":555,"username":"david-response-json-trace-456","email":"david@example.com-verified"}`
-		if string(respBytes) != expectedJSON {
+		if strings.TrimSpace(string(respBytes)) != expectedJSON {
 			t.Errorf("unexpected response JSON: got %s, expected %s", string(respBytes), expectedJSON)
 		}
 	})

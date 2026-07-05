@@ -34,6 +34,9 @@ public class MultiplexedServer implements AutoCloseable {
         while (running) {
             try {
                 Socket socket = serverSocket.accept();
+                socket.setKeepAlive(true);
+                socket.setTcpNoDelay(true);
+                socket.setPerformancePreferences(0, 2, 1); // Prioritize low latency (connection time: 0, latency: 2, bandwidth: 1)
                 new Thread(() -> {
                     try {
                         PushbackInputStream pbis = new PushbackInputStream(socket.getInputStream(), 8);

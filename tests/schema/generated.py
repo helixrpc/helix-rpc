@@ -174,9 +174,15 @@ class LazyChatMessage:
             field_num = tag >> 3
             wire_type = tag & 0x7
             if field_num == 1:
-                _l, idx = _read_varint(raw, idx); _f_role = bytes(raw[idx:idx+_l]).decode('utf-8'); idx += _l
+                _l, idx = _read_varint(raw, idx)
+                _f_role = bytes(raw[idx:idx+_l])
+                idx += _l
+                _f_role = _f_role.decode('utf-8')
             elif field_num == 2:
-                _l, idx = _read_varint(raw, idx); _f_content = bytes(raw[idx:idx+_l]).decode('utf-8'); idx += _l
+                _l, idx = _read_varint(raw, idx)
+                _f_content = bytes(raw[idx:idx+_l])
+                idx += _l
+                _f_content = _f_content.decode('utf-8')
             else:
                 if wire_type == 0: _, idx = _read_varint(raw, idx)
                 elif wire_type == 2:
@@ -322,7 +328,7 @@ class LazyChatCompletionRequest:
     def get_stream(self) -> bool:
         b, _ = _fast_scan_field(self._raw, 3)
         v, _ = _read_varint(b, 0)
-        return bool(v)
+        return v != 0
 
     @classmethod
     def transpile_protobuf_to_thrift_compact(cls, data: bytes) -> bytes:
@@ -337,11 +343,14 @@ class LazyChatCompletionRequest:
             field_num = tag >> 3
             wire_type = tag & 0x7
             if field_num == 1:
-                _l, idx = _read_varint(raw, idx); _f_model = bytes(raw[idx:idx+_l]).decode('utf-8'); idx += _l
+                _l, idx = _read_varint(raw, idx)
+                _f_model = bytes(raw[idx:idx+_l])
+                idx += _l
+                _f_model = _f_model.decode('utf-8')
             elif field_num == 2:
-                _, idx = _read_varint(raw, idx)
             elif field_num == 3:
-                _v, idx = _read_varint(raw, idx); _f_stream = bool(_v)
+                v, idx = _read_varint(raw, idx)
+                _f_stream = (v != 0)
             else:
                 if wire_type == 0: _, idx = _read_varint(raw, idx)
                 elif wire_type == 2:
@@ -515,13 +524,15 @@ class LazyChatCompletionChoice:
             field_num = tag >> 3
             wire_type = tag & 0x7
             if field_num == 1:
-                _f_index, idx = _read_varint(raw, idx)
+                v, idx = _read_varint(raw, idx)
+                _f_index = v
             elif field_num == 2:
-                _, idx = _read_varint(raw, idx)
             elif field_num == 3:
-                _, idx = _read_varint(raw, idx)
             elif field_num == 4:
-                _l, idx = _read_varint(raw, idx); _f_finish_reason = bytes(raw[idx:idx+_l]).decode('utf-8'); idx += _l
+                _l, idx = _read_varint(raw, idx)
+                _f_finish_reason = bytes(raw[idx:idx+_l])
+                idx += _l
+                _f_finish_reason = _f_finish_reason.decode('utf-8')
             else:
                 if wire_type == 0: _, idx = _read_varint(raw, idx)
                 elif wire_type == 2:
@@ -532,7 +543,7 @@ class LazyChatCompletionChoice:
         _delta = 1 - prev_field
         if 0 < _delta <= 15: out.append((_delta << 4) | 5)
         else: out.append(5); _write_thrift_i16(out, 1)
-        _zz = (_f_index << 1) ^ (_f_index >> 63) if _f_index < 0 else _f_index << 1
+        _zz = (_f_index << 1) ^ (_f_index >> 31) if _f_index < 0 else _f_index << 1
         _write_thrift_varint(out, _zz)
         prev_field = 1
         if _f_finish_reason is not None:
@@ -744,15 +755,24 @@ class LazyChatCompletionResponse:
             field_num = tag >> 3
             wire_type = tag & 0x7
             if field_num == 1:
-                _l, idx = _read_varint(raw, idx); _f_id = bytes(raw[idx:idx+_l]).decode('utf-8'); idx += _l
+                _l, idx = _read_varint(raw, idx)
+                _f_id = bytes(raw[idx:idx+_l])
+                idx += _l
+                _f_id = _f_id.decode('utf-8')
             elif field_num == 2:
-                _l, idx = _read_varint(raw, idx); _f_object = bytes(raw[idx:idx+_l]).decode('utf-8'); idx += _l
+                _l, idx = _read_varint(raw, idx)
+                _f_object = bytes(raw[idx:idx+_l])
+                idx += _l
+                _f_object = _f_object.decode('utf-8')
             elif field_num == 3:
-                _f_created, idx = _read_varint(raw, idx)
+                v, idx = _read_varint(raw, idx)
+                _f_created = v
             elif field_num == 4:
-                _l, idx = _read_varint(raw, idx); _f_model = bytes(raw[idx:idx+_l]).decode('utf-8'); idx += _l
+                _l, idx = _read_varint(raw, idx)
+                _f_model = bytes(raw[idx:idx+_l])
+                idx += _l
+                _f_model = _f_model.decode('utf-8')
             elif field_num == 5:
-                _, idx = _read_varint(raw, idx)
             else:
                 if wire_type == 0: _, idx = _read_varint(raw, idx)
                 elif wire_type == 2:
