@@ -55,6 +55,8 @@ func main() {
 		runDiff(os.Args[2:])
 	case "lint":
 		runLint(os.Args[2:])
+	case "transpile-schema":
+		runTranspileSchema(os.Args[2:])
 	case "version", "--version", "-v":
 		fmt.Printf("helix-gen %s\n", version)
 	case "help", "--help", "-h":
@@ -754,4 +756,27 @@ func runLint(args []string) {
 	}
 
 	fmt.Printf("✅ Schema %s matches Helix style guidelines!\n", filepath.Base(path))
+}
+
+func runTranspileSchema(args []string) {
+	fs := flag.NewFlagSet("transpile-schema", flag.ExitOnError)
+	inPath := fs.String("in", "", "Input legacy Thrift IDL file path")
+	outPath := fs.String("out", "", "Output Protobuf v3 file path")
+	fs.Usage = func() {
+		fmt.Fprintln(os.Stderr, "Usage: helix-gen transpile-schema -in <schema.thrift> -out <schema.proto>")
+		fs.PrintDefaults()
+	}
+	fs.Parse(args) //nolint:errcheck
+
+	if *inPath == "" || *outPath == "" {
+		fs.Usage()
+		os.Exit(1)
+	}
+
+	if err := compat.TranspileFile(*inPath, *outPath); err != nil {
+		printError(fmt.Sprintf("failed to transpile schema: %v", err))
+		os.Exit(1)
+	}
+
+	fmt.Printf("✅ Transpiled schema: %s -> %s successfully!\n", *inPath, *outPath)
 }
