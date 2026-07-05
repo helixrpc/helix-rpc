@@ -126,3 +126,97 @@ impl Balancer for RoundRobinBalancer {
         Ok(targets[idx].clone())
     }
 }
+
+pub struct ConsistentHashBalancer {
+    replicas: usize,
+    inner: Arc<Mutex<ConsistentHashInner>>,
+}
+
+struct ConsistentHashInner {
+    ring: Vec<u64>,
+    hash_map: std::collections::HashMap<u64, String>,
+    registered: std::collections::HashSet<String>,
+}
+
+impl ConsistentHashBalancer {
+    pub fn new(replicas: usize) -> Self {
+        let replicas = if replicas == 0 { 50 } else { replicas };
+        ConsistentHashBalancer {
+            replicas,
+            inner: Arc::new(Mutex::new(ConsistentHashInner {
+                ring: Vec::new(),
+                hash_map: std::collections::HashMap::new(),
+                registered: std::collections::HashSet::new(),
+            })),
+        }
+    }
+
+    fn get_hash(key: &str) -> u64 {
+        use std::hash::{Hash, Hasher};
+        let mut s = std::collections::hash_map::DefaultHasher::new();
+        key.hash(&mut s);
+        s.finish()
+    }
+
+    pub fn next_with_key(&self, targets: &[String], key: &str) -> Result<String, String> {
+        if targets.is_empty() {
+            return Err("no targets available for load balancing".to_string());
+        }
+
+        let mut guard = self.inner.lock().unwrap();
+        let mut needs_sort = false;
+
+        for target in targets {
+            if !guard.registered.contains(target) {
+                guard.registered.insert(target.clone());
+                for i in 0..self.replicas {
+                    let virtual_node_key = format!("{}#{}", target, i);
+                    let hash = Self::get_hash(&virtual_node_key);
+                    guard.ring.push(hash);
+                    guard.hash_map.insert(hash, target.clone());
+                }
+                needs_sort = true;
+            }
+        }
+
+        if needs_sort {
+            guard.ring.sort_unstable();
+        }
+
+        if guard.ring.is_empty() {
+            return Ok(targets[0].clone());
+        }
+
+        let key_hash = Self::get_hash(key);
+        let idx = match guard.ring.binary_search(&key_hash) {
+            Ok(i) => i,
+            Err(i) => i,
+        };
+
+        let target_set: std::collections::HashSet<&String> = targets.iter().collect();
+        let start_idx = if idx >= guard.ring.len() { 0 } else { idx };
+        let mut curr_idx = start_idx;
+
+        loop {
+            let hash_val = guard.ring[curr_idx];
+            if let Some(node) = guard.hash_map.get(&hash_val) {
+                if target_set.contains(node) {
+                    return Ok(node.clone());
+                }
+            }
+            curr_idx = (curr_idx + 1) % guard.ring.len();
+            if curr_idx == start_idx {
+                break;
+            }
+        }
+
+        Ok(targets[0].clone())
+    }
+}
+
+impl Balancer for ConsistentHashBalancer {
+    fn next(&self, targets: &[String]) -> Result<String, String> {
+        self.next_with_key(targets, "default-key")
+    }
+}
+

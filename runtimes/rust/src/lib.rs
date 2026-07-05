@@ -12,7 +12,7 @@ pub mod retry;
 pub mod server;
 pub mod sniffer;
 
-pub use client_pool::{AnyStream, Balancer, ClientConnPool, RoundRobinBalancer};
+pub use client_pool::{AnyStream, Balancer, ClientConnPool, RoundRobinBalancer, ConsistentHashBalancer};
 pub use errors::{ErrorCode, HelixError};
 pub use metadata::get_metadata;
 pub use server::{

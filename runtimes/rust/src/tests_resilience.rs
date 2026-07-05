@@ -382,4 +382,35 @@ mod resilience_tests {
         assert!(formatted
             .contains("helix_request_duration_seconds_count{method=\"POST\",path=\"/predict\"} 2"));
     }
+
+    #[test]
+    fn test_consistent_hash_balancer() {
+        use crate::client_pool::{Balancer, ConsistentHashBalancer};
+
+        let lb = ConsistentHashBalancer::new(50);
+        let targets = vec![
+            "127.0.0.1:8081".to_string(),
+            "127.0.0.1:8082".to_string(),
+            "127.0.0.1:8083".to_string(),
+        ];
+
+        // 1. Same key maps to the same target consistently
+        let key1 = "system-prompt-llm-1";
+        let choice1 = lb.next_with_key(&targets, key1).unwrap();
+
+        for _ in 0..20 {
+            let choice = lb.next_with_key(&targets, key1).unwrap();
+            assert_eq!(choice, choice1);
+        }
+
+        // 2. Different key maps to a stable target consistently
+        let key2 = "different-system-prompt";
+        let choice2 = lb.next_with_key(&targets, key2).unwrap();
+
+        for _ in 0..20 {
+            let choice = lb.next_with_key(&targets, key2).unwrap();
+            assert_eq!(choice, choice2);
+        }
+    }
 }
+
