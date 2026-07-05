@@ -56,21 +56,26 @@ markdown_extensions:
       permalink: true
 
 nav:
-  - Home: index.md
-  - Setup & Configuration: setup-configuration.md
-  - Architecture: architecture.md
-  - Features: features.md
-  - Language Support: languages.md
-  - Tutorials: tutorials.md
-  - LLM Token Serving: llm-serving.md
-  - Examples: examples.md
-  - Developer Guide: developer-guide.md
-  - Integrations: integrations.md
-  - Migration Guide: migration-guide.md
-  - Benchmarks: benchmarks.md
+  - Getting Started:
+      - Home: index.md
+      - Setup & Configuration: setup-configuration.md
+      - Tutorials: tutorials.md
+  - Guides:
+      - Developer Guide: developer-guide.md
+      - Migration Guide: migration-guide.md
+      - Language Support: languages.md
+  - Core Architecture:
+      - Overview: architecture.md
+      - Features: features.md
+      - Benchmarks: benchmarks.md
+  - Ecosystem & Examples:
+      - LLM Token Serving: llm-serving.md
+      - Integrations: integrations.md
+      - Examples: examples.md
   - Blog:
       - Overview: blog/index.md
       - Introducing Helix RPC: blog/introducing-helix-rpc.md
       - Deep-Dive Advanced Optimizations: blog/deep-dive-advanced-optimizations.md
       - Helix vs. Alternatives: blog/helix-vs-alternatives.md
+
 
