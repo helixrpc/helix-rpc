@@ -66,6 +66,7 @@ nav:
   - Examples: examples.md
   - Developer Guide: developer-guide.md
   - Integrations: integrations.md
+  - Migration Guide: migration-guide.md
   - Benchmarks: benchmarks.md
   - Blog:
       - Overview: blog/index.md
