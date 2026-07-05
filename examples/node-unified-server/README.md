@@ -34,3 +34,27 @@ npm run client
 This sends:
 - A `POST` request to `/v1/kv` with payload `{ "key": "hello", "value": "Unified RPC & REST works!" }`
 - A `GET` request to `/v1/kv/hello` to retrieve it.
+
+---
+
+## 🌐 Testing the 3 Protocols
+
+Helix sniffs incoming traffic on port `9090` and routes it dynamically to the corresponding decoder/handler depending on the protocol preamble:
+
+### 1. JSON over HTTP (REST)
+Test this by making a curl call (or using the Dashboard):
+```bash
+curl -X POST http://127.0.0.1:9090/v1/kv \
+  -H "Content-Type: application/json" \
+  -d '{"key": "test_key", "value": "Hello REST!"}'
+```
+
+### 2. gRPC / HTTP/2 (Protobuf)
+Helix detects the HTTP/2 preface and routes to standard gRPC. Test this using `grpcurl`:
+```bash
+grpcurl -plaintext -d '{"key": "test_key"}' 127.0.0.1:9090 keyval.KVService/Get
+```
+
+### 3. Apache Thrift Compact
+Thrift clients can connect directly to the same port `9090`. Under the hood, Helix transpiles the Thrift compact structure to the target Protobuf model with **zero allocations** in memory before handing it off to the service function.
+
