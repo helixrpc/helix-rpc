@@ -501,8 +501,13 @@ func fastScanField(dAtA []byte, targetFieldNum int32) ([]byte, int, error) {
 		sb.WriteString("\t\tdefault:\n")
 		sb.WriteString("\t\t\tiprot.Skip(ctx, fieldTypeId)\n")
 		sb.WriteString("\t\t}\n")
+		sb.WriteString("\t\t}\n")
 		sb.WriteString("\t\tif err := iprot.ReadFieldEnd(ctx); err != nil {\n")
 		sb.WriteString("\t\t\treturn err\n")
+		sb.WriteString("\t\t}\n")
+		sb.WriteString("\t}\n")
+		sb.WriteString("\treturn iprot.ReadStructEnd(ctx)\n")
+		sb.WriteString("}\n\n")
 		if str.HasFallback {
 			sb.WriteString(fmt.Sprintf("type Lazy%s struct {\n\tdecoded *%s\n}\n\n", str.Name, str.Name))
 			sb.WriteString(fmt.Sprintf("func NewLazy%s(raw []byte) *Lazy%s {\n\tvar decoded %s\n\t_ = decoded.Unmarshal(raw)\n\treturn &Lazy%s{decoded: &decoded}\n}\n\n", str.Name, str.Name, str.Name, str.Name))

@@ -7,5 +7,5 @@
     "strict": true,
     "skipLibCheck": true
   },
-  "include": ["test.ts", "run_parity_tests.ts", "generated.ts"]
+  "include": ["test.ts", "run_parity_tests.ts", "generated.ts", "complex_fallback.ts"]
 }

@@ -238,6 +238,36 @@ function fastScanField(buf: Uint8Array, targetFieldNum: number): [Uint8Array, nu
 		sb.WriteString("    }\n")
 
 		if str.HasFallback {
+			sb.WriteString(fmt.Sprintf("\n    public static unmarshalProtobuf(buf: Uint8Array): %s {\n", str.Name))
+			sb.WriteString(fmt.Sprintf("        const res = new %s();\n", str.Name))
+			sb.WriteString("        let idx = 0;\n")
+			sb.WriteString("        while (idx < buf.length) {\n")
+			sb.WriteString("            const [tag, ni] = readVarint(buf, idx); idx = ni;\n")
+			sb.WriteString("            const fieldNum = Number(tag >> 3n);\n")
+			sb.WriteString("            const wireType = Number(tag & 7n);\n")
+			sb.WriteString("            switch (fieldNum) {\n")
+			for _, f := range str.Fields {
+				sb.WriteString(fmt.Sprintf("                case %d:\n", f.ID))
+				switch f.Type.Kind {
+				case ast.TypeInt32, ast.TypeInt64:
+					sb.WriteString(fmt.Sprintf("                    const [v_%d, ni_%d] = readVarint(buf, idx); idx = ni_%d;\n", f.ID, f.ID, f.ID))
+					sb.WriteString(fmt.Sprintf("                    res.%s = Number(v_%d);\n", toJSFieldName(f.Name), f.ID))
+				case ast.TypeString:
+					sb.WriteString(fmt.Sprintf("                    const [len_%d, ni_%d] = readVarint(buf, idx); idx = ni_%d;\n", f.ID, f.ID, f.ID))
+					sb.WriteString(fmt.Sprintf("                    res.%s = new TextDecoder().decode(buf.subarray(idx, idx + Number(len_%d)));\n", toJSFieldName(f.Name), f.ID))
+					sb.WriteString(fmt.Sprintf("                    idx += Number(len_%d);\n", f.ID))
+				}
+				sb.WriteString("                    break;\n")
+			}
+			sb.WriteString("                default:\n")
+			sb.WriteString("                    if (wireType === 0) { const [, ni2] = readVarint(buf, idx); idx = ni2; }\n")
+			sb.WriteString("                    else if (wireType === 2) { const [len, ni2] = readVarint(buf, idx); idx = ni2 + Number(len); }\n")
+			sb.WriteString("                    break;\n")
+			sb.WriteString("            }\n")
+			sb.WriteString("        }\n")
+			sb.WriteString("        return res;\n")
+			sb.WriteString("    }\n")
+
 			sb.WriteString("\n    public static transpileProtobufToThriftCompact(input: Uint8Array): Uint8Array {\n")
 			sb.WriteString("        throw new Error(\"Transpilation is unsupported for structs with complex fields.\");\n")
 			sb.WriteString("    }\n")

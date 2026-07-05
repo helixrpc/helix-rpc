@@ -1,4 +1,5 @@
 pub mod generated;
+pub mod complex_fallback;
 
 use generated::{UserProfile, UserProfileService};
 use helix_rt::{sniff_protocol, Compressor, Protocol};

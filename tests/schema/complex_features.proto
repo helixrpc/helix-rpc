@@ -1,0 +1,11 @@
+syntax = "proto3";
+package test;
+
+message ComplexRequest {
+    int32 id = 1;
+    oneof payload {
+        string text = 2;
+        bytes data = 3;
+    }
+    map<string, string> metadata = 4;
+}

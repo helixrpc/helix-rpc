@@ -235,7 +235,26 @@ func (p *protoParser) parseMessage() (*ast.StructNode, error) {
 				p.nextToken()
 				typeName = "list<" + p.tok.val + ">" // Map list for simplicity
 			}
-			p.nextToken() // consume type name
+			if typeName == "map" {
+				str.HasFallback = true
+				p.nextToken() // consume 'map'
+				if p.tok.kind == tokPunct && p.tok.val == "<" {
+					p.nextToken() // consume '<'
+					keyType := p.tok.val
+					p.nextToken() // consume keyType
+					if p.tok.kind == tokPunct && p.tok.val == "," {
+						p.nextToken() // consume ','
+						valueType := p.tok.val
+						p.nextToken() // consume valueType
+						if p.tok.kind == tokPunct && p.tok.val == ">" {
+							p.nextToken() // consume '>'
+							typeName = fmt.Sprintf("map<%s,%s>", keyType, valueType)
+						}
+					}
+				}
+			} else {
+				p.nextToken() // consume type name
+			}
 
 			if p.tok.kind != tokIdent {
 				return nil, fmt.Errorf("expected field name identifier after type %s", typeName)
