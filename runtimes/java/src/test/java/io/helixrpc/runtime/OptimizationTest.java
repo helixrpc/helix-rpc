@@ -27,8 +27,8 @@ public class OptimizationTest {
 
         // 1. Verify Lazy Smart Fields
         UserProfile.Lazy lazy = new UserProfile.Lazy(protoBuf.duplicate());
-        if (lazy.getUserId() != 42) {
-            throw new RuntimeException("failed lazy getUserId");
+        if (lazy.getUserID() != 42) {
+            throw new RuntimeException("failed lazy getUserID");
         }
         if (!"zero_copy_hero".equals(lazy.getUsername())) {
             throw new RuntimeException("failed lazy getUsername");
