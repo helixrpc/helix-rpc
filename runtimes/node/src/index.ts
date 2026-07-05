@@ -8,3 +8,4 @@ export * from './telemetry.js';
 export * from './circuitbreaker.js';
 export * from './balancer.js';
 export * from './ebpf.js';
+export * from './quic_transport.js';

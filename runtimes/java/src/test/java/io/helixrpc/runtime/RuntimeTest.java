@@ -97,12 +97,23 @@ public class RuntimeTest {
         System.out.println("✓ testHealth passed!");
     }
 
+    public static void testQuicTransport() throws Exception {
+        QuicTransport.QuicListener listener = new QuicTransport.QuicListener(0);
+        int port = listener.getPort();
+        if (port <= 0) {
+            throw new RuntimeException("failed to bind Java UDP socket");
+        }
+        listener.close();
+        System.out.println("✓ testQuicTransport passed!");
+    }
+
     public static void main(String[] args) throws Exception {
         testConsistentHashBalancer();
         testSniffer();
         testDeadline();
         testCompression();
         testHealth();
+        testQuicTransport();
         System.out.println("All Java Parity tests passed successfully!");
     }
 }

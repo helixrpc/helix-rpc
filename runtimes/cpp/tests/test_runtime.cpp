@@ -3,6 +3,7 @@
 #include "helix/deadline.h"
 #include "helix/compression.h"
 #include "helix/health.h"
+#include "helix/quic_transport.h"
 #include <iostream>
 #include <cassert>
 
@@ -73,12 +74,22 @@ void TestHealth() {
     std::cout << "✓ TestHealth passed!" << std::endl;
 }
 
+void TestQuicTransport() {
+    helix::QuicListener listener(0);
+    int port = listener.GetPort();
+    assert(port > 0);
+
+    // Verify socket exists
+    std::cout << "✓ TestQuicTransport passed (UDP bound on port " << port << ")!" << std::endl;
+}
+
 int main() {
     TestConsistentHashBalancer();
     TestSniffer();
     TestDeadline();
     TestCompression();
     TestHealth();
+    TestQuicTransport();
     std::cout << "All C++ Parity tests passed successfully!" << std::endl;
     return 0;
 }
