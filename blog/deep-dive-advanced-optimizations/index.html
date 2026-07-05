@@ -1204,7 +1204,7 @@
 - <strong>Protobuf wire type 0 (varint)</strong> maps to <strong>Thrift Compact 0x05 (I32)</strong> or <strong>0x06 (I64)</strong>.
 - <strong>Protobuf wire type 2 (length-delimited)</strong> maps to <strong>Thrift Compact 0x08 (Binary/String)</strong>.</p>
 <p>To transpile integer values, we must account for different signed variable-length representations. Protobuf represents signed numbers using ZigZag encoding in Sint32/Sint64 formats, while Thrift Compact represents all I16/I32/I64 types using ZigZag. The translation applies bitwise transformations inline:</p>
-<p>$$\text{ZigZagEncode}(v) = (v \ll 1) \oplus (v \gg 63)$$</p>
+<div class="arithmatex">\[\text{ZigZagEncode}(v) = (v \ll 1) \oplus (v \gg 63)\]</div>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>Protobuf Stream:    [ 0x08 ] [ 0x2A ] -&gt; Tag 1 (varint), Value 42
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>Transpiler Action:  Compute Delta: 1 - 0 = 1 (Fits in short-form nibble)
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>                    Thrift Compact Header: (1 &lt;&lt; 4) | 0x06 = 0x16 (Delta 1, Type I64)
@@ -1283,7 +1283,7 @@
 <h3 id="skip-scan-mechanism">Skip-Scan Mechanism<a class="headerlink" href="#skip-scan-mechanism" title="Permanent link">&para;</a></h3>
 <p>When scanning for tag 3:
 1. Parse tag 1 (Varint). It's not 3. Read varint value and skip it.
-2. Parse tag 2 (Length-delimited). It's not 3. Read length prefix $L$, then add $L$ to current index to jump past the string payload.
+2. Parse tag 2 (Length-delimited). It's not 3. Read length prefix <span class="arithmatex">\(L\)</span>, then add <span class="arithmatex">\(L\)</span> to current index to jump past the string payload.
 3. Parse tag 3. It matches. Return the slice containing the raw bytes.</p>
 <p>The rest of the payload is never parsed. Full deserialization is deferred, or avoided completely if the request is routed without payload modification.</p>
 <hr />
@@ -1364,6 +1364,10 @@
     
     
       <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+        <script src="../../javascripts/mathjax.js"></script>
+      
+        <script src="https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js"></script>
       
     
   </body>
