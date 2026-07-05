@@ -853,4 +853,98 @@ mod advanced_optimization_tests {
         assert_eq!(helix_rt::strip_unix_prefix("unix:///tmp/helix.sock"), "/tmp/helix.sock");
         assert_eq!(helix_rt::strip_unix_prefix("127.0.0.1:9090"), "127.0.0.1:9090");
     }
+
+    #[tokio::test]
+    async fn test_e2e_grpc_web() {
+        use std::sync::Arc;
+        use hyper::{Client, Request, Body, StatusCode};
+        use base64::Engine;
+
+        // Bind dynamic port
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        drop(listener);
+
+        let server = helix_rt::server::HelixServer::new(
+            &addr.to_string(),
+            Arc::new(super::ServiceImpl),
+            vec![],
+        );
+
+        let srv = Arc::new(server);
+        let srv_clone = srv.clone();
+        tokio::spawn(async move {
+            srv_clone.start().await.unwrap();
+        });
+
+        // Wait for server to start
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        let client = Client::new();
+
+        // 1. Binary mode
+        let req_obj = UserProfile {
+            user_id: 12345,
+            username: "rust_grpc_web".to_string(),
+            email: "rust@grpcweb.com".to_string(),
+        };
+        let mut payload = Vec::new();
+        req_obj.encode(&mut payload).unwrap();
+
+        let mut frame = Vec::new();
+        frame.push(0);
+        let length = payload.len() as u32;
+        frame.extend_from_slice(&length.to_be_bytes());
+        frame.extend_from_slice(&payload);
+
+        let req = Request::builder()
+            .method("POST")
+            .uri(format!("http://{}/helix_example.UserProfileService/GetUserProfile", addr))
+            .header("content-type", "application/grpc-web")
+            .body(Body::from(frame.clone()))
+            .unwrap();
+
+        let res = client.request(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+        assert_eq!(res.headers().get("content-type").unwrap(), "application/grpc-web");
+
+        let body_bytes = hyper::body::to_bytes(res.into_body()).await.unwrap();
+        assert!(body_bytes.len() > 10);
+
+        // Read message frame
+        let mut msg_len_bytes = [0u8; 4];
+        msg_len_bytes.copy_from_slice(&body_bytes[1..5]);
+        let msg_len = u32::from_be_bytes(msg_len_bytes) as usize;
+        let msg_payload = &body_bytes[5..5+msg_len];
+        let decoded = UserProfile::decode(msg_payload).unwrap();
+        assert_eq!(decoded.user_id, 12345);
+        assert!(decoded.username.contains("rust_grpc_web-response"));
+
+        // Read trailers frame
+        let trailers_header = &body_bytes[5+msg_len..5+msg_len+5];
+        assert_eq!(trailers_header[0], 0x80);
+
+        // 2. Text mode
+        let encoded_frame = base64::engine::general_purpose::STANDARD.encode(&frame);
+        let req_text = Request::builder()
+            .method("POST")
+            .uri(format!("http://{}/helix_example.UserProfileService/GetUserProfile", addr))
+            .header("content-type", "application/grpc-web-text")
+            .body(Body::from(encoded_frame))
+            .unwrap();
+
+        let res_text = client.request(req_text).await.unwrap();
+        assert_eq!(res_text.status(), StatusCode::OK);
+        assert_eq!(res_text.headers().get("content-type").unwrap(), "application/grpc-web-text");
+
+        let text_body_bytes = hyper::body::to_bytes(res_text.into_body()).await.unwrap();
+        let decoded_body_bytes = base64::engine::general_purpose::STANDARD.decode(text_body_bytes).unwrap();
+
+        let mut msg_len_bytes_t = [0u8; 4];
+        msg_len_bytes_t.copy_from_slice(&decoded_body_bytes[1..5]);
+        let msg_len_t = u32::from_be_bytes(msg_len_bytes_t) as usize;
+        let msg_payload_t = &decoded_body_bytes[5..5+msg_len_t];
+        let decoded_t = UserProfile::decode(msg_payload_t).unwrap();
+        assert_eq!(decoded_t.user_id, 12345);
+    }
 }

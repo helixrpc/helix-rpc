@@ -18,3 +18,4 @@ rustls = { version = "0.21", features = ["dangerous_configuration"] }
 tokio-rustls = "0.24"
 rustls-pemfile = "1.0"
 hyper-rustls = { version = "0.24", features = ["http2"] }
+base64 = "0.21"
