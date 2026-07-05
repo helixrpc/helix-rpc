@@ -10,8 +10,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/helixrpc/helix-rpc/actions/workflows/ci.yml">
-    <img src="https://github.com/helixrpc/helix-rpc/actions/workflows/ci.yml/badge.svg" alt="CI"/>
+  <a href="https://github.com/helixrpc/helix-rpc/actions/workflows/ci-integration.yml">
+    <img src="https://github.com/helixrpc/helix-rpc/actions/workflows/ci-integration.yml/badge.svg" alt="CI"/>
   </a>
   <a href="https://github.com/helixrpc/helix-rpc/actions/workflows/docs.yml">
     <img src="https://github.com/helixrpc/helix-rpc/actions/workflows/docs.yml/badge.svg" alt="Docs"/>
