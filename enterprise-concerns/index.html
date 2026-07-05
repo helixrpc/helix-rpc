@@ -920,6 +920,84 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#5-kvcache-consistent-hash-prefix-routing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. KVCache Consistent-Hash Prefix Routing
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5. KVCache Consistent-Hash Prefix Routing">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Configuration
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-quic-http3-sniffing-transport" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. QUIC / HTTP/3 Sniffing Transport
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-multi-tenant-rate-limiting-auth" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. Multi-Tenant Rate Limiting &amp; Auth
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8-kubernetes-controller-schema-crd" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8. Kubernetes Controller &amp; Schema CRD
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="8. Kubernetes Controller &amp; Schema CRD">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#helixschema-resource" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        HelixSchema Resource
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1232,6 +1310,63 @@
 </span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>    <span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">conn</span><span class="o">.</span><span class="n">fetch</span><span class="p">(</span><span class="s2">&quot;SELECT * FROM models&quot;</span><span class="p">)</span>
 </span></code></pre></div></li>
 </ul>
+<hr />
+<h2 id="5-kvcache-consistent-hash-prefix-routing">5. KVCache Consistent-Hash Prefix Routing<a class="headerlink" href="#5-kvcache-consistent-hash-prefix-routing" title="Permanent link">&para;</a></h2>
+<p>In large-scale AI deployment settings, serving models concurrently requires optimizing key-value (KV) prompt caching. Helix RPC provides a <code>ConsistentHashBalancer</code> that hashes the prompt prefix metadata to direct traffic to corresponding nodes.</p>
+<h3 id="configuration">Configuration<a class="headerlink" href="#configuration" title="Permanent link">&para;</a></h3>
+<p><strong>Go Usage:</strong>
+<div class="language-go highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="kn">import</span><span class="w"> </span><span class="s">&quot;github.com/helix-rpc/helix/runtime-go&quot;</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="nx">balancer</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">runtime</span><span class="p">.</span><span class="nx">NewConsistentHashBalancer</span><span class="p">(</span><span class="mi">50</span><span class="p">)</span><span class="w"> </span><span class="c1">// 50 virtual nodes</span>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="nx">targets</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="p">[]</span><span class="kt">string</span><span class="p">{</span><span class="s">&quot;10.0.0.1:9090&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;10.0.0.2:9090&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;10.0.0.3:9090&quot;</span><span class="p">}</span>
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="c1">// Consistent selection based on prompt prefix hash</span>
+</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="nx">target</span><span class="p">,</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">balancer</span><span class="p">.</span><span class="nx">NextWithKey</span><span class="p">(</span><span class="nx">targets</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;system-prompt-v1&quot;</span><span class="p">)</span>
+</span></code></pre></div></p>
+<p><strong>Rust Usage:</strong>
+<div class="language-rust highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="k">use</span><span class="w"> </span><span class="n">helix_rt</span><span class="p">::{</span><span class="n">ConsistentHashBalancer</span><span class="p">,</span><span class="w"> </span><span class="n">Balancer</span><span class="p">};</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="kd">let</span><span class="w"> </span><span class="n">balancer</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ConsistentHashBalancer</span><span class="p">::</span><span class="n">new</span><span class="p">(</span><span class="mi">50</span><span class="p">);</span>
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="kd">let</span><span class="w"> </span><span class="n">targets</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="fm">vec!</span><span class="p">[</span><span class="s">&quot;10.0.0.1:9090&quot;</span><span class="p">.</span><span class="n">to_string</span><span class="p">(),</span><span class="w"> </span><span class="s">&quot;10.0.0.2:9090&quot;</span><span class="p">.</span><span class="n">to_string</span><span class="p">()];</span>
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>
+</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="kd">let</span><span class="w"> </span><span class="n">target</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">balancer</span><span class="p">.</span><span class="n">next_with_key</span><span class="p">(</span><span class="o">&amp;</span><span class="n">targets</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;system-prompt-v1&quot;</span><span class="p">).</span><span class="n">unwrap</span><span class="p">();</span>
+</span></code></pre></div></p>
+<hr />
+<h2 id="6-quic-http3-sniffing-transport">6. QUIC / HTTP/3 Sniffing Transport<a class="headerlink" href="#6-quic-http3-sniffing-transport" title="Permanent link">&para;</a></h2>
+<p>Mobile clients running under lossy connections experience head-of-line blocking using traditional TCP/HTTP2 multiplexing. Helix runtimes support high-performance UDP-based QUIC stream transport.</p>
+<ul>
+<li><strong>Go</strong>: Binds to UDP port to listen for virtual stream frames using <code>QUICTransportListener</code>.</li>
+<li><strong>Rust</strong>: Uses a tokio-based <code>QuicListener</code> running on a separate thread socket accept loop.</li>
+</ul>
+<hr />
+<h2 id="7-multi-tenant-rate-limiting-auth">7. Multi-Tenant Rate Limiting &amp; Auth<a class="headerlink" href="#7-multi-tenant-rate-limiting-auth" title="Permanent link">&para;</a></h2>
+<p>To manage traffic limits dynamically across multiple consumer tiers, use <code>MultiTenantRateLimiter</code>.</p>
+<div class="language-go highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="nx">limiter</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">runtime</span><span class="p">.</span><span class="nx">NewMultiTenantRateLimiter</span><span class="p">(</span>
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="w">    </span><span class="nx">runtime</span><span class="p">.</span><span class="nx">TenantConfig</span><span class="p">{</span><span class="nx">RequestsPerSecond</span><span class="p">:</span><span class="w"> </span><span class="mi">5</span><span class="p">,</span><span class="w"> </span><span class="nx">BurstSize</span><span class="p">:</span><span class="w"> </span><span class="mi">5</span><span class="p">},</span><span class="w"> </span><span class="c1">// Default fallback</span>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">    </span><span class="kd">func</span><span class="p">(</span><span class="nx">r</span><span class="w"> </span><span class="o">*</span><span class="nx">http</span><span class="p">.</span><span class="nx">Request</span><span class="p">)</span><span class="w"> </span><span class="p">(</span><span class="kt">string</span><span class="p">,</span><span class="w"> </span><span class="nx">runtime</span><span class="p">.</span><span class="nx">TenantConfig</span><span class="p">,</span><span class="w"> </span><span class="kt">error</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="w">        </span><span class="nx">tenantID</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">r</span><span class="p">.</span><span class="nx">Header</span><span class="p">.</span><span class="nx">Get</span><span class="p">(</span><span class="s">&quot;x-tenant-id&quot;</span><span class="p">)</span>
+</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="w">        </span><span class="c1">// Resolve and return tenant configuration dynamically...</span>
+</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="nx">tenantID</span><span class="p">,</span><span class="w"> </span><span class="nx">runtime</span><span class="p">.</span><span class="nx">TenantConfig</span><span class="p">{</span><span class="nx">RequestsPerSecond</span><span class="p">:</span><span class="w"> </span><span class="mi">100</span><span class="p">,</span><span class="w"> </span><span class="nx">BurstSize</span><span class="p">:</span><span class="w"> </span><span class="mi">100</span><span class="p">},</span><span class="w"> </span><span class="kc">nil</span>
+</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="w">    </span><span class="p">},</span>
+</span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="p">)</span>
+</span></code></pre></div>
+<hr />
+<h2 id="8-kubernetes-controller-schema-crd">8. Kubernetes Controller &amp; Schema CRD<a class="headerlink" href="#8-kubernetes-controller-schema-crd" title="Permanent link">&para;</a></h2>
+<p>Helix RPC features a Kubernetes Custom Resource Definition (<code>HelixSchema</code>) and watch controller to compile service contracts dynamically inside K8s clusters.</p>
+<h3 id="helixschema-resource">HelixSchema Resource<a class="headerlink" href="#helixschema-resource" title="Permanent link">&para;</a></h3>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">helixrpc.io/v1alpha1</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">HelixSchema</span>
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="nt">metadata</span><span class="p">:</span>
+</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">user-profile-service</span>
+</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="w">  </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">production</span>
+</span><span id="__span-8-6"><a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="nt">spec</span><span class="p">:</span>
+</span><span id="__span-8-7"><a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="w">  </span><span class="nt">idlContent</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">|</span>
+</span><span id="__span-8-8"><a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a><span class="w">    </span><span class="no">syntax = &quot;proto3&quot;;</span>
+</span><span id="__span-8-9"><a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a><span class="w">    </span><span class="no">package user;</span>
+</span><span id="__span-8-10"><a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a><span class="w">    </span><span class="no">message ProfileRequest { int64 user_id = 1; }</span>
+</span><span id="__span-8-11"><a id="__codelineno-8-11" name="__codelineno-8-11" href="#__codelineno-8-11"></a><span class="w">  </span><span class="nt">language</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">rust</span>
+</span><span id="__span-8-12"><a id="__codelineno-8-12" name="__codelineno-8-12" href="#__codelineno-8-12"></a><span class="w">  </span><span class="nt">outputDirectory</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/app/generated</span>
+</span></code></pre></div>
 
 
 
