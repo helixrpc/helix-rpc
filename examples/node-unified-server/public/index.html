@@ -131,7 +131,7 @@
       font-weight: 500;
     }
 
-    .form-group input {
+    .form-group input, .form-group select {
       width: 100%;
       background: rgba(0, 0, 0, 0.2);
       border: 1px solid var(--border-color);
@@ -144,7 +144,7 @@
       transition: border-color 0.2s ease;
     }
 
-    .form-group input:focus {
+    .form-group input:focus, .form-group select:focus {
       border-color: #4facfe;
     }
 
@@ -198,6 +198,12 @@
       border-radius: 15px;
       padding: 1.5rem;
       text-align: center;
+      transition: box-shadow 0.3s ease;
+    }
+
+    .stat-card.active-proto {
+      box-shadow: 0 0 15px rgba(79, 172, 254, 0.4);
+      border-color: #4facfe;
     }
 
     .stat-card h3 {
@@ -239,6 +245,7 @@
     .console .system { color: #6b7280; }
     .console .success { color: #34d399; }
     .console .err { color: #f87171; }
+    .console .binary { color: #facc15; }
 
     .bar-container {
       margin-top: 1rem;
@@ -284,6 +291,14 @@
       <div class="card">
         <h2>🧬 Set Value (POST /v1/kv)</h2>
         <div class="form-group">
+          <label for="select-protocol-set">PROTOCOL TO SIMULATE</label>
+          <select id="select-protocol-set">
+            <option value="json">HTTP/JSON REST (baseline)</option>
+            <option value="proto">gRPC / Protobuf (binary)</option>
+            <option value="thrift">Apache Thrift Compact (binary)</option>
+          </select>
+        </div>
+        <div class="form-group">
           <label for="set-key">KEY</label>
           <input type="text" id="set-key" placeholder="e.g. name" value="greet">
         </div>
@@ -296,7 +311,15 @@
 
       <!-- GET FORM -->
       <div class="card">
-        <h2>🧬 Get Value (GET /v1/kv/:key)</h2>
+        <h2>🧬 Get Value (GET /v1/kv/{key})</h2>
+        <div class="form-group">
+          <label for="select-protocol-get">PROTOCOL TO SIMULATE</label>
+          <select id="select-protocol-get">
+            <option value="json">HTTP/JSON REST (baseline)</option>
+            <option value="proto">gRPC / Protobuf (binary)</option>
+            <option value="thrift">Apache Thrift Compact (binary)</option>
+          </select>
+        </div>
         <div class="form-group">
           <label for="get-key">KEY</label>
           <input type="text" id="get-key" placeholder="e.g. name" value="greet">
@@ -309,17 +332,17 @@
         <h2>📊 Serialization Size Comparison</h2>
         
         <div class="stats-grid">
-          <div class="stat-card">
+          <div id="card-json" class="stat-card">
             <h3>JSON (REST Payload)</h3>
             <div id="json-size" class="val json-color">--</div>
             <div class="desc" style="color: var(--text-muted);">Baseline size</div>
           </div>
-          <div class="stat-card">
+          <div id="card-proto" class="stat-card">
             <h3>Protobuf (gRPC payload)</h3>
             <div id="proto-size" class="val proto-color">--</div>
             <div id="proto-pct" class="desc">--</div>
           </div>
-          <div class="stat-card">
+          <div id="card-thrift" class="stat-card">
             <h3>Thrift Compact Payload</h3>
             <div id="thrift-size" class="val thrift-color">--</div>
             <div id="thrift-pct" class="desc">--</div>
@@ -373,6 +396,9 @@
     const getKeyInput = document.getElementById('get-key');
     const consoleOutput = document.getElementById('console-output');
 
+    const selectProtocolSet = document.getElementById('select-protocol-set');
+    const selectProtocolGet = document.getElementById('select-protocol-get');
+
     // UI stats
     const jsonSizeEl = document.getElementById('json-size');
     const protoSizeEl = document.getElementById('proto-size');
@@ -397,62 +423,136 @@
       consoleOutput.scrollTop = consoleOutput.scrollHeight;
     }
 
-    function updateComparison(key, value) {
-      // JSON REST payload size
-      const jsonStr = JSON.stringify({ key, value });
-      const jsonSize = new TextEncoder().encode(jsonStr).length;
+    function toHex(uint8Array) {
+      return Array.from(uint8Array).map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
+    }
 
-      // Protobuf wire size calculation:
-      // tag(1) + len(varint) + key_bytes + tag(1) + len(varint) + val_bytes
+    function writeVarint(out, val) {
+      let v = BigInt(val);
+      while (true) {
+        if ((v & ~0x7Fn) === 0n) {
+          out.push(Number(v));
+          break;
+        }
+        out.push(Number((v & 0x7Fn) | 0x80n));
+        v >>= 7n;
+      }
+    }
+
+    function writeThriftVarint(out, val) {
+      writeVarint(out, val);
+    }
+
+    function serializeProtobuf(key, value) {
       const enc = new TextEncoder();
       const keyBytes = enc.encode(key);
       const valBytes = enc.encode(value);
-      const protoSize = 1 + getVarintLen(keyBytes.length) + keyBytes.length + 1 + getVarintLen(valBytes.length) + valBytes.length;
+      const out = [];
+      // tag: field 1, wireType 2 -> 0x0a
+      out.push(0x0a);
+      writeVarint(out, keyBytes.length);
+      out.push(...keyBytes);
+      if (value !== undefined) {
+        // tag: field 2, wireType 2 -> 0x12
+        out.push(0x12);
+        writeVarint(out, valBytes.length);
+        out.push(...valBytes);
+      }
+      return new Uint8Array(out);
+    }
 
-      // Thrift Compact size estimation:
-      // field 1 (key): delta=1, type=8 -> 1 byte + thrift_varint(len) + key_bytes
-      // field 2 (value): delta=1, type=8 -> 1 byte + thrift_varint(len) + val_bytes
-      // field stop -> 1 byte
-      const thriftSize = 1 + getVarintLen(keyBytes.length) + keyBytes.length + 1 + getVarintLen(valBytes.length) + valBytes.length + 1;
+    function serializeThriftCompact(key, value) {
+      const enc = new TextEncoder();
+      const keyBytes = enc.encode(key);
+      const valBytes = enc.encode(value);
+      const out = [];
+      // field 1 (key): delta=1, type=8 -> 1 << 4 | 8 = 24 (0x18)
+      out.push(0x18);
+      writeVarint(out, keyBytes.length);
+      out.push(...keyBytes);
+      if (value !== undefined) {
+        // field 2 (value): delta=1, type=8 -> 1 << 4 | 8 = 24 (0x18)
+        out.push(0x18);
+        writeVarint(out, valBytes.length);
+        out.push(...valBytes);
+      }
+      out.push(0x00); // STOP byte
+      return new Uint8Array(out);
+    }
+
+    function updateComparison(key, value) {
+      const enc = new TextEncoder();
+      const jsonStr = JSON.stringify(value !== undefined ? { key, value } : { key });
+      const jsonSize = enc.encode(jsonStr).length;
+
+      const protoBytes = serializeProtobuf(key, value);
+      const thriftBytes = serializeThriftCompact(key, value);
 
       // Update elements
       jsonSizeEl.textContent = `${jsonSize} B`;
-      protoSizeEl.textContent = `${protoSize} B`;
-      thriftSizeEl.textContent = `${thriftSize} B`;
+      protoSizeEl.textContent = `${protoBytes.length} B`;
+      thriftSizeEl.textContent = `${thriftBytes.length} B`;
 
-      const protoSavings = Math.round(((jsonSize - protoSize) / jsonSize) * 100);
-      const thriftSavings = Math.round(((jsonSize - thriftSize) / jsonSize) * 100);
+      const protoSavings = Math.round(((jsonSize - protoBytes.length) / jsonSize) * 100);
+      const thriftSavings = Math.round(((jsonSize - thriftBytes.length) / jsonSize) * 100);
 
       protoPctEl.textContent = `Save ${protoSavings}%`;
       thriftPctEl.textContent = `Save ${thriftSavings}%`;
 
       // Update bars
-      const maxVal = Math.max(jsonSize, protoSize, thriftSize);
+      const maxVal = Math.max(jsonSize, protoBytes.length, thriftBytes.length);
       const jsonPct = Math.round((jsonSize / maxVal) * 100);
-      const protoPct = Math.round((protoSize / maxVal) * 100);
-      const thriftPct = Math.round((thriftSize / maxVal) * 100);
+      const protoPct = Math.round((protoBytes.length / maxVal) * 100);
+      const thriftPct = Math.round((thriftBytes.length / maxVal) * 100);
 
       barJson.style.width = `${jsonPct}%`;
       barProto.style.width = `${protoPct}%`;
       barThrift.style.width = `${thriftPct}%`;
 
       labelBarJson.textContent = `${jsonSize} Bytes (100%)`;
-      labelBarProto.textContent = `${protoSize} Bytes (${Math.round((protoSize/jsonSize)*100)}%)`;
-      labelBarThrift.textContent = `${thriftSize} Bytes (${Math.round((thriftSize/jsonSize)*100)}%)`;
+      labelBarProto.textContent = `${protoBytes.length} Bytes (${Math.round((protoBytes.length/jsonSize)*100)}%)`;
+      labelBarThrift.textContent = `${thriftBytes.length} Bytes (${Math.round((thriftBytes.length/jsonSize)*100)}%)`;
     }
 
-    function getVarintLen(val) {
-      if (val < 128) return 1;
-      if (val < 16384) return 2;
-      return 3;
+    // Highlighting active card based on select choice
+    function setActiveCard(protocol) {
+      document.getElementById('card-json').classList.remove('active-proto');
+      document.getElementById('card-proto').classList.remove('active-proto');
+      document.getElementById('card-thrift').classList.remove('active-proto');
+
+      if (protocol === 'json') document.getElementById('card-json').classList.add('active-proto');
+      if (protocol === 'proto') document.getElementById('card-proto').classList.add('active-proto');
+      if (protocol === 'thrift') document.getElementById('card-thrift').classList.add('active-proto');
     }
+
+    selectProtocolSet.addEventListener('change', (e) => setActiveCard(e.target.value));
+    selectProtocolGet.addEventListener('change', (e) => setActiveCard(e.target.value));
+
+    // Initialize with first select state
+    setActiveCard('json');
 
     document.getElementById('btn-set').addEventListener('click', async () => {
       const key = setKeyInput.value.trim();
       const value = setValueInput.value.trim();
+      const protocol = selectProtocolSet.value;
       if (!key) return alert('Key is required');
 
-      log(`Sending HTTP/1.1 POST /v1/kv (JSON REST payload) to Helix Same-Port server...`, 'system');
+      updateComparison(key, value);
+      
+      if (protocol === 'json') {
+        log(`📡 Sending [JSON REST] payload to same-port server...`, 'system');
+        log(`[Payload]: ${JSON.stringify({ key, value })}`);
+      } else if (protocol === 'proto') {
+        const bytes = serializeProtobuf(key, value);
+        log(`📡 Sending [gRPC / Protobuf] binary frame to same-port server...`, 'system');
+        log(`[Hex Stream]: ${toHex(bytes)}`, 'binary');
+      } else {
+        const bytes = serializeThriftCompact(key, value);
+        log(`📡 Sending [Apache Thrift Compact] binary stream to same-port server...`, 'system');
+        log(`[Hex Stream]: ${toHex(bytes)}`, 'binary');
+        log(`[Bridge Action]: Same-Port Sniffer transcodes Thrift to Protobuf with Zero-Allocations.`, 'system');
+      }
+
       try {
         const res = await fetch('http://127.0.0.1:9090/v1/kv', {
           method: 'POST',
@@ -463,7 +563,6 @@
         });
         const data = await res.json();
         log(`Response from Server: ${JSON.stringify(data)}`, 'success');
-        updateComparison(key, value);
       } catch (err) {
         log(`Failed to store data: ${err.message}`, 'err');
       }
@@ -471,9 +570,21 @@
 
     document.getElementById('btn-get').addEventListener('click', async () => {
       const key = getKeyInput.value.trim();
+      const protocol = selectProtocolGet.value;
       if (!key) return alert('Key is required');
 
-      log(`Sending HTTP/1.1 GET /v1/kv/${key} request to Helix Same-Port server...`, 'system');
+      if (protocol === 'json') {
+        log(`📡 Sending [JSON REST] request to GET /v1/kv/${key}...`, 'system');
+      } else if (protocol === 'proto') {
+        const bytes = serializeProtobuf(key);
+        log(`📡 Sending [gRPC / Protobuf] GET request...`, 'system');
+        log(`[Hex Stream]: ${toHex(bytes)}`, 'binary');
+      } else {
+        const bytes = serializeThriftCompact(key);
+        log(`📡 Sending [Thrift Compact] GET request...`, 'system');
+        log(`[Hex Stream]: ${toHex(bytes)}`, 'binary');
+      }
+
       try {
         const res = await fetch(`http://127.0.0.1:9090/v1/kv/${key}`);
         const data = await res.json();
