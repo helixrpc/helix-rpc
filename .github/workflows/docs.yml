@@ -6,15 +6,24 @@ on:
       - main
 
 permissions:
-  contents: write
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
 
 jobs:
   deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # needed for mkdocs git-revision-date plugin
+          fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:
@@ -29,7 +38,21 @@ jobs:
             mkdocs-material-
 
       - name: Install MkDocs Material
-        run: pip install mkdocs-material
+        run: |
+          pip install mkdocs-material
+
+      - name: Build Docs
+        run: |
+          mkdocs build --site-dir site
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages Artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
 
       - name: Deploy to GitHub Pages
-        run: mkdocs gh-deploy --force
+        id: deployment
+        uses: actions/deploy-pages@v4
