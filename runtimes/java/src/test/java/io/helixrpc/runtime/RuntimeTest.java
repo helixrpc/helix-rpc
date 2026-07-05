@@ -3,6 +3,7 @@ package io.helixrpc.runtime;
 import java.util.Arrays;
 import java.util.List;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 
 public class RuntimeTest {
     public static void testConsistentHashBalancer() {
@@ -33,25 +34,21 @@ public class RuntimeTest {
     }
 
     public static void testSniffer() {
-        // Test gRPC Preface
         byte[] grpcPreface = "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n".getBytes(StandardCharsets.US_ASCII);
         if (Sniffer.sniffProtocol(grpcPreface) != Protocol.GRPC) {
             throw new RuntimeException("failed to sniff gRPC");
         }
 
-        // Test Thrift Binary
         byte[] thriftBin = { (byte)0x80, 0x01, 0x00, 0x01 };
         if (Sniffer.sniffProtocol(thriftBin) != Protocol.THRIFT_BINARY) {
             throw new RuntimeException("failed to sniff Thrift Binary");
         }
 
-        // Test Thrift Compact
         byte[] thriftCompact = { (byte)0x82, 0x15, 0x01 };
         if (Sniffer.sniffProtocol(thriftCompact) != Protocol.THRIFT_COMPACT) {
             throw new RuntimeException("failed to sniff Thrift Compact");
         }
 
-        // Test REST GET
         byte[] restGet = "GET /index.html".getBytes(StandardCharsets.US_ASCII);
         if (Sniffer.sniffProtocol(restGet) != Protocol.REST) {
             throw new RuntimeException("failed to sniff REST");
@@ -60,9 +57,52 @@ public class RuntimeTest {
         System.out.println("✓ testSniffer passed!");
     }
 
-    public static void main(String[] args) {
+    public static void testDeadline() {
+        if (Deadline.parseGRPCTimeout("100m").toMillis() != 100) {
+            throw new RuntimeException("failed deadline parse m");
+        }
+        if (Deadline.parseGRPCTimeout("500u").toNanos() != 500000) {
+            throw new RuntimeException("failed deadline parse u");
+        }
+        if (Deadline.parseGRPCTimeout("2S").getSeconds() != 2) {
+            throw new RuntimeException("failed deadline parse S");
+        }
+        System.out.println("✓ testDeadline passed!");
+    }
+
+    public static void testCompression() throws Exception {
+        Compression.GzipCompressor compressor = new Compression.GzipCompressor();
+        byte[] original = "hello gzip".getBytes(StandardCharsets.UTF_8);
+        byte[] compressed = compressor.compress(original);
+        byte[] decompressed = compressor.decompress(compressed);
+        if (!Arrays.equals(decompressed, original)) {
+            throw new RuntimeException("failed compression roundtrip");
+        }
+        System.out.println("✓ testCompression passed!");
+    }
+
+    public static void testHealth() {
+        Health.HealthChecker checker = new Health.HealthChecker();
+        if (checker.check("my-service") != Health.HealthStatus.UNKNOWN) {
+            throw new RuntimeException("health check default failed");
+        }
+        checker.setServingStatus("my-service", Health.HealthStatus.SERVING);
+        if (checker.check("my-service") != Health.HealthStatus.SERVING) {
+            throw new RuntimeException("health check serving failed");
+        }
+        checker.setServingStatus("my-service", Health.HealthStatus.NOT_SERVING);
+        if (checker.check("my-service") != Health.HealthStatus.NOT_SERVING) {
+            throw new RuntimeException("health check not serving failed");
+        }
+        System.out.println("✓ testHealth passed!");
+    }
+
+    public static void main(String[] args) throws Exception {
         testConsistentHashBalancer();
         testSniffer();
-        System.out.println("All Java Runtime tests passed successfully!");
+        testDeadline();
+        testCompression();
+        testHealth();
+        System.out.println("All Java Parity tests passed successfully!");
     }
 }
