@@ -1198,21 +1198,27 @@
 <p>Helix RPC is not just another wrapping library; it is a unified compilation target and transport layer designed for high-performance distributed systems.</p>
 <h3 id="1-zero-config-multi-protocol-transcoding">1. Zero-Config Multi-Protocol Transcoding<a class="headerlink" href="#1-zero-config-multi-protocol-transcoding" title="Permanent link">&para;</a></h3>
 <p>Helix allows you to define your service contracts once using Protobuf IDL. The compiler then generates dual-protocol stubs allowing a server to accept <strong>gRPC (HTTP/2)</strong>, <strong>Thrift (Framed Compact/Binary)</strong>, and <strong>REST (HTTP/1.1 JSON)</strong> concurrently on the exact same port. You no longer need to deploy heavy proxy sidecars (like Envoy) just to convert JSON requests into high-speed internal RPC frames.</p>
-<p>For example, a single server instance can process these incoming requests transparently:
-- A binary gRPC payload from a Go microservice
-- A binary Thrift Compact payload from a legacy Java client
-- A JSON POST request from a web frontend browser</p>
+<p>For example, a single server instance can process these incoming requests transparently:</p>
+<ul>
+<li>A binary gRPC payload from a Go microservice</li>
+<li>A binary Thrift Compact payload from a legacy Java client</li>
+<li>A JSON POST request from a web frontend browser</li>
+</ul>
 <h3 id="2-native-aillm-serving-primitives">2. Native AI/LLM serving primitives<a class="headerlink" href="#2-native-aillm-serving-primitives" title="Permanent link">&para;</a></h3>
 <p>Traditional RPC frameworks were designed around low-latency CRUD database operations. They are fundamentally unsuited for AI serving workloads where model inference is extremely slow and requires high GPU utilization.</p>
-<p>Helix runtimes in Go, Rust, Python, and Node.js have built-in support for:
-- <strong>Dynamic Request Batching</strong>: Merges concurrent individual requests into a single batched array before passing them to GPU-bound model inference, increasing hardware utilization by up to 4x.
-- <strong>SSE Streaming</strong>: Seamlessly streams response chunks back to clients for real-time generative AI interfaces.
-- <strong>Token Bucket Rate Limiting</strong>: Built-in, high-efficiency rate limiters that throttle requests per second at the application layer.</p>
+<p>Helix runtimes in Go, Rust, Python, and Node.js have built-in support for:</p>
+<ul>
+<li><strong>Dynamic Request Batching</strong>: Merges concurrent individual requests into a single batched array before passing them to GPU-bound model inference, increasing hardware utilization by up to 4x.</li>
+<li><strong>SSE Streaming</strong>: Seamlessly streams response chunks back to clients for real-time generative AI interfaces.</li>
+<li><strong>Token Bucket Rate Limiting</strong>: Built-in, high-efficiency rate limiters that throttle requests per second at the application layer.</li>
+</ul>
 <h3 id="3-client-side-resiliency-engine">3. Client-Side Resiliency Engine<a class="headerlink" href="#3-client-side-resiliency-engine" title="Permanent link">&para;</a></h3>
-<p>Traditional client libraries rely on external service meshes to handle network faults. Helix bakes resilience directly into the client connection pool:
-- <strong>P99 Hedging</strong>: Automatically sends a duplicate request to a backup instance if the primary request exceeds a predefined response threshold, cutting tail latency in half.
-- <strong>Circuit Breakers</strong>: Protects downstream services by immediately failing fast when error rates spike.
-- <strong>Exponential Backoff</strong>: Built-in retry policies that prevent thundering herd problems on system recovery.</p>
+<p>Traditional client libraries rely on external service meshes to handle network faults. Helix bakes resilience directly into the client connection pool:</p>
+<ul>
+<li><strong>P99 Hedging</strong>: Automatically sends a duplicate request to a backup instance if the primary request exceeds a predefined response threshold, cutting tail latency in half.</li>
+<li><strong>Circuit Breakers</strong>: Protects downstream services by immediately failing fast when error rates spike.</li>
+<li><strong>Exponential Backoff</strong>: Built-in retry policies that prevent thundering herd problems on system recovery.</li>
+</ul>
 <hr />
 <h2 id="getting-started-a-quick-example">Getting Started: A Quick Example<a class="headerlink" href="#getting-started-a-quick-example" title="Permanent link">&para;</a></h2>
 <p>Define your service contract in a standard Protobuf IDL file:</p>
