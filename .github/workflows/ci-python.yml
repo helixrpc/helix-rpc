@@ -27,7 +27,7 @@ jobs:
       - name: Install dependencies
         working-directory: ./runtimes/python
         run: |
-          pip install pytest aiohttp
+          pip install pytest aiohttp opentelemetry-api opentelemetry-sdk
           # If a setup.py or requirements.txt exists, install it:
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 

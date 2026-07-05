@@ -401,7 +401,7 @@ mod resilience_tests {
 
     #[test]
     fn test_consistent_hash_balancer() {
-        use crate::client_pool::{Balancer, ConsistentHashBalancer};
+        use crate::client_pool::ConsistentHashBalancer;
 
         let lb = ConsistentHashBalancer::new(50);
         let targets = vec![
