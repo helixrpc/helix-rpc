@@ -1,0 +1,7 @@
+gRPC-Gateway server listening on 127.0.0.1:8003
+panic: listen tcp 127.0.0.1:8003: bind: address already in use
+
+goroutine 1 [running]:
+main.main()
+	/Users/naveenchedeti/.gemini/antigravity/scratch/helix-rpc/benchmarks/grpc_gateway_server.go:47 +0xe0
+exit status 2

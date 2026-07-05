@@ -1,0 +1,3 @@
+Helix server listening on 127.0.0.1:8002
+failed to start server: listen tcp 127.0.0.1:8002: bind: address already in use
+exit status 1
