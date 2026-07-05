@@ -34,54 +34,49 @@ impl QuicListener {
             let active_streams: Arc<Mutex<std::collections::HashMap<String, Sender<Vec<u8>>>>> =
                 Arc::new(Mutex::new(std::collections::HashMap::new()));
 
-            loop {
-                match socket_clone.recv_from(&mut buf).await {
-                    Ok((n, remote_addr)) => {
-                        if n < 4 {
-                            continue;
-                        }
-                        let stream_id = u32::from_be_bytes([buf[0], buf[1], buf[2], buf[3]]);
-                        let key = format!("{}:{}", remote_addr, stream_id);
-
-                        let (tx, stream_to_send) = {
-                            let mut guard = active_streams.lock().unwrap();
-                            let mut stream_to_send = None;
-                            let tx = if let Some(tx) = guard.get(&key) {
-                                tx.clone()
-                            } else {
-                                let (tx_stream, rx_stream) = channel(100);
-                                guard.insert(key.clone(), tx_stream.clone());
-
-                                let socket_write = socket_clone.clone();
-                                let virtual_stream = QuicStream {
-                                    remote_addr,
-                                    read_receiver: rx_stream,
-                                    leftover: Vec::new(),
-                                    write_fn: Arc::new(move |payload| {
-                                        let socket = socket_write.clone();
-                                        Box::pin(async move {
-                                            let mut packet = Vec::with_capacity(4 + payload.len());
-                                            packet.extend_from_slice(&stream_id.to_be_bytes());
-                                            packet.extend_from_slice(&payload);
-                                            let _ = socket.send_to(&packet, remote_addr).await;
-                                        })
-                                    }),
-                                };
-                                stream_to_send = Some(virtual_stream);
-                                tx_stream
-                            };
-                            (tx, stream_to_send)
-                        };
-
-                        if let Some(vs) = stream_to_send {
-                            let _ = tx_clone.send(vs).await;
-                        }
-
-                        let payload = buf[4..n].to_vec();
-                        let _ = tx.send(payload).await;
-                    }
-                    Err(_) => break,
+            while let Ok((n, remote_addr)) = socket_clone.recv_from(&mut buf).await {
+                if n < 4 {
+                    continue;
                 }
+                let stream_id = u32::from_be_bytes([buf[0], buf[1], buf[2], buf[3]]);
+                let key = format!("{}:{}", remote_addr, stream_id);
+
+                let (tx, stream_to_send) = {
+                    let mut guard = active_streams.lock().unwrap();
+                    let mut stream_to_send = None;
+                    let tx = if let Some(tx) = guard.get(&key) {
+                        tx.clone()
+                    } else {
+                        let (tx_stream, rx_stream) = channel(100);
+                        guard.insert(key.clone(), tx_stream.clone());
+
+                        let socket_write = socket_clone.clone();
+                        let virtual_stream = QuicStream {
+                            remote_addr,
+                            read_receiver: rx_stream,
+                            leftover: Vec::new(),
+                            write_fn: Arc::new(move |payload| {
+                                let socket = socket_write.clone();
+                                Box::pin(async move {
+                                    let mut packet = Vec::with_capacity(4 + payload.len());
+                                    packet.extend_from_slice(&stream_id.to_be_bytes());
+                                    packet.extend_from_slice(&payload);
+                                    let _ = socket.send_to(&packet, remote_addr).await;
+                                })
+                            }),
+                        };
+                        stream_to_send = Some(virtual_stream);
+                        tx_stream
+                    };
+                    (tx, stream_to_send)
+                };
+
+                if let Some(vs) = stream_to_send {
+                    let _ = tx_clone.send(vs).await;
+                }
+
+                let payload = buf[4..n].to_vec();
+                let _ = tx.send(payload).await;
             }
         });
 
@@ -89,6 +84,7 @@ impl QuicListener {
     }
 }
 
+#[allow(clippy::type_complexity)]
 pub struct QuicStream {
     pub remote_addr: SocketAddr,
     read_receiver: Receiver<Vec<u8>>,
