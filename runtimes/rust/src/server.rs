@@ -237,7 +237,10 @@ where
 
                 // If REST endpoint call, default content_type to application/json if empty
                 let is_json = content_type == "application/json" || content_type.is_empty();
-                let is_grpc = content_type == "application/grpc";
+                let is_grpc_only = content_type == "application/grpc";
+                let is_grpc_web = content_type == "application/grpc-web";
+                let is_grpc_web_text = content_type == "application/grpc-web-text";
+                let is_grpc = is_grpc_only || is_grpc_web || is_grpc_web_text;
 
                 if !is_json && !is_grpc {
                     let response = Response::builder()
@@ -285,11 +288,24 @@ where
 
             let mut request_payload = body_bytes;
 
+            if is_grpc_web_text {
+                use base64::Engine;
+                match base64::engine::general_purpose::STANDARD.decode(&request_payload) {
+                    Ok(decoded) => request_payload = decoded,
+                    Err(e) => {
+                        return Ok(Response::builder()
+                            .status(StatusCode::BAD_REQUEST)
+                            .body(Body::from(format!("Failed to decode base64 body: {}", e)))
+                            .unwrap());
+                    }
+                }
+            }
+
             // Intercept health check requests
             if path == "/grpc.health.v1.Health/Check" {
                 if let Some(ref hc) = health_checker {
                     let mut payload = request_payload.clone();
-                    if is_grpc {
+                    if is_grpc_only {
                         if payload.len() >= 5 {
                             let length = u32::from_be_bytes([payload[1], payload[2], payload[3], payload[4]]) as usize;
                             payload = payload[5..5+length].to_vec();
@@ -300,7 +316,7 @@ where
 
                     match hc.handle_request(&payload, is_json).await {
                         Ok((resp_bytes, resp_content_type)) => {
-                            if is_grpc {
+                            if is_grpc_only {
                                 let mut frame = Vec::with_capacity(5 + resp_bytes.len());
                                 frame.push(0); // uncompressed
                                 frame.extend_from_slice(&(resp_bytes.len() as u32).to_be_bytes());
@@ -322,7 +338,7 @@ where
                             }
                         }
                         Err(e) => {
-                            if is_grpc {
+                            if is_grpc_only {
                                 let response = Response::builder()
                                     .status(StatusCode::OK)
                                     .header("content-type", "application/grpc")
@@ -456,7 +472,7 @@ where
             // --- Streaming dispatch ---
             // If this is a gRPC call and a streaming handler is registered for
             // the path, set up the bidirectional channel and hand off.
-            if is_grpc {
+            if is_grpc_only {
                 if let Some(ref sh) = streaming_handler {
                     if sh.is_streaming(&matched_path) {
                         // Reconstruct the raw body from bytes already consumed.
@@ -501,20 +517,94 @@ where
                         return Ok(response);
                     }
                 }
+            }
 
+            if is_grpc {
                 // Unary gRPC: strip 5-byte frame header
                 if request_payload.len() < 5 {
-                    let res = Response::builder()
-                        .status(StatusCode::OK)
-                        .header("content-type", "application/grpc")
-                        .header("grpc-status", "13") // INTERNAL
-                        .header("grpc-message", "invalid frame header length")
-                        .body(Body::empty())
-                        .unwrap();
-                    return Ok(res);
+                    if is_grpc_web || is_grpc_web_text {
+                        let trailers_str = "grpc-status: 13\r\ngrpc-message: invalid frame header length\r\n";
+                        let trailers_len = trailers_str.len() as u32;
+                        let mut frame = Vec::new();
+                        frame.push(0x80);
+                        frame.extend_from_slice(&trailers_len.to_be_bytes());
+                        frame.extend_from_slice(trailers_str.as_bytes());
+
+                        let response_body = if is_grpc_web_text {
+                            use base64::Engine;
+                            let encoded = base64::engine::general_purpose::STANDARD.encode(&frame);
+                            Body::from(encoded)
+                        } else {
+                            Body::from(frame)
+                        };
+
+                        let resp_content_type = if is_grpc_web_text {
+                            "application/grpc-web-text"
+                        } else {
+                            "application/grpc-web"
+                        };
+
+                        let res = Response::builder()
+                            .status(StatusCode::OK)
+                            .header("content-type", resp_content_type)
+                            .body(response_body)
+                            .unwrap();
+                        return Ok(res);
+                    } else {
+                        let res = Response::builder()
+                            .status(StatusCode::OK)
+                            .header("content-type", "application/grpc")
+                            .header("grpc-status", "13") // INTERNAL
+                            .header("grpc-message", "invalid frame header length")
+                            .body(Body::empty())
+                            .unwrap();
+                        return Ok(res);
+                    }
                 }
                 let compressed_flag = request_payload[0];
                 let length = u32::from_be_bytes([request_payload[1], request_payload[2], request_payload[3], request_payload[4]]) as usize;
+                
+                if request_payload.len() < 5 + length {
+                    if is_grpc_web || is_grpc_web_text {
+                        let trailers_str = "grpc-status: 13\r\ngrpc-message: frame payload truncated\r\n";
+                        let trailers_len = trailers_str.len() as u32;
+                        let mut frame = Vec::new();
+                        frame.push(0x80);
+                        frame.extend_from_slice(&trailers_len.to_be_bytes());
+                        frame.extend_from_slice(trailers_str.as_bytes());
+
+                        let response_body = if is_grpc_web_text {
+                            use base64::Engine;
+                            let encoded = base64::engine::general_purpose::STANDARD.encode(&frame);
+                            Body::from(encoded)
+                        } else {
+                            Body::from(frame)
+                        };
+
+                        let resp_content_type = if is_grpc_web_text {
+                            "application/grpc-web-text"
+                        } else {
+                            "application/grpc-web"
+                        };
+
+                        let res = Response::builder()
+                            .status(StatusCode::OK)
+                            .header("content-type", resp_content_type)
+                            .body(response_body)
+                            .unwrap();
+                        return Ok(res);
+                    } else {
+                        let res = Response::builder()
+                            .status(StatusCode::OK)
+                            .header("content-type", "application/grpc")
+                            .header("grpc-status", "13")
+                            .header("grpc-message", "frame payload truncated")
+                            .body(Body::empty())
+                            .unwrap();
+                        return Ok(res);
+                    }
+                }
+
                 request_payload = request_payload[5..5+length].to_vec();
 
                 // Decompress if compressed flag is 1
@@ -523,16 +613,74 @@ where
                         match compressor.decompress(&request_payload) {
                             Ok(decompressed) => request_payload = decompressed,
                             Err(e) => {
-                                let res = Response::builder()
-                                    .status(StatusCode::OK)
-                                    .header("content-type", "application/grpc")
-                                    .header("grpc-status", "13")
-                                    .header("grpc-message", format!("decompression error: {}", e))
-                                    .body(Body::empty())
-                                    .unwrap();
-                                return Ok(res);
+                                if is_grpc_web || is_grpc_web_text {
+                                    let trailers_str = format!("grpc-status: 13\r\ngrpc-message: decompression error: {}\r\n", e);
+                                    let trailers_len = trailers_str.len() as u32;
+                                    let mut frame = Vec::new();
+                                    frame.push(0x80);
+                                    frame.extend_from_slice(&trailers_len.to_be_bytes());
+                                    frame.extend_from_slice(trailers_str.as_bytes());
+
+                                    let response_body = if is_grpc_web_text {
+                                        use base64::Engine;
+                                        let encoded = base64::engine::general_purpose::STANDARD.encode(&frame);
+                                        Body::from(encoded)
+                                    } else {
+                                        Body::from(frame)
+                                    };
+
+                                    let resp_content_type = if is_grpc_web_text {
+                                        "application/grpc-web-text"
+                                    } else {
+                                        "application/grpc-web"
+                                    };
+
+                                    let res = Response::builder()
+                                        .status(StatusCode::OK)
+                                        .header("content-type", resp_content_type)
+                                        .body(response_body)
+                                        .unwrap();
+                                    return Ok(res);
+                                } else {
+                                    let res = Response::builder()
+                                        .status(StatusCode::OK)
+                                        .header("content-type", "application/grpc")
+                                        .header("grpc-status", "13")
+                                        .header("grpc-message", format!("decompression error: {}", e))
+                                        .body(Body::empty())
+                                        .unwrap();
+                                    return Ok(res);
+                                }
                             }
                         }
+                    } else if is_grpc_web || is_grpc_web_text {
+                        let trailers_str = format!("grpc-status: 12\r\ngrpc-message: unsupported grpc-encoding: {}\r\n", grpc_encoding);
+                        let trailers_len = trailers_str.len() as u32;
+                        let mut frame = Vec::new();
+                        frame.push(0x80);
+                        frame.extend_from_slice(&trailers_len.to_be_bytes());
+                        frame.extend_from_slice(trailers_str.as_bytes());
+
+                        let response_body = if is_grpc_web_text {
+                            use base64::Engine;
+                            let encoded = base64::engine::general_purpose::STANDARD.encode(&frame);
+                            Body::from(encoded)
+                        } else {
+                            Body::from(frame)
+                        };
+
+                        let resp_content_type = if is_grpc_web_text {
+                            "application/grpc-web-text"
+                        } else {
+                            "application/grpc-web"
+                        };
+
+                        let res = Response::builder()
+                            .status(StatusCode::OK)
+                            .header("content-type", resp_content_type)
+                            .body(response_body)
+                            .unwrap();
+                        return Ok(res);
                     } else {
                         let res = Response::builder()
                             .status(StatusCode::OK)
@@ -579,17 +727,50 @@ where
                         frame.extend_from_slice(&(final_payload.len() as u32).to_be_bytes());
                         frame.extend_from_slice(&final_payload);
 
-                        let mut builder = Response::builder()
-                            .status(StatusCode::OK)
-                            .header("content-type", "application/grpc")
-                            .header("grpc-status", "0"); // OK
-                        
-                        if compress_flag == 1 {
-                            builder = builder.header("grpc-encoding", &grpc_encoding);
-                        }
+                        if is_grpc_web || is_grpc_web_text {
+                            let trailers_str = "grpc-status: 0\r\ngrpc-message: \r\n";
+                            let trailers_len = trailers_str.len() as u32;
+                            frame.push(0x80);
+                            frame.extend_from_slice(&trailers_len.to_be_bytes());
+                            frame.extend_from_slice(trailers_str.as_bytes());
 
-                        let response = builder.body(Body::from(frame)).unwrap();
-                        Ok(response)
+                            let response_body = if is_grpc_web_text {
+                                use base64::Engine;
+                                let encoded = base64::engine::general_purpose::STANDARD.encode(&frame);
+                                Body::from(encoded)
+                            } else {
+                                Body::from(frame)
+                            };
+
+                            let resp_content_type = if is_grpc_web_text {
+                                "application/grpc-web-text"
+                            } else {
+                                "application/grpc-web"
+                            };
+
+                            let mut builder = Response::builder()
+                                .status(StatusCode::OK)
+                                .header("content-type", resp_content_type);
+                            
+                            if compress_flag == 1 {
+                                builder = builder.header("grpc-encoding", &grpc_encoding);
+                            }
+
+                            let response = builder.body(response_body).unwrap();
+                            Ok(response)
+                        } else {
+                            let mut builder = Response::builder()
+                                .status(StatusCode::OK)
+                                .header("content-type", "application/grpc")
+                                .header("grpc-status", "0"); // OK
+                            
+                            if compress_flag == 1 {
+                                builder = builder.header("grpc-encoding", &grpc_encoding);
+                            }
+
+                            let response = builder.body(Body::from(frame)).unwrap();
+                            Ok(response)
+                        }
                     } else {
                         let response = Response::builder()
                             .status(StatusCode::OK)
@@ -606,14 +787,45 @@ where
                         } else {
                             "13" // INTERNAL
                         };
-                        let response = Response::builder()
-                            .status(StatusCode::OK)
-                            .header("content-type", "application/grpc")
-                            .header("grpc-status", status_code)
-                            .header("grpc-message", err_msg)
-                            .body(Body::empty())
-                            .unwrap();
-                        Ok(response)
+
+                        if is_grpc_web || is_grpc_web_text {
+                            let trailers_str = format!("grpc-status: {}\r\ngrpc-message: {}\r\n", status_code, err_msg);
+                            let trailers_len = trailers_str.len() as u32;
+                            let mut frame = Vec::new();
+                            frame.push(0x80);
+                            frame.extend_from_slice(&trailers_len.to_be_bytes());
+                            frame.extend_from_slice(trailers_str.as_bytes());
+
+                            let response_body = if is_grpc_web_text {
+                                use base64::Engine;
+                                let encoded = base64::engine::general_purpose::STANDARD.encode(&frame);
+                                Body::from(encoded)
+                            } else {
+                                Body::from(frame)
+                            };
+
+                            let resp_content_type = if is_grpc_web_text {
+                                "application/grpc-web-text"
+                            } else {
+                                "application/grpc-web"
+                            };
+
+                            let response = Response::builder()
+                                .status(StatusCode::OK)
+                                .header("content-type", resp_content_type)
+                                .body(response_body)
+                                .unwrap();
+                            Ok(response)
+                        } else {
+                            let response = Response::builder()
+                                .status(StatusCode::OK)
+                                .header("content-type", "application/grpc")
+                                .header("grpc-status", status_code)
+                                .header("grpc-message", err_msg)
+                                .body(Body::empty())
+                                .unwrap();
+                            Ok(response)
+                        }
                     } else {
                         let status = if err_msg.contains("deadline exceeded") {
                             StatusCode::GATEWAY_TIMEOUT

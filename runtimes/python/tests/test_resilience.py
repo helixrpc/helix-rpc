@@ -398,3 +398,119 @@ class TestRateLimiterMiddleware:
         assert s2 == 200
         assert s3 == 429
 
+
+# ---------------------------------------------------------------------------
+# gRPC-Web Middleware Tests
+# ---------------------------------------------------------------------------
+
+class TestGrpcWebSupport:
+    def test_grpc_web_success(self):
+        from helix_rt.server import HelixServer
+        import json
+
+        async def run():
+            server = HelixServer()
+            
+            async def hello_handler(body):
+                return {"message": f"Hello {body.get('name', 'World')}"}
+
+            server.register_route("POST", "/hello", hello_handler)
+
+            from aiohttp.test_utils import TestClient, TestServer
+            client = TestClient(TestServer(server.app))
+            await client.start_server()
+
+            # Construct gRPC-Web payload: 1 byte flag (0), 4 bytes length, then JSON payload
+            payload_str = json.dumps({"name": "test-grpc-web"})
+            payload_bytes = payload_str.encode("utf-8")
+            header = b"\x00" + len(payload_bytes).to_bytes(4, byteorder="big")
+            request_body = header + payload_bytes
+
+            resp = await client.post(
+                "/hello",
+                headers={"Content-Type": "application/grpc-web"},
+                data=request_body
+            )
+            response_content = await resp.read()
+            await client.close()
+            return resp.status, resp.headers.get("Content-Type"), response_content
+
+        status, content_type, body = asyncio.run(run())
+        assert status == 200
+        assert content_type == "application/grpc-web"
+
+        # Check response body:
+        # First frame: 5 bytes header + payload
+        assert len(body) > 5
+        flag = body[0]
+        assert flag == 0
+        length = int.from_bytes(body[1:5], byteorder="big")
+        payload = body[5:5+length]
+        resp_data = json.loads(payload.decode("utf-8"))
+        assert resp_data["message"] == "Hello test-grpc-web"
+
+        # Trailers frame: starts at 5 + length
+        trailers_part = body[5+length:]
+        assert len(trailers_part) > 5
+        assert trailers_part[0] == 0x80
+        t_len = int.from_bytes(trailers_part[1:5], byteorder="big")
+        t_str = trailers_part[5:5+t_len].decode("ascii")
+        assert "grpc-status: 0" in t_str
+
+    def test_grpc_web_text_success(self):
+        from helix_rt.server import HelixServer
+        import json
+        import base64
+
+        async def run():
+            server = HelixServer()
+            
+            async def hello_handler(body):
+                return {"message": f"Hello {body.get('name', 'World')}"}
+
+            server.register_route("POST", "/hello", hello_handler)
+
+            from aiohttp.test_utils import TestClient, TestServer
+            client = TestClient(TestServer(server.app))
+            await client.start_server()
+
+            # Construct gRPC-Web-text payload: base64-encoded framed JSON
+            payload_str = json.dumps({"name": "test-grpc-web-text"})
+            payload_bytes = payload_str.encode("utf-8")
+            header = b"\x00" + len(payload_bytes).to_bytes(4, byteorder="big")
+            request_body = base64.b64encode(header + payload_bytes)
+
+            resp = await client.post(
+                "/hello",
+                headers={"Content-Type": "application/grpc-web-text"},
+                data=request_body
+            )
+            response_content = await resp.read()
+            await client.close()
+            return resp.status, resp.headers.get("Content-Type"), response_content
+
+        status, content_type, body = asyncio.run(run())
+        assert status == 200
+        assert content_type == "application/grpc-web-text"
+
+        # Base64 decode response first
+        decoded_body = base64.b64decode(body)
+
+        # Check response body:
+        assert len(decoded_body) > 5
+        flag = decoded_body[0]
+        assert flag == 0
+        length = int.from_bytes(decoded_body[1:5], byteorder="big")
+        payload = decoded_body[5:5+length]
+        resp_data = json.loads(payload.decode("utf-8"))
+        assert resp_data["message"] == "Hello test-grpc-web-text"
+
+        # Trailers frame: starts at 5 + length
+        trailers_part = decoded_body[5+length:]
+        assert len(trailers_part) > 5
+        assert trailers_part[0] == 0x80
+        t_len = int.from_bytes(trailers_part[1:5], byteorder="big")
+        t_str = trailers_part[5:5+t_len].decode("ascii")
+        assert "grpc-status: 0" in t_str
+
+

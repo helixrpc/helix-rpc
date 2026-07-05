@@ -7,7 +7,7 @@ from typing import AsyncIterator, Callable, Awaitable
 from aiohttp import web
 from dataclasses import asdict
 
-from .errors import HelixError
+from .errors import HelixError, ErrorCode
 from .telemetry import telemetry_middleware
 
 # ---------------------------------------------------------------------------
@@ -150,9 +150,70 @@ class HelixServer:
         HelixError is automatically converted to the appropriate HTTP status.
         """
         async def web_handler(request: web.Request) -> web.StreamResponse:
+            ct = request.content_type or ""
+            is_grpc_web = ct.startswith("application/grpc-web")
+            is_grpc_web_text = ct.startswith("application/grpc-web-text")
+
             try:
-                body = await request.json()
+                if is_grpc_web or is_grpc_web_text:
+                    raw_body = await request.read()
+                    if is_grpc_web_text:
+                        import base64
+                        try:
+                            raw_body = base64.b64decode(raw_body)
+                        except Exception as decode_err:
+                            raise HelixError(ErrorCode.INVALID_ARGUMENT, f"Failed to decode base64 body: {decode_err}")
+
+                    if len(raw_body) < 5:
+                        raise HelixError(ErrorCode.INVALID_ARGUMENT, "grpc frame too small")
+
+                    compressed_flag = raw_body[0]
+                    length = int.from_bytes(raw_body[1:5], byteorder="big")
+                    if len(raw_body) < 5 + length:
+                        raise HelixError(ErrorCode.INVALID_ARGUMENT, "grpc frame payload truncated")
+
+                    payload = raw_body[5:5+length]
+                    if compressed_flag == 1:
+                        payload = gzip.decompress(payload)
+
+                    payload_str = payload.decode("utf-8") if payload else ""
+                    body = json.loads(payload_str) if payload_str else {}
+                else:
+                    body = await request.json()
+
                 resp = await handler(body)
+
+                if is_grpc_web or is_grpc_web_text:
+                    if hasattr(resp, "marshal_flatbuffers") and callable(resp.marshal_flatbuffers):
+                        resp_bytes = resp.marshal_flatbuffers()
+                    elif hasattr(resp, "__dataclass_fields__"):
+                        resp_bytes = json.dumps(asdict(resp)).encode("utf-8")
+                    else:
+                        resp_bytes = json.dumps(resp).encode("utf-8")
+
+                    # Write the response body frame (5-byte header + binary Protobuf/data)
+                    response_header = b"\x00" + len(resp_bytes).to_bytes(4, byteorder="big")
+                    response_frame = response_header + resp_bytes
+
+                    # Append the trailers frame
+                    trailers_str = "grpc-status: 0\r\ngrpc-message: \r\n"
+                    trailers_bytes = trailers_str.encode("ascii")
+                    trailers_len = len(trailers_bytes)
+                    trailers_header = b"\x80" + trailers_len.to_bytes(4, byteorder="big")
+                    trailers_frame = trailers_header + trailers_bytes
+
+                    combined_frame = response_frame + trailers_frame
+                    if is_grpc_web_text:
+                        import base64
+                        response_body = base64.b64encode(combined_frame)
+                    else:
+                        response_body = combined_frame
+
+                    return web.Response(
+                        body=response_body,
+                        content_type=ct,
+                        status=200
+                    )
 
                 # SSE streaming
                 if isinstance(resp, AsyncIterator) or hasattr(resp, "__aiter__"):
@@ -178,13 +239,51 @@ class HelixServer:
 
             except HelixError as he:
                 logging.warning("Helix RPC HelixError: %s", he)
-                return web.json_response(
-                    {"error": he.message, "code": he.grpc_status},
-                    status=he.http_status,
-                )
+                if is_grpc_web or is_grpc_web_text:
+                    trailers_str = f"grpc-status: {he.grpc_status}\r\ngrpc-message: {he.message}\r\n"
+                    trailers_bytes = trailers_str.encode("ascii")
+                    trailers_len = len(trailers_bytes)
+                    trailers_header = b"\x80" + trailers_len.to_bytes(4, byteorder="big")
+                    trailers_frame = trailers_header + trailers_bytes
+
+                    if is_grpc_web_text:
+                        import base64
+                        response_body = base64.b64encode(trailers_frame)
+                    else:
+                        response_body = trailers_frame
+
+                    return web.Response(
+                        body=response_body,
+                        content_type=ct,
+                        status=200
+                    )
+                else:
+                    return web.json_response(
+                        {"error": he.message, "code": he.grpc_status},
+                        status=he.http_status,
+                    )
             except Exception as e:
                 logging.exception("Helix RPC Handler Exception")
-                return web.json_response({"error": str(e)}, status=500)
+                if is_grpc_web or is_grpc_web_text:
+                    trailers_str = f"grpc-status: 13\r\ngrpc-message: {str(e)}\r\n"
+                    trailers_bytes = trailers_str.encode("ascii")
+                    trailers_len = len(trailers_bytes)
+                    trailers_header = b"\x80" + trailers_len.to_bytes(4, byteorder="big")
+                    trailers_frame = trailers_header + trailers_bytes
+
+                    if is_grpc_web_text:
+                        import base64
+                        response_body = base64.b64encode(trailers_frame)
+                    else:
+                        response_body = trailers_frame
+
+                    return web.Response(
+                        body=response_body,
+                        content_type=ct,
+                        status=200
+                    )
+                else:
+                    return web.json_response({"error": str(e)}, status=500)
 
         self.app.router.add_route(method, path, web_handler)
 
