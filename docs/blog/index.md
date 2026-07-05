@@ -17,3 +17,7 @@ A deep-dive technical look at the serialization and network optimizations in the
 ### 3. [Helix RPC vs. The Alternatives: gRPC, Thrift, and JSON](helix-vs-alternatives.md)
 *Published: July 4, 2026*  
 An architectural comparison matrix and operational analysis comparing Helix RPC against REST, gRPC, and Apache Thrift, including migration guides and sidecar proxy cost breakdowns.
+
+### 4. [Polymorphic JIT Transpilation: Redefining High-Performance RPC Gateways](polymorphic-jit-transpilation.md)
+*Published: July 5, 2026*  
+A strategic look at Polymorphic JIT Transpilation, detailing why JIT-compiling native machine code on-the-fly for socket-level protocol transcoding is novel, why it is technically difficult to implement, and why standard sidecar proxies (like Envoy) cannot support it.

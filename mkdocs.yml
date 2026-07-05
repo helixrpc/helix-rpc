@@ -77,5 +77,6 @@ nav:
       - Introducing Helix RPC: blog/introducing-helix-rpc.md
       - Deep-Dive Advanced Optimizations: blog/deep-dive-advanced-optimizations.md
       - Helix vs. Alternatives: blog/helix-vs-alternatives.md
+      - Polymorphic JIT Transpilation: blog/polymorphic-jit-transpilation.md
 
 
