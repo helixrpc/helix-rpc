@@ -29,5 +29,7 @@ jobs:
         working-directory: ./runtimes/java
         run: |
           mkdir -p bin
-          javac -d bin src/main/java/io/helixrpc/runtime/*.java src/test/java/io/helixrpc/runtime/*.java
+          find src -name "*.java" > sources.txt
+          javac -d bin @sources.txt
           java -cp bin io.helixrpc.runtime.RuntimeTest
+          java -cp bin io.helixrpc.runtime.OptimizationTest
