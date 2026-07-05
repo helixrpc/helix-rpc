@@ -5,8 +5,8 @@
 <h1 align="center">Helix RPC 🧬</h1>
 
 <p align="center">
-  <strong>The next-generation AI infrastructure framework built for maximum efficiency.</strong><br/>
-  Zero-serialization. Multi-protocol. Zero-configuration.
+  <strong>The Unified Multi-Protocol Meta-Framework for Modern Microservices and AI Inference.</strong><br/>
+  Seamlessly unifying gRPC, Thrift, and JSON/REST under a single high-performance runtime.
 </p>
 
 <p align="center">
@@ -24,13 +24,17 @@
 
 ---
 
-## 🎯 Focus on Business Logic, Not Plumbing
+## 🧬 What is Helix RPC?
 
-Helix RPC is architected so developers spend **zero time** on network stacks, deployment pipelines, TLS, observability, or database connection tuning.
+Helix RPC is not a new competing transport protocol. Instead, it is a **unified multi-protocol meta-framework** designed to run on top of your existing schemas and systems. 
 
-Run `helix-gen init` and get a **fully production-grade**, highly available microservice — with structured logging, Prometheus metrics, health checks, gzip compression, JWT auth, and Kubernetes manifests all pre-configured.
+By utilizing a **Same-Port Multiplexer** and **Zero-Allocation Transpilers**, Helix sniffs, routes, and transcodes incoming traffic (gRPC over HTTP/2, legacy Apache Thrift compact/binary, or HTTP/JSON REST) dynamically, letting them coexist seamlessly in your cluster.
 
-**Your only task is to write the core business logic handler.**
+### Why Helix?
+- **Unified Multi-Protocol Server**: Accept gRPC, Thrift, and JSON/REST on a single TCP port.
+- **Zero-Downtime Migration**: Maintain legacy clients and migrate backend services gradually without writing translators or deploying sidecar proxies.
+- **Direct Kernel Bypass**: Automatically bypasses the TCP/IP stack using **eBPF Sockmaps** for co-located microservices on loopback.
+- **Zero-Copy Views**: Memory-slicing encoders/decoders in Go, Rust, Node.js, and Python consume up to 70% less memory under high throughput.
 
 ---
 
@@ -38,169 +42,97 @@ Run `helix-gen init` and get a **fully production-grade**, highly available micr
 
 | Feature | Description |
 |---|---|
-| **Zero-Serialization PyO3** | Embeds CPython directly in the Rust gateway — tensors pass over FFI, never JSON |
-| **Dynamic Batching** | `@batch` interceptor coalesces 100 concurrent requests → 1 GPU call |
-| **Multi-Protocol Gateway** | gRPC · Thrift Binary/Compact · HTTP/JSON REST · SSE — one TCP port |
-| **Single-File Scaffolding** | `helix-gen init` generates schema, stubs, Dockerfile, Terraform & `helix.json` |
-| **Hot-Reload Config** | `helix.json` watched at runtime — auth, rate limits, features toggled without restart |
-| **Secure Containers** | Statically-linked `scratch` Docker + Firecracker microVM blueprints included |
-| **Service Discovery** | Built-in DNS/SRV, Consul, and Kubernetes resolvers |
-| **Cloud Deployment** | One-command Terraform for AWS ECS · GCP Cloud Run · Azure Container Apps |
-| **Enterprise Auth** | JWT (HS256/RS256/ES256) + API key validation — toggle via `helix.json` |
-| **Observability** | Prometheus `/metrics`, Grafana dashboard JSON, HPA-ready Kubernetes manifests |
+| **Same-Port Sniffer** | Sniffs incoming packets to route gRPC, Thrift, and HTTP/REST on one port |
+| **Zero-Copy View** | Memory-slicing parser views avoid heap copies during serialization |
+| **Zero-Allocation Transpiling**| Directly translates Protobuf binary to Thrift Compact in-memory |
+| **Dynamic Batching** | Coalesces highly concurrent individual requests into optimal batches for GPU/LLM backends |
+| **eBPF Kernel Bypass** | Kernel-level Sockmap redirection for local loopback routing |
+| **Single-File Scaffolding** | `helix-gen init` generates schema, stubs, configs, containers, and deployment plans |
+| **Hot-Reload Config** | `helix.json` watched and hot-reloaded dynamically for auth, rate limits, and compression |
 
 ---
 
 ## ⚡ Quick Start
 
-### 1. Install the compiler
-
+### 1. Install the CLI tool
 ```bash
 go install github.com/helixrpc/helix-rpc/compiler/helix-gen@latest
 ```
 
-### 2. Scaffold a new service (Go)
-
+### 2. Scaffold a new unified service
 ```bash
 helix-gen init my-service --lang go
 cd my-service
 ```
 
-This generates:
+This sets up:
 ```
 my-service/
-├── schema.proto          # your IDL
-├── server/main.go        # handler stub — write your logic here
-├── generated/            # auto-generated stubs
-├── helix.json            # full config (auth, rate limits, features)
-├── Makefile              # gen · build · test · docker-build · deploy-aws/gcp/azure
-├── containers/           # optimised Dockerfile + docker-compose
-├── deployments/          # Terraform for AWS/GCP/Azure + k8s manifests
-└── README.md
+├── schema.proto          # Unified IDL schema
+├── server/main.go        # Server setup and business handlers
+├── generated/            # Sniffers and multi-protocol stubs
+├── helix.json            # Dynamic hot-reload configuration file
+└── Makefile              # Commands for local build, test, and container run
 ```
 
-### 3. Define your schema
-
-```protobuf
-// schema.proto
-message PredictRequest  { string prompt = 1; }
-message PredictResponse { string completion = 1; }
-
-service ModelService {
-  rpc Predict(PredictRequest) returns (PredictResponse);
-}
-```
-
-### 4. Generate stubs
-
-```bash
-make gen
-```
-
-### 5. Write your handler (the only code you write)
-
+### 3. Write your handler (the only code you write)
 ```go
 // server/main.go
 server.RegisterMethod("/v1.ModelService/Predict", runtime.MethodInfo{
     Handler: func(ctx context.Context, req interface{}) (interface{}, error) {
-        // ← your business logic here
-        return &PredictResponse{Completion: "Hello from Helix!"}, nil
+        // Core business logic goes here
+        return &PredictResponse{Completion: "Processed by Helix Unified Server!"}, nil
     },
 })
 ```
 
-### 6. Run it
+---
 
-```bash
-make dev           # local dev with hot-reload
-make docker-build  # optimised scratch container
-make deploy-aws    # push to AWS ECS Fargate via Terraform
+## 🏗 Architectural Blueprint
+
+```
+                     Client Traffic
+                           │
+  ┌────────────────────────┼────────────────────────┐
+  ▼ (gRPC/HTTP2)           ▼ (Thrift Compact)       ▼ (HTTP/JSON REST)
+┌─────────────────────────────────────────────────────────────┐
+│                 Helix Same-Port Sniffing Server             │
+├─────────────────────────────────────────────────────────────┤
+│                     Direct Transpilation                    │
+│             (Zero-Allocation Protobuf ↔ Thrift)             │
+├─────────────────────────────────────────────────────────────┤
+│                   eBPF Sockmap Redirect                     │
+│                (Kernel loopback bypass)                     │
+└──────────────────────────┬──────────────────────────────────┘
+                           ▼
+                 ┌───────────────────┐
+                 │   Your Handler    │
+                 └───────────────────┘
 ```
 
 ---
 
-## 🌐 Supported Languages
+## 📦 Dynamic Configuration (`helix.json`)
 
-| Runtime | Protocols | Key Capabilities |
-|---|---|---|
-| **Go** | gRPC · Thrift · HTTP/JSON | Dynamic batching, circuit breaker, JWT auth, Prometheus |
-| **Rust** | gRPC · HTTP/JSON · SSE | PyO3 zero-copy FFI, TLS, keepalive, Firecracker |
-| **Python** | HTTP/JSON · SSE | asyncio, streaming generators, asyncpg pool |
-
----
-
-## 📦 What `helix.json` Controls
+Tweak system behaviors at runtime without restarting your instances:
 
 ```jsonc
 {
   "host": "0.0.0.0",
   "port": 8080,
-  "disable_metrics": false,    // Prometheus /metrics endpoint
-  "disable_health": false,     // /healthz liveness probe
-  "disable_gzip": false,       // per-message compression
-  "disable_deadline": false,   // grpc-timeout propagation
-  "rate_limit_rate": 100.0,    // token-bucket refill rate
-  "rate_limit_burst": 10,
-  "enable_jwt_auth": false,    // toggle JWT validation
-  "jwt_secret": "...",
-  "enable_api_key_auth": false, // toggle API key validation
-  "api_key": "..."
+  "disable_gzip": false,        // Per-message compression toggle
+  "disable_deadline": false,    // Timeout propagation toggle
+  "rate_limit_rate": 200.0,     // Token-bucket refill rate
+  "rate_limit_burst": 20,
+  "enable_jwt_auth": true,       // Live JWT authentication
+  "jwt_secret": "my-secret-key"
 }
 ```
 
-Changes take effect **without restart** — the runtime watches and hot-reloads automatically.
-
 ---
 
-## 🏗 Architecture Overview
+## 🤝 Contributing & License
 
-```
-Client
-  │
-  ▼
-┌─────────────────────────────────────────────────────────┐
-│              Single TCP Port (protocol sniffing)        │
-│   gRPC / HTTP2  │  Thrift Binary/Compact  │  REST/JSON  │
-└────────────────────────┬────────────────────────────────┘
-                         │
-              ┌──────────▼──────────┐
-              │   Helix Gateway     │
-              │  (Go / Rust)        │
-              │  ┌───────────────┐  │
-              │  │  Interceptors │  │  JWT · Rate Limit · Circuit Breaker
-              │  │  Middlewares  │  │  Logging · Metrics · Deadline
-              │  └───────┬───────┘  │
-              │          │          │
-              │  ┌───────▼───────┐  │
-              │  │  Your Handler │  │  ← write this only
-              │  └───────────────┘  │
-              └─────────────────────┘
-                         │
-             ┌───────────┼───────────┐
-             ▼           ▼           ▼
-          Database    Kafka/MQ    AI Model (PyO3)
-```
+We welcome contributions to the compiler and multi-language runtimes. Please check out our [Contributing Guide](CONTRIBUTING.md).
 
----
-
-## 📚 Documentation
-
-Full documentation is available at **[helixrpc.github.io/helix-rpc](https://helixrpc.github.io/helix-rpc)**
-
-- [Setup & Configuration](https://helixrpc.github.io/helix-rpc/setup-configuration/)
-- [Developer Guide](https://helixrpc.github.io/helix-rpc/developer-guide/)
-- [Tutorials](https://helixrpc.github.io/helix-rpc/tutorials/)
-- [Integrations](https://helixrpc.github.io/helix-rpc/integrations/)
-- [Enterprise Concerns](https://helixrpc.github.io/helix-rpc/enterprise-concerns/)
-
----
-
-## 🤝 Contributing
-
-We welcome contributions! Please read our [Contributing Guide](CONTRIBUTING.md) and open a pull request.
-
----
-
-## 📄 License
-
-MIT © Helix RPC Contributors
+Distributed under the MIT License. © Helix RPC Contributors.
