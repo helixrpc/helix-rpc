@@ -148,7 +148,7 @@ public class UserProfile {
     }
 }
 
-class LazyUserProfile {
+public class LazyUserProfile {
     private final ByteBuffer raw;
     public LazyUserProfile(ByteBuffer raw) { this.raw = raw; }
 

@@ -165,7 +165,7 @@ func GenerateJava(parsed *ast.AST) (string, error) {
 		sb.WriteString("}\n\n")
 
 		// Lazy class
-		sb.WriteString(fmt.Sprintf("class Lazy%s {\n", str.Name))
+		sb.WriteString(fmt.Sprintf("public class Lazy%s {\n", str.Name))
 		sb.WriteString("    private final ByteBuffer raw;\n")
 		sb.WriteString(fmt.Sprintf("    public Lazy%s(ByteBuffer raw) { this.raw = raw; }\n\n", str.Name))
 
