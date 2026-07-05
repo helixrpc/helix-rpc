@@ -39,6 +39,7 @@ Helix RPC is not just another wrapping library; it is a unified compilation targ
 Helix allows you to define your service contracts once using Protobuf IDL. The compiler then generates dual-protocol stubs allowing a server to accept **gRPC (HTTP/2)**, **Thrift (Framed Compact/Binary)**, and **REST (HTTP/1.1 JSON)** concurrently on the exact same port. You no longer need to deploy heavy proxy sidecars (like Envoy) just to convert JSON requests into high-speed internal RPC frames.
 
 For example, a single server instance can process these incoming requests transparently:
+
 - A binary gRPC payload from a Go microservice
 - A binary Thrift Compact payload from a legacy Java client
 - A JSON POST request from a web frontend browser
@@ -47,12 +48,14 @@ For example, a single server instance can process these incoming requests transp
 Traditional RPC frameworks were designed around low-latency CRUD database operations. They are fundamentally unsuited for AI serving workloads where model inference is extremely slow and requires high GPU utilization.
 
 Helix runtimes in Go, Rust, Python, and Node.js have built-in support for:
+
 - **Dynamic Request Batching**: Merges concurrent individual requests into a single batched array before passing them to GPU-bound model inference, increasing hardware utilization by up to 4x.
 - **SSE Streaming**: Seamlessly streams response chunks back to clients for real-time generative AI interfaces.
 - **Token Bucket Rate Limiting**: Built-in, high-efficiency rate limiters that throttle requests per second at the application layer.
 
 ### 3. Client-Side Resiliency Engine
 Traditional client libraries rely on external service meshes to handle network faults. Helix bakes resilience directly into the client connection pool:
+
 - **P99 Hedging**: Automatically sends a duplicate request to a backup instance if the primary request exceeds a predefined response threshold, cutting tail latency in half.
 - **Circuit Breakers**: Protects downstream services by immediately failing fast when error rates spike.
 - **Exponential Backoff**: Built-in retry policies that prevent thundering herd problems on system recovery.
