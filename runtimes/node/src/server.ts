@@ -113,9 +113,19 @@ export class HelixServer {
     }
 
     private async handleHTTP1(req: http.IncomingMessage, res: http.ServerResponse) {
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, grpc-timeout');
+
         const urlObj = new URL(req.url || '', `http://${req.headers.host}`);
         const path = urlObj.pathname;
         const method = req.method || 'GET';
+
+        if (method === 'OPTIONS') {
+            res.writeHead(204);
+            res.end();
+            return;
+        }
 
         // Prometheus exporter endpoint
         if (path === '/metrics') {
