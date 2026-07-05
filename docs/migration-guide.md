@@ -71,3 +71,19 @@ CloudWeGo (Kitex) uses high-performance Thrift codecs. Helix provides **Zero-All
       to: thrift_compact
     ```
 2.  **No Client Changes Needed:** The Kitex clients continue sending legacy Thrift compact payloads. The Helix Gateway intercepts them, transpiles them in-place with zero heap allocations, and forwards them as gRPC/Protobuf internally.
+
+---
+
+## 4. Automatic IDL Transpilation (Thrift to Protobuf)
+
+To simplify the migration of large codebases from Apache Thrift or Kitex, Helix includes a command-line utility to automatically transpile legacy `.thrift` IDL files into Protobuf v3 files.
+
+This saves manual conversion effort and guarantees schema compatibility.
+
+### Transpile IDL Schema:
+```bash
+# Transpile old Thrift compact schema to Protobuf v3 schema
+helix-gen transpile-schema -in old_service.thrift -out modern_service.proto
+```
+
+The transpiled `.proto` file is fully compatible with Helix and standard Protobuf compiler toolchains.
