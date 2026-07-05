@@ -36,13 +36,31 @@ By utilizing a **Same-Port Multiplexer** and **Zero-Allocation Transpilers**, He
 - **Direct Kernel Bypass**: Automatically bypasses the TCP/IP stack using **eBPF Sockmaps** for co-located microservices on loopback.
 - **Zero-Copy Views**: Memory-slicing encoders/decoders in Go, Rust, Node.js, and Python consume up to 70% less memory under high throughput.
 
+## 🚀 Performance & Packages
+
+Helix RPC has been benchmarked against industry standards for HTTP/1.1 JSON REST workloads under high concurrency (100 concurrent connections):
+- **16.8× faster than FastAPI** (130,993 req/sec vs 7,811 req/sec)
+- **Matches raw Go `net/http` within 2%** — proving our multi-protocol sniffing and transcoding layers add essentially zero overhead.
+
+Read the full reproducible [Performance Benchmarks](docs/benchmarks.md).
+
+**Install the Runtime Packages:**
+```bash
+# Rust
+cargo add helix-rt
+
+# Python
+pip install helix-rt
+pip install "helix-rt[tensor]" # For zero-copy numpy support
+```
+
 ---
 
-## 🚀 Key Features
+## ⚡ Key Features
 
 | Feature | Description |
 |---|---|
-| **Same-Port Sniffer** | Sniffs incoming packets to route gRPC, Thrift, and HTTP/REST on one port |
+| **Same-Port Sniffer** | Sniffs incoming packets to route gRPC, Thrift, HTTP/REST, gRPC-Web, and SSE on one port |
 | **Zero-Copy View** | Memory-slicing parser views avoid heap copies during serialization |
 | **Zero-Allocation Transpiling**| Directly translates Protobuf binary to Thrift Compact in-memory |
 | **Dynamic Batching** | Coalesces highly concurrent individual requests into optimal batches for GPU/LLM backends |
