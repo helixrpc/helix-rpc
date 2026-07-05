@@ -1196,10 +1196,12 @@
 <h1 id="helix-rpc-vs-the-alternatives-grpc-thrift-and-json">Helix RPC vs. The Alternatives: gRPC, Thrift, and JSON<a class="headerlink" href="#helix-rpc-vs-the-alternatives-grpc-thrift-and-json" title="Permanent link">&para;</a></h1>
 <p><strong>Date</strong>: July 4, 2026<br />
 <strong>Author</strong>: Marketing &amp; Architecture Team  </p>
-<p>Choosing the right communication protocol for your microservices is a long-term architectural commitment. For years, the choice has been polarized between three main paradigms:
-1. <strong>JSON over HTTP/1.1 (REST)</strong>: Simple, readable, but slow and lacks strict typing.
-2. <strong>gRPC over HTTP/2 (Protobuf)</strong>: Strongly typed, efficient, but difficult to consume directly from web apps.
-3. <strong>Apache Thrift</strong>: Highly performant, compact, but lacks native JSON transcoding and features a fragmented ecosystem.</p>
+<p>Choosing the right communication protocol for your microservices is a long-term architectural commitment. For years, the choice has been polarized between three main paradigms:</p>
+<ol>
+<li><strong>JSON over HTTP/1.1 (REST)</strong>: Simple, readable, but slow and lacks strict typing.</li>
+<li><strong>gRPC over HTTP/2 (Protobuf)</strong>: Strongly typed, efficient, but difficult to consume directly from web apps.</li>
+<li><strong>Apache Thrift</strong>: Highly performant, compact, but lacks native JSON transcoding and features a fragmented ecosystem.</li>
+</ol>
 <p><strong>Helix RPC</strong> represents a new paradigm, combining the best properties of each while adding modern runtime optimizations natively.</p>
 <hr />
 <h2 id="feature-comparison-matrix">Feature Comparison Matrix<a class="headerlink" href="#feature-comparison-matrix" title="Permanent link">&para;</a></h2>
