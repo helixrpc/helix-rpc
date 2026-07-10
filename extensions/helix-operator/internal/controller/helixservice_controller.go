@@ -107,7 +107,8 @@ func (r *HelixServiceReconciler) deploymentForHelix(m *orchestrationv1alpha1.Hel
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: ls,
+					Labels:      ls,
+					Annotations: map[string]string{},
 				},
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{{
@@ -121,6 +122,12 @@ func (r *HelixServiceReconciler) deploymentForHelix(m *orchestrationv1alpha1.Hel
 				},
 			},
 		},
+	}
+
+	if m.Spec.VaultSecretPath != "" {
+		dep.Spec.Template.ObjectMeta.Annotations["vault.hashicorp.com/agent-inject"] = "true"
+		dep.Spec.Template.ObjectMeta.Annotations["vault.hashicorp.com/role"] = "helix-role"
+		dep.Spec.Template.ObjectMeta.Annotations["vault.hashicorp.com/agent-inject-secret-helix-secrets.json"] = m.Spec.VaultSecretPath
 	}
 
 	if m.Spec.EnableEBPFBypass {

@@ -44,6 +44,10 @@ type HelixServiceSpec struct {
 	// +kubebuilder:default:=200
 	// +optional
 	RateLimit int32 `json:"rateLimit,omitempty"`
+
+	// VaultSecretPath specifies the HashiCorp Vault path to inject secrets from
+	// +optional
+	VaultSecretPath string `json:"vaultSecretPath,omitempty"`
 }
 
 // HelixServiceStatus defines the observed state of HelixService.

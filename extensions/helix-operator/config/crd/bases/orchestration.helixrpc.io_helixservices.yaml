@@ -58,6 +58,10 @@ spec:
                 description: Replicas is the number of desired pods
                 format: int32
                 type: integer
+              vaultSecretPath:
+                description: VaultSecretPath specifies the HashiCorp Vault path to
+                  inject secrets from
+                type: string
             required:
             - image
             type: object
