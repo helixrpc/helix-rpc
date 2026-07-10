@@ -39,6 +39,8 @@ mimalloc = "0.1"
 base64 = "0.21"
 hyper-tungstenite = "0.9"
 futures-util = "0.3"
+lapin = "4.10.0"
+tokio-amqp = "2.0.0"
 
 [dev-dependencies]
 tokio-tungstenite = "0.18"
