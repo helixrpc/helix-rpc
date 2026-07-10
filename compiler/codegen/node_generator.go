@@ -389,6 +389,150 @@ function fastScanField(buf: Uint8Array, targetFieldNum: number): [Uint8Array, nu
 		}
 	}
 
+	// ---------------------------------------------------------------------------
+	// Generate Base Client Configuration
+	// ---------------------------------------------------------------------------
+	sb.WriteString("// ---------------------------------------------------------------------------\n")
+	sb.WriteString("// Helix TypeScript Client & React Hooks\n")
+	sb.WriteString("// ---------------------------------------------------------------------------\n\n")
+	sb.WriteString("export interface HelixConfig {\n")
+	sb.WriteString("    baseUrl: string;\n")
+	sb.WriteString("    headers?: Record<string, string>;\n")
+	sb.WriteString("}\n\n")
+
+	// ---------------------------------------------------------------------------
+	// Generate Service Clients
+	// ---------------------------------------------------------------------------
+	for _, svc := range parsed.Services {
+		sb.WriteString(fmt.Sprintf("export class %sClient {\n", svc.Name))
+		sb.WriteString("    constructor(private config: HelixConfig) {}\n\n")
+
+		for _, method := range svc.Methods {
+			if method.ServerStreaming {
+				// Server Streaming (SSE)
+				sb.WriteString(fmt.Sprintf("    async *%s(req: %s): AsyncGenerator<%s> {\n", method.Name, method.InputType, method.OutputType))
+				sb.WriteString("        const headers = { 'Content-Type': 'application/json', 'Accept': 'text/event-stream', ...this.config.headers };\n")
+				
+				path := method.RESTPath
+				if path == "" {
+					path = fmt.Sprintf("/v1.%s/%s", svc.Name, method.Name)
+				}
+				sb.WriteString(fmt.Sprintf("        const url = `${this.config.baseUrl}%s`;\n", path))
+				
+				sb.WriteString("        const res = await fetch(url, {\n")
+				sb.WriteString("            method: 'POST',\n")
+				sb.WriteString("            headers,\n")
+				sb.WriteString("            body: JSON.stringify(req)\n")
+				sb.WriteString("        });\n")
+				sb.WriteString("        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);\n")
+				sb.WriteString("        if (!res.body) throw new Error('Response body is null');\n\n")
+				sb.WriteString("        const reader = res.body.getReader();\n")
+				sb.WriteString("        const decoder = new TextDecoder('utf-8');\n")
+				sb.WriteString("        let buffer = '';\n\n")
+				sb.WriteString("        while (true) {\n")
+				sb.WriteString("            const { done, value } = await reader.read();\n")
+				sb.WriteString("            if (done) break;\n")
+				sb.WriteString("            buffer += decoder.decode(value, { stream: true });\n")
+				sb.WriteString("            const lines = buffer.split('\\n');\n")
+				sb.WriteString("            buffer = lines.pop() || '';\n")
+				sb.WriteString("            for (const line of lines) {\n")
+				sb.WriteString("                if (line.startsWith('data: ')) {\n")
+				sb.WriteString("                    const dataStr = line.slice(6).trim();\n")
+				sb.WriteString("                    if (dataStr === '[DONE]') return;\n")
+				sb.WriteString("                    try {\n")
+				sb.WriteString(fmt.Sprintf("                        const data = JSON.parse(dataStr) as Partial<%s>;\n", method.OutputType))
+				sb.WriteString(fmt.Sprintf("                        yield new %s(data);\n", method.OutputType))
+				sb.WriteString("                    } catch (e) {\n")
+				sb.WriteString("                        console.error('Error parsing SSE chunk:', e, dataStr);\n")
+				sb.WriteString("                    }\n")
+				sb.WriteString("                }\n")
+				sb.WriteString("            }\n")
+				sb.WriteString("        }\n")
+				sb.WriteString("    }\n\n")
+			} else {
+				// Unary Call (JSON REST)
+				sb.WriteString(fmt.Sprintf("    async %s(req: %s): Promise<%s> {\n", method.Name, method.InputType, method.OutputType))
+				sb.WriteString("        const headers = { 'Content-Type': 'application/json', ...this.config.headers };\n")
+				
+				path := method.RESTPath
+				if path == "" {
+					path = fmt.Sprintf("/v1.%s/%s", svc.Name, method.Name)
+				}
+				sb.WriteString(fmt.Sprintf("        const url = `${this.config.baseUrl}%s`;\n", path))
+				
+				sb.WriteString("        const res = await fetch(url, {\n")
+				sb.WriteString("            method: 'POST',\n")
+				sb.WriteString("            headers,\n")
+				sb.WriteString("            body: JSON.stringify(req)\n")
+				sb.WriteString("        });\n")
+				sb.WriteString("        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);\n")
+				sb.WriteString("        const data = await res.json();\n")
+				sb.WriteString(fmt.Sprintf("        return new %s(data);\n", method.OutputType))
+				sb.WriteString("    }\n\n")
+			}
+		}
+		sb.WriteString("}\n\n")
+
+		// ---------------------------------------------------------------------------
+		// Generate React Hooks
+		// ---------------------------------------------------------------------------
+		sb.WriteString("// ---------------------------------------------------------------------------\n")
+		sb.WriteString("// React Hooks (Usage: import { useState, useEffect } from 'react'; ...)\n")
+		sb.WriteString("// ---------------------------------------------------------------------------\n")
+		
+		for _, method := range svc.Methods {
+			if method.ServerStreaming {
+				sb.WriteString(fmt.Sprintf("export function use%sStream(client: %sClient, req: %s | null) {\n", method.Name, svc.Name, method.InputType))
+				sb.WriteString(fmt.Sprintf("    const [data, setData] = (<any>window).React?.useState<%s[]>([]) || [null, () => {}];\n", method.OutputType))
+				sb.WriteString("    const [loading, setLoading] = (<any>window).React?.useState<boolean>(false) || [false, () => {}];\n")
+				sb.WriteString("    const [error, setError] = (<any>window).React?.useState<Error | null>(null) || [null, () => {}];\n\n")
+				sb.WriteString("    (<any>window).React?.useEffect(() => {\n")
+				sb.WriteString("        if (!req) return;\n")
+				sb.WriteString("        let active = true;\n")
+				sb.WriteString("        setLoading(true);\n")
+				sb.WriteString("        setError(null);\n")
+				sb.WriteString("        setData([]);\n\n")
+				sb.WriteString("        (async () => {\n")
+				sb.WriteString("            try {\n")
+				sb.WriteString(fmt.Sprintf("                for await (const chunk of client.%s(req)) {\n", method.Name))
+				sb.WriteString("                    if (!active) break;\n")
+				sb.WriteString(fmt.Sprintf("                    setData((prev: %s[]) => [...prev, chunk]);\n", method.OutputType))
+				sb.WriteString("                }\n")
+				sb.WriteString("            } catch (err: any) {\n")
+				sb.WriteString("                if (active) setError(err);\n")
+				sb.WriteString("            } finally {\n")
+				sb.WriteString("                if (active) setLoading(false);\n")
+				sb.WriteString("            }\n")
+				sb.WriteString("        })();\n\n")
+				sb.WriteString("        return () => { active = false; };\n")
+				sb.WriteString("    }, [client, JSON.stringify(req)]);\n\n")
+				sb.WriteString("    return { data, loading, error };\n")
+				sb.WriteString("}\n\n")
+			} else {
+				sb.WriteString(fmt.Sprintf("export function use%s(client: %sClient, req: %s | null) {\n", method.Name, svc.Name, method.InputType))
+				sb.WriteString(fmt.Sprintf("    const [data, setData] = (<any>window).React?.useState<%s | null>(null) || [null, () => {}];\n", method.OutputType))
+				sb.WriteString("    const [loading, setLoading] = (<any>window).React?.useState<boolean>(false) || [false, () => {}];\n")
+				sb.WriteString("    const [error, setError] = (<any>window).React?.useState<Error | null>(null) || [null, () => {}];\n\n")
+				sb.WriteString("    (<any>window).React?.useEffect(() => {\n")
+				sb.WriteString("        if (!req) return;\n")
+				sb.WriteString("        let active = true;\n")
+				sb.WriteString("        setLoading(true);\n")
+				sb.WriteString("        setError(null);\n\n")
+				sb.WriteString("        client."+method.Name+"(req)\n")
+				sb.WriteString("            .then(res => {\n")
+				sb.WriteString("                if (active) { setData(res); setLoading(false); }\n")
+				sb.WriteString("            })\n")
+				sb.WriteString("            .catch(err => {\n")
+				sb.WriteString("                if (active) { setError(err); setLoading(false); }\n")
+				sb.WriteString("            });\n\n")
+				sb.WriteString("        return () => { active = false; };\n")
+				sb.WriteString("    }, [client, JSON.stringify(req)]);\n\n")
+				sb.WriteString("    return { data, loading, error };\n")
+				sb.WriteString("}\n\n")
+			}
+		}
+	}
+
 	return sb.String(), nil
 }
 
