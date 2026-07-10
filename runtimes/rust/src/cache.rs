@@ -21,6 +21,10 @@ impl CacheInterceptor {
     }
 
     pub fn generate_cache_key(&self, method: &str, payload: &[u8]) -> String {
+        Self::generate_key(method, payload)
+    }
+
+    pub fn generate_key(method: &str, payload: &[u8]) -> String {
         let mut hasher = Sha256::new();
         hasher.update(method.as_bytes());
         hasher.update(payload);
@@ -43,3 +47,13 @@ impl CacheInterceptor {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_generate_key() {
+        let key = CacheInterceptor::generate_key("GET", b"test_payload");
+        assert_eq!(key.len(), 64); // SHA256 hex is 64 chars
+    }
+}

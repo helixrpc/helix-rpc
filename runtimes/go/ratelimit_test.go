@@ -106,3 +106,27 @@ func TestAdaptiveConcurrencyLimiter_Interceptor(t *testing.T) {
 	// Unblock
 	close(barrier)
 }
+
+func TestRateLimiter(t *testing.T) {
+	cfg := RateLimitConfig{
+		RequestsPerSecond: 10,
+		BurstSize:         5,
+	}
+	limiter := NewRateLimiter(cfg)
+
+	key := "test-client"
+
+	// Should allow 5 burst requests immediately
+	for i := 0; i < 5; i++ {
+		_, ok := limiter.Allow(key)
+		if !ok {
+			t.Fatalf("Expected request %d to be allowed", i+1)
+		}
+	}
+
+	// 6th request should fail immediately
+	_, ok := limiter.Allow(key)
+	if ok {
+		t.Fatal("Expected 6th request to be denied")
+	}
+}

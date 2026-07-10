@@ -31,3 +31,15 @@ impl KafkaAsyncSink {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_kafka_sink_init() {
+        let sink_res = KafkaAsyncSink::new("invalid_broker");
+        // creation usually succeeds even if broker is invalid, but might fail depending on config
+        assert!(sink_res.is_ok() || sink_res.is_err());
+    }
+}

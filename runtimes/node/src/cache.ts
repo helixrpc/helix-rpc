@@ -1,4 +1,4 @@
-import Memcached from 'memcached';
+import * as Memcached from 'memcached';
 import { createHash } from 'crypto';
 
 export class CacheInterceptor {
@@ -19,18 +19,18 @@ export class CacheInterceptor {
 
     public get(key: string): Promise<[Buffer | null, boolean]> {
         return new Promise((resolve) => {
-            this.client.get(key, (err, data) => {
+            this.client.get(key, (err: Error | undefined, data: unknown) => {
                 if (err || !data) {
                     resolve([null, false]);
                 } else {
-                    resolve([Buffer.isBuffer(data) ? data : Buffer.from(data), true]);
+                    resolve([Buffer.isBuffer(data) ? data : Buffer.from(data as string), true]);
                 }
             });
         });
     }
 
     public set(key: string, payload: Buffer): void {
-        this.client.set(key, payload, this.ttl, (err) => {
+        this.client.set(key, payload, this.ttl, (err: Error | undefined) => {
             if (err) {
                 console.error(`Failed to set cache for key ${key}: ${err}`);
             }

@@ -181,3 +181,23 @@ impl RedisRateLimiter {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_client_bucket_allow() {
+        let bucket = ClientBucket::new(10.0, 5);
+        let (_, allowed) = bucket.allow();
+        assert!(allowed);
+    }
+
+    #[test]
+    fn test_rate_limiter() {
+        let rl = RateLimiter::new(10.0, Some(5));
+        let (_, allowed) = rl.allow("test");
+        assert!(allowed);
+        assert_eq!(rl.limit(), 5);
+        assert_eq!(rl.rps(), 10.0);
+    }
+}
