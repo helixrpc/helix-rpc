@@ -117,6 +117,67 @@ class RateLimiter:
         return _middleware
 
 
+LUA_TOKEN_BUCKET = """
+local key = KEYS[1]
+local rate = tonumber(ARGV[1])
+local burst = tonumber(ARGV[2])
+local now = tonumber(ARGV[3])
+
+local tokens_key = key .. ":tokens"
+local timestamp_key = key .. ":ts"
+
+local last_tokens = tonumber(redis.call("get", tokens_key))
+if last_tokens == nil then
+    last_tokens = burst
+end
+
+local last_refreshed = tonumber(redis.call("get", timestamp_key))
+if last_refreshed == nil then
+    last_refreshed = 0
+end
+
+local delta = math.max(0, now - last_refreshed)
+local filled_tokens = math.min(burst, last_tokens + (delta * rate))
+local allowed = filled_tokens >= 1
+local new_tokens = filled_tokens
+
+if allowed then
+    new_tokens = filled_tokens - 1
+end
+
+redis.call("setex", tokens_key, math.ceil(burst / rate), new_tokens)
+redis.call("setex", timestamp_key, math.ceil(burst / rate), now)
+
+return { new_tokens, allowed }
+"""
+
+class RedisRateLimiter(RateLimiter):
+    """
+    Globally distributed token bucket rate limiter backed by Redis.
+    Uses an atomic Lua script to prevent race conditions across multiple workers.
+    """
+
+    def __init__(
+        self,
+        redis_client,
+        requests_per_second: float,
+        burst: Optional[int] = None,
+        key_func: Optional[Callable[[web.Request], str]] = None,
+    ) -> None:
+        super().__init__(requests_per_second, burst, key_func)
+        self.redis = redis_client
+        self._script = self.redis.register_script(LUA_TOKEN_BUCKET)
+
+    async def allow(self, key: str) -> tuple[int, bool]:
+        """Return (remaining, allowed) for the given client key via Redis."""
+        now = time.time()
+        res = await self._script(
+            keys=[f"ratelimit:{key}"],
+            args=[self.rps, self.burst, now]
+        )
+        # Lua script returns [new_tokens, allowed]
+        return int(res[0]), bool(res[1])
+
 def _ip_key(request: web.Request) -> str:
     """Extract client IP, honouring X-Forwarded-For."""
     forwarded = request.headers.get("X-Forwarded-For", "")
