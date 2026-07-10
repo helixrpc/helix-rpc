@@ -1,0 +1,13 @@
+[package]
+name = "helix-envoy-wasm"
+version = "0.1.0"
+edition = "2021"
+description = "Envoy Wasm filter for Helix RPC traffic sniffing and observability"
+authors = ["Helix RPC Contributors"]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+proxy-wasm = "0.2"
+log = "0.4"

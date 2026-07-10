@@ -1,0 +1,63 @@
+static_resources:
+  listeners:
+    - name: listener_0
+      address:
+        socket_address:
+          address: 0.0.0.0
+          port_value: 8080
+      filter_chains:
+        - filters:
+            - name: envoy.filters.network.http_connection_manager
+              typed_config:
+                "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+                stat_prefix: ingress_http
+                codec_type: AUTO
+                route_config:
+                  name: local_route
+                  virtual_hosts:
+                    - name: local_service
+                      domains: ["*"]
+                      routes:
+                        - match:
+                            prefix: "/"
+                          route:
+                            cluster: helix_backend
+                            # Ensure WebSockets are allowed through the multiplexer
+                            upgrade_configs:
+                              - upgrade_type: "websocket"
+                http_filters:
+                  # Inject our Wasm plugin for Protocol Sniffing
+                  - name: envoy.filters.http.wasm
+                    typed_config:
+                      "@type": type.googleapis.com/udpa.type.v1.TypedStruct
+                      type_url: type.googleapis.com/envoy.extensions.filters.http.wasm.v3.Wasm
+                      value:
+                        config:
+                          name: "helix-protocol-sniffer"
+                          root_id: "helix-root"
+                          vm_config:
+                            vm_id: "helix-vm"
+                            runtime: "envoy.wasm.runtime.v8"
+                            code:
+                              local:
+                                filename: "target/wasm32-unknown-unknown/release/helix_envoy_wasm.wasm"
+                          configuration:
+                            "@type": type.googleapis.com/google.protobuf.StringValue
+                            value: "{}"
+                  - name: envoy.filters.http.router
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+  clusters:
+    - name: helix_backend
+      connect_timeout: 0.25s
+      type: STRICT_DNS
+      lb_policy: ROUND_ROBIN
+      load_assignment:
+        cluster_name: helix_backend
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address:
+                      address: 127.0.0.1
+                      port_value: 8081
