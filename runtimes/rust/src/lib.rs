@@ -50,6 +50,8 @@ pub mod gateway;
 pub use gateway::MultiTenantRateLimiter;
 pub mod rabbitmq;
 pub use rabbitmq::RabbitMQAsyncSink;
+pub mod kafka;
+pub use kafka::KafkaAsyncSink;
 pub mod cache;
 pub use cache::CacheInterceptor;
 
