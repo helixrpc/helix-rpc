@@ -6,7 +6,7 @@
 
 <p align="center">
   <strong>The Unified Multi-Protocol Meta-Framework for Modern Microservices and AI Inference.</strong><br/>
-  Seamlessly unifying gRPC, Thrift, and JSON/REST under a single high-performance runtime.
+  Seamlessly unifying gRPC, Thrift, JSON/REST, WebSockets, and FlatBuffers under a single high-performance runtime.
 </p>
 
 <p align="center">
@@ -28,13 +28,13 @@
 
 Helix RPC is not a new competing transport protocol. Instead, it is a **unified multi-protocol meta-framework** designed to run on top of your existing schemas and systems. 
 
-By utilizing a **Same-Port Multiplexer** and **Zero-Allocation Transpilers**, Helix sniffs, routes, and transcodes incoming traffic (gRPC over HTTP/2, legacy Apache Thrift compact/binary, or HTTP/JSON REST) dynamically, letting them coexist seamlessly in your cluster.
+By utilizing a **Same-Port Multiplexer** and **Zero-Allocation Transpilers**, Helix sniffs, routes, and transcodes incoming traffic dynamically, letting them coexist seamlessly in your cluster.
 
 ### Why Helix?
-- **Unified Multi-Protocol Server**: Accept gRPC, Thrift, and JSON/REST on a single TCP port.
+- **Unified Multi-Protocol Server**: Accept gRPC, Thrift, JSON/REST, Bidirectional WebSockets, and zero-copy FlatBuffers on a **single TCP port**.
 - **Zero-Downtime Migration**: Maintain legacy clients and migrate backend services gradually without writing translators or deploying sidecar proxies.
-- **Direct Kernel Bypass**: Automatically bypasses the TCP/IP stack using **eBPF Sockmaps** for co-located microservices on loopback.
-- **Zero-Copy Views**: Memory-slicing encoders/decoders in Go, Rust, Node.js, and Python consume up to 70% less memory under high throughput.
+- **AI-Native Optimization**: Pass massive multi-gigabyte ML Tensors using the `application/grpc+flatbuffers` codec directly into numpy/PyTorch memory views without deserialization.
+- **Service Mesh Ready**: First-class Envoy Wasm Filter support and automatic OpenTelemetry TraceContext propagation.
 
 ## 🚀 Performance & Packages
 
@@ -51,7 +51,6 @@ cargo add helix-rt
 
 # Python
 pip install helix-rt
-pip install "helix-rt[tensor]" # For zero-copy numpy support
 ```
 
 ---
@@ -60,13 +59,14 @@ pip install "helix-rt[tensor]" # For zero-copy numpy support
 
 | Feature | Description |
 |---|---|
-| **Same-Port Sniffer** | Sniffs incoming packets to route gRPC, Thrift, HTTP/REST, gRPC-Web, and SSE on one port |
-| **Zero-Copy View** | Memory-slicing parser views avoid heap copies during serialization |
+| **Same-Port Sniffer** | Sniffs packets to route gRPC, Thrift, HTTP/REST, gRPC-Web, WebSockets, and SSE on one port |
+| **Zero-Copy FlatBuffers** | `application/x-flatbuffers` routes skip deserialization completely for huge ML tensor payloads |
 | **Zero-Allocation Transpiling**| Directly translates Protobuf binary to Thrift Compact in-memory |
+| **OpenAPI Generation** | Automatically generates `openapi.json` from your `.proto` / `.thrift` files |
+| **Java Interoperability** | Generates Zero-Dependency Java Stubs that implement `TBase` and `MessageLite` out of the box |
 | **Dynamic Batching** | Coalesces highly concurrent individual requests into optimal batches for GPU/LLM backends |
-| **eBPF Kernel Bypass** | Kernel-level Sockmap redirection for local loopback routing |
+| **Service Mesh Wasm Filter** | Envoy Proxy WebAssembly plugin that normalizes multi-protocol telemetry metrics |
 | **Single-File Scaffolding** | `helix-gen init` generates schema, stubs, configs, containers, and deployment plans |
-| **Hot-Reload Config** | `helix.json` watched and hot-reloaded dynamically for auth, rate limits, and compression |
 
 ---
 
@@ -110,41 +110,22 @@ server.RegisterMethod("/v1.ModelService/Predict", runtime.MethodInfo{
 
 ```
                      Client Traffic
-                           │
-  ┌────────────────────────┼────────────────────────┐
-  ▼ (gRPC/HTTP2)           ▼ (Thrift Compact)       ▼ (HTTP/JSON REST)
+                            │
+  ┌─────────────────────────┼────────────────────────┐
+  ▼ (gRPC/HTTP2)            ▼ (Thrift Compact)       ▼ (HTTP/JSON REST/WS)
 ┌─────────────────────────────────────────────────────────────┐
 │                 Helix Same-Port Sniffing Server             │
 ├─────────────────────────────────────────────────────────────┤
 │                     Direct Transpilation                    │
 │             (Zero-Allocation Protobuf ↔ Thrift)             │
 ├─────────────────────────────────────────────────────────────┤
-│                   eBPF Sockmap Redirect                     │
-│                (Kernel loopback bypass)                     │
-└──────────────────────────┬──────────────────────────────────┘
-                           ▼
-                 ┌───────────────────┐
-                 │   Your Handler    │
-                 └───────────────────┘
-```
-
----
-
-## 📦 Dynamic Configuration (`helix.json`)
-
-Tweak system behaviors at runtime without restarting your instances:
-
-```jsonc
-{
-  "host": "0.0.0.0",
-  "port": 8080,
-  "disable_gzip": false,        // Per-message compression toggle
-  "disable_deadline": false,    // Timeout propagation toggle
-  "rate_limit_rate": 200.0,     // Token-bucket refill rate
-  "rate_limit_burst": 20,
-  "enable_jwt_auth": true,       // Live JWT authentication
-  "jwt_secret": "my-secret-key"
-}
+│                 Zero-Copy Codec / Memory View               │
+│                (FlatBuffers Tensor Extraction)              │
+└───────────────────────────┬─────────────────────────────────┘
+                            ▼
+                  ┌───────────────────┐
+                  │   Your Handler    │
+                  └───────────────────┘
 ```
 
 ---
