@@ -16,7 +16,19 @@ func GenerateJava(parsed *ast.AST) (string, error) {
 	sb.WriteString("import java.util.List;\n")
 	sb.WriteString("import java.util.NoSuchElementException;\n")
 	sb.WriteString("import java.nio.ByteBuffer;\n")
-	sb.WriteString("import java.nio.charset.StandardCharsets;\n\n")
+	sb.WriteString("import java.nio.charset.StandardCharsets;\n")
+	sb.WriteString("import java.io.IOException;\n")
+	sb.WriteString("import java.util.concurrent.CompletableFuture;\n")
+	sb.WriteString("import java.util.concurrent.Flow;\n\n")
+	sb.WriteString("import com.google.protobuf.CodedInputStream;\n")
+	sb.WriteString("import com.google.protobuf.CodedOutputStream;\n")
+	sb.WriteString("import org.apache.thrift.TBase;\n")
+	sb.WriteString("import org.apache.thrift.TException;\n")
+	sb.WriteString("import org.apache.thrift.protocol.TField;\n")
+	sb.WriteString("import org.apache.thrift.protocol.TProtocol;\n")
+	sb.WriteString("import org.apache.thrift.protocol.TProtocolUtil;\n")
+	sb.WriteString("import org.apache.thrift.protocol.TStruct;\n")
+	sb.WriteString("import org.apache.thrift.protocol.TType;\n\n")
 
 	// Global helpers class inside the package
 	sb.WriteString(`class HelixHelpers {
@@ -89,7 +101,11 @@ func GenerateJava(parsed *ast.AST) (string, error) {
 
 	for _, str := range parsed.Structs {
 		// Struct definition
-		sb.WriteString(fmt.Sprintf("public class %s {\n", str.Name))
+		if str.HasFallback {
+			sb.WriteString(fmt.Sprintf("public class %s {\n", str.Name))
+		} else {
+			sb.WriteString(fmt.Sprintf("public class %s implements TBase<%s, %s._Fields> {\n", str.Name, str.Name, str.Name))
+		}
 		for _, f := range str.Fields {
 			javaType := getJavaType(f.Type)
 			sb.WriteString(fmt.Sprintf("    public %s %s;\n", javaType, f.Name))
@@ -166,6 +182,170 @@ func GenerateJava(parsed *ast.AST) (string, error) {
 			sb.WriteString("        return out;\n")
 			sb.WriteString("    }\n\n")
 
+			
+		if !str.HasFallback {
+			sb.WriteString("\n    public enum _Fields implements org.apache.thrift.TFieldIdEnum {\n")
+			for i, f := range str.Fields {
+				comma := ","
+				if i == len(str.Fields)-1 {
+					comma = ";"
+				}
+				sb.WriteString(fmt.Sprintf("        %s((short)%d, \"%s\")%s\n", strings.ToUpper(f.Name), f.ID, f.Name, comma))
+			}
+			if len(str.Fields) == 0 {
+				sb.WriteString("        ;\n")
+			}
+			sb.WriteString("\n        private final short _thriftId;\n")
+			sb.WriteString("        private final String _fieldName;\n")
+			sb.WriteString("        _Fields(short thriftId, String fieldName) {\n")
+			sb.WriteString("            _thriftId = thriftId;\n")
+			sb.WriteString("            _fieldName = fieldName;\n")
+			sb.WriteString("        }\n")
+			sb.WriteString("        public short getThriftFieldId() { return _thriftId; }\n")
+			sb.WriteString("        public String getFieldName() { return _fieldName; }\n")
+			sb.WriteString("    }\n\n")
+
+			sb.WriteString(fmt.Sprintf("    public void read(TProtocol iprot) throws TException {\n"))
+			sb.WriteString("        iprot.readStructBegin();\n")
+			sb.WriteString("        while (true) {\n")
+			sb.WriteString("            TField field = iprot.readFieldBegin();\n")
+			sb.WriteString("            if (field.type == TType.STOP) { break; }\n")
+			sb.WriteString("            switch (field.id) {\n")
+			for _, f := range str.Fields {
+				sb.WriteString(fmt.Sprintf("                case %d: // %s\n", f.ID, f.Name))
+				switch f.Type.Kind {
+				case ast.TypeInt32:
+					sb.WriteString("                    if (field.type == TType.I32) {\n")
+					sb.WriteString(fmt.Sprintf("                        this.%s = iprot.readI32();\n", f.Name))
+					sb.WriteString("                    } else { TProtocolUtil.skip(iprot, field.type); }\n")
+				case ast.TypeInt64:
+					sb.WriteString("                    if (field.type == TType.I64) {\n")
+					sb.WriteString(fmt.Sprintf("                        this.%s = iprot.readI64();\n", f.Name))
+					sb.WriteString("                    } else { TProtocolUtil.skip(iprot, field.type); }\n")
+				case ast.TypeString:
+					sb.WriteString("                    if (field.type == TType.STRING) {\n")
+					sb.WriteString(fmt.Sprintf("                        this.%s = iprot.readString();\n", f.Name))
+					sb.WriteString("                    } else { TProtocolUtil.skip(iprot, field.type); }\n")
+				}
+				sb.WriteString("                    break;\n")
+			}
+			sb.WriteString("                default:\n")
+			sb.WriteString("                    TProtocolUtil.skip(iprot, field.type);\n")
+			sb.WriteString("            }\n")
+			sb.WriteString("            iprot.readFieldEnd();\n")
+			sb.WriteString("        }\n")
+			sb.WriteString("        iprot.readStructEnd();\n")
+			sb.WriteString("    }\n\n")
+
+			sb.WriteString(fmt.Sprintf("    public void write(TProtocol oprot) throws TException {\n"))
+			sb.WriteString(fmt.Sprintf("        oprot.writeStructBegin(new TStruct(\"%s\"));\n", str.Name))
+			for _, f := range str.Fields {
+				thriftType := "TType.STRING"
+				if f.Type.Kind == ast.TypeInt32 { thriftType = "TType.I32" } else if f.Type.Kind == ast.TypeInt64 { thriftType = "TType.I64" }
+				sb.WriteString(fmt.Sprintf("        oprot.writeFieldBegin(new TField(\"%s\", %s, (short)%d));\n", f.Name, thriftType, f.ID))
+				switch f.Type.Kind {
+				case ast.TypeInt32:
+					sb.WriteString(fmt.Sprintf("        oprot.writeI32(this.%s);\n", f.Name))
+				case ast.TypeInt64:
+					sb.WriteString(fmt.Sprintf("        oprot.writeI64(this.%s);\n", f.Name))
+				case ast.TypeString:
+					sb.WriteString(fmt.Sprintf("        if (this.%s != null) oprot.writeString(this.%s);\n", f.Name, f.Name))
+				}
+				sb.WriteString("        oprot.writeFieldEnd();\n")
+			}
+			sb.WriteString("        oprot.writeFieldStop();\n")
+			sb.WriteString("        oprot.writeStructEnd();\n")
+			sb.WriteString("    }\n\n")
+
+			sb.WriteString(fmt.Sprintf("    public void clear() {\n"))
+			for _, f := range str.Fields {
+				if f.Type.Kind == ast.TypeString {
+					sb.WriteString(fmt.Sprintf("        this.%s = null;\n", f.Name))
+				} else {
+					sb.WriteString(fmt.Sprintf("        this.%s = 0;\n", f.Name))
+				}
+			}
+			sb.WriteString("    }\n\n")
+
+			sb.WriteString(fmt.Sprintf("    public %s deepCopy() {\n", str.Name))
+			sb.WriteString(fmt.Sprintf("        %s copy = new %s();\n", str.Name, str.Name))
+			for _, f := range str.Fields {
+				sb.WriteString(fmt.Sprintf("        copy.%s = this.%s;\n", f.Name, f.Name))
+			}
+			sb.WriteString("        return copy;\n")
+			sb.WriteString("    }\n\n")
+
+			sb.WriteString(fmt.Sprintf("    public int compareTo(%s other) {\n", str.Name))
+			sb.WriteString("        return 0; // Not fully implemented\n")
+			sb.WriteString("    }\n\n")
+
+			sb.WriteString("    public _Fields fieldForId(int fieldId) { return null; }\n")
+			sb.WriteString("    public boolean isSet(_Fields field) { return true; }\n")
+			sb.WriteString("    public Object getFieldValue(_Fields field) { return null; }\n")
+			sb.WriteString("    public void setFieldValue(_Fields field, Object value) {}\n\n")
+
+			// Protobuf Serialization Methods
+			sb.WriteString("    public void writeTo(CodedOutputStream output) throws IOException {\n")
+			for _, f := range str.Fields {
+				switch f.Type.Kind {
+				case ast.TypeInt32:
+					sb.WriteString(fmt.Sprintf("        if (this.%s != 0) output.writeInt32(%d, this.%s);\n", f.Name, f.ID, f.Name))
+				case ast.TypeInt64:
+					sb.WriteString(fmt.Sprintf("        if (this.%s != 0L) output.writeInt64(%d, this.%s);\n", f.Name, f.ID, f.Name))
+				case ast.TypeString:
+					sb.WriteString(fmt.Sprintf("        if (this.%s != null && !this.%s.isEmpty()) output.writeString(%d, this.%s);\n", f.Name, f.Name, f.ID, f.Name))
+				}
+			}
+			sb.WriteString("    }\n\n")
+
+			sb.WriteString("    public int getSerializedSize() {\n")
+			sb.WriteString("        int size = 0;\n")
+			for _, f := range str.Fields {
+				switch f.Type.Kind {
+				case ast.TypeInt32:
+					sb.WriteString(fmt.Sprintf("        if (this.%s != 0) size += CodedOutputStream.computeInt32Size(%d, this.%s);\n", f.Name, f.ID, f.Name))
+				case ast.TypeInt64:
+					sb.WriteString(fmt.Sprintf("        if (this.%s != 0L) size += CodedOutputStream.computeInt64Size(%d, this.%s);\n", f.Name, f.ID, f.Name))
+				case ast.TypeString:
+					sb.WriteString(fmt.Sprintf("        if (this.%s != null && !this.%s.isEmpty()) size += CodedOutputStream.computeStringSize(%d, this.%s);\n", f.Name, f.Name, f.ID, f.Name))
+				}
+			}
+			sb.WriteString("        return size;\n")
+			sb.WriteString("    }\n\n")
+
+			sb.WriteString(fmt.Sprintf("    public static %s parseFrom(byte[] data) throws IOException {\n", str.Name))
+			sb.WriteString(fmt.Sprintf("        return parseFrom(CodedInputStream.newInstance(data));\n"))
+			sb.WriteString("    }\n\n")
+
+			sb.WriteString(fmt.Sprintf("    public static %s parseFrom(CodedInputStream input) throws IOException {\n", str.Name))
+			sb.WriteString(fmt.Sprintf("        %s msg = new %s();\n", str.Name, str.Name))
+			sb.WriteString("        while (true) {\n")
+			sb.WriteString("            int tag = input.readTag();\n")
+			sb.WriteString("            if (tag == 0) break;\n")
+			sb.WriteString("            switch (tag) {\n")
+			for _, f := range str.Fields {
+				wire := 0
+				if f.Type.Kind == ast.TypeString { wire = 2 }
+				tagId := (f.ID << 3) | int32(wire)
+				sb.WriteString(fmt.Sprintf("                case %d:\n", tagId))
+				switch f.Type.Kind {
+				case ast.TypeInt32:
+					sb.WriteString(fmt.Sprintf("                    msg.%s = input.readInt32();\n", f.Name))
+				case ast.TypeInt64:
+					sb.WriteString(fmt.Sprintf("                    msg.%s = input.readInt64();\n", f.Name))
+				case ast.TypeString:
+					sb.WriteString(fmt.Sprintf("                    msg.%s = input.readString();\n", f.Name))
+				}
+				sb.WriteString("                    break;\n")
+			}
+			sb.WriteString("                default:\n")
+			sb.WriteString("                    input.skipField(tag);\n")
+			sb.WriteString("            }\n")
+			sb.WriteString("        }\n")
+			sb.WriteString("        return msg;\n")
+			sb.WriteString("    }\n\n")
+		}
+
 			// Nested Lazy class inside the public struct class
 			sb.WriteString("    public static class Lazy {\n")
 			sb.WriteString("        private final ByteBuffer raw;\n")
@@ -194,6 +374,20 @@ func GenerateJava(parsed *ast.AST) (string, error) {
 		sb.WriteString("}\n\n")
 	}
 
+	
+	// Generate Java Interfaces for Services
+	for _, srv := range parsed.Services {
+		sb.WriteString(fmt.Sprintf("public interface %s {\n", srv.Name))
+		for _, m := range srv.Methods {
+			if m.ServerStreaming || m.ClientStreaming {
+				sb.WriteString(fmt.Sprintf("    Flow.Publisher<%s> %s(Flow.Publisher<%s> request);\n", m.OutputType, toCamelCaseLC(m.Name), m.InputType))
+			} else {
+				sb.WriteString(fmt.Sprintf("    CompletableFuture<%s> %s(%s request);\n", m.OutputType, toCamelCaseLC(m.Name), m.InputType))
+			}
+		}
+		sb.WriteString("}\n\n")
+	}
+
 	return sb.String(), nil
 }
 
@@ -212,4 +406,13 @@ func getJavaType(t ast.TypeNode) string {
 	default:
 		return "String"
 	}
+}
+
+
+func toCamelCaseLC(s string) string {
+	cc := toCamelCase(s)
+	if len(cc) > 0 {
+		return strings.ToLower(cc[:1]) + cc[1:]
+	}
+	return cc
 }
