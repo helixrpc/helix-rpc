@@ -40,5 +40,9 @@ base64 = "0.21"
 hyper-tungstenite = "0.9"
 futures-util = "0.3"
 
+[dev-dependencies]
+tokio-tungstenite = "0.18"
+tokio-stream = { version = "0.1", features = ["net"] }
+
 
 
