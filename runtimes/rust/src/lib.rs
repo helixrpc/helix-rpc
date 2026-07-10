@@ -12,6 +12,7 @@ pub mod retry;
 pub mod server;
 pub mod sniffer;
 pub mod quic_transport;
+pub mod websocket;
 
 pub use quic_transport::{QuicListener, QuicStream};
 pub use client_pool::{AnyStream, Balancer, ClientConnPool, RoundRobinBalancer, ConsistentHashBalancer};

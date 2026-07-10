@@ -203,6 +203,32 @@ where
             let path = req.uri().path().to_string();
             let req_method = req.method().as_str().to_uppercase();
 
+            // Check for WebSocket upgrade
+            if hyper_tungstenite::is_upgrade_request(&req) {
+                if let Some(ref sh) = streaming_handler {
+                    if sh.is_streaming(&path) {
+                        let (response, websocket) = match hyper_tungstenite::upgrade(req, None) {
+                            Ok(res) => res,
+                            Err(e) => {
+                                return Ok(Response::builder()
+                                    .status(StatusCode::BAD_REQUEST)
+                                    .body(Body::from(format!("WebSocket upgrade error: {}", e)))
+                                    .unwrap());
+                            }
+                        };
+                        let sh_clone = sh.clone();
+                        let path_clone = path.clone();
+                        tokio::spawn(async move {
+                            if let Ok(ws_stream) = websocket.await {
+                                let ws_server_stream = crate::websocket::WsServerStream::new(ws_stream);
+                                let _ = sh_clone.handle_stream(&path_clone, Box::new(ws_server_stream)).await;
+                            }
+                        });
+                        return Ok(response);
+                    }
+                }
+            }
+
             if !disable_metrics
                 && (path == "/metrics"
                     || path == "/metrics/"

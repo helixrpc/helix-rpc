@@ -215,6 +215,15 @@ class HelixServer:
                         status=200
                     )
 
+                # WebSocket streaming (Upgrades)
+                if request.headers.get("Upgrade", "").lower() == "websocket" and (isinstance(resp, AsyncIterator) or hasattr(resp, "__aiter__")):
+                    ws = web.WebSocketResponse()
+                    await ws.prepare(request)
+                    async for chunk in resp:
+                        chunk_data = asdict(chunk) if hasattr(chunk, "__dataclass_fields__") else chunk
+                        await ws.send_json(chunk_data)
+                    return ws
+
                 # SSE streaming
                 if isinstance(resp, AsyncIterator) or hasattr(resp, "__aiter__"):
                     response = web.StreamResponse(
