@@ -80,11 +80,11 @@ func main() {
 func runGenerate(args []string) {
 	fs := flag.NewFlagSet("generate", flag.ExitOnError)
 	idlPath := fs.String("idl", "", "Path to the IDL file (.proto or .thrift)")
-	lang := fs.String("lang", "go", "Target language (go, rust, python, node, cpp, java)")
+	lang := fs.String("lang", "go", "Target language (go, rust, python, node, cpp, java, openapi)")
 	outPath := fs.String("out", "", "Output filepath for generated code")
 	watch := fs.Bool("watch", false, "Watch IDL file and regenerate on change")
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "Usage: helix-gen generate -idl <schema.proto> -lang <go|rust|python|node|cpp|java> -out <output-file> [--watch]")
+		fmt.Fprintln(os.Stderr, "Usage: helix-gen generate -idl <schema.proto> -lang <go|rust|python|node|cpp|java|openapi> -out <output-file> [--watch]")
 		fs.PrintDefaults()
 	}
 	fs.Parse(args) //nolint:errcheck
@@ -168,9 +168,11 @@ func generate(idlPath, lang, outPath string) error {
 		generated, err = codegen.GenerateCPP(parsed)
 	case "java":
 		generated, err = codegen.GenerateJava(parsed)
+	case "openapi":
+		generated, err = codegen.GenerateOpenAPI(parsed)
 	default:
 		printError(fmt.Sprintf("unsupported language %q", lang))
-		fmt.Fprintln(os.Stderr, "  Supported languages: go, rust, python, node, cpp, java")
+		fmt.Fprintln(os.Stderr, "  Supported languages: go, rust, python, node, cpp, java, openapi")
 		return fmt.Errorf("unsupported language")
 	}
 

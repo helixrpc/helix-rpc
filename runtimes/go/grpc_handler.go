@@ -276,6 +276,21 @@ func (h *GRPCHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		r.Body = io.NopCloser(base64.NewDecoder(base64.StdEncoding, r.Body))
 	}
 
+	// Check for WebSocket Upgrade
+	if IsWebSocketUpgrade(r) && methodInfo.IsStreaming {
+		stream, err := UpgradeToWebSocket(w, r)
+		if err != nil {
+			http.Error(w, "failed to upgrade to websocket: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		
+		err = methodInfo.StreamHandler(stream)
+		if err != nil {
+			fmt.Printf("WebSocket stream error: %v\n", err)
+		}
+		return
+	}
+
 	// If HTTP/1.1 REST is caller, default to application/json if Content-Type is missing
 	if contentType == "" {
 		contentType = "application/json"
