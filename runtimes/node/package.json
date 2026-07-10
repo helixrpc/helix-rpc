@@ -9,10 +9,13 @@
     "build": "npx tsc"
   },
   "devDependencies": {
+    "@types/memcached": "^2.2.10",
     "@types/node": "^26.1.0",
     "typescript": "^5.3.3"
   },
   "dependencies": {
-    "@aws-sdk/client-kms": "^3.1084.0"
+    "@aws-sdk/client-kms": "^3.1084.0",
+    "ioredis": "^5.11.1",
+    "memcached": "^2.2.2"
   }
 }

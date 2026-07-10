@@ -7,6 +7,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/redis/go-redis/v9"
 )
 
 // ---------------------------------------------------------------------------
@@ -193,6 +195,142 @@ func max64(a, b int64) int64 {
 		return a
 	}
 	return b
+}
+
+// ---------------------------------------------------------------------------
+// RedisRateLimiter — globally distributed token bucket backed by Redis
+// ---------------------------------------------------------------------------
+
+const luaTokenBucket = `
+local key = KEYS[1]
+local rate = tonumber(ARGV[1])
+local burst = tonumber(ARGV[2])
+local now = tonumber(ARGV[3])
+
+local tokens_key = key .. ":tokens"
+local timestamp_key = key .. ":ts"
+
+local last_tokens = tonumber(redis.call("get", tokens_key))
+if last_tokens == nil then
+    last_tokens = burst
+end
+
+local last_refreshed = tonumber(redis.call("get", timestamp_key))
+if last_refreshed == nil then
+    last_refreshed = 0
+end
+
+local delta = math.max(0, now - last_refreshed)
+local filled_tokens = math.min(burst, last_tokens + (delta * rate))
+local allowed = filled_tokens >= 1
+local new_tokens = filled_tokens
+
+if allowed then
+    new_tokens = filled_tokens - 1
+end
+
+redis.call("setex", tokens_key, math.ceil(burst / rate), new_tokens)
+redis.call("setex", timestamp_key, math.ceil(burst / rate), now)
+
+if allowed then
+	return { new_tokens, 1 }
+else
+	return { new_tokens, 0 }
+end
+`
+
+var tokenBucketScript = redis.NewScript(luaTokenBucket)
+
+// RedisRateLimiter is a globally distributed token bucket rate limiter backed by Redis.
+type RedisRateLimiter struct {
+	cfg   RateLimitConfig
+	redis *redis.Client
+}
+
+// NewRedisRateLimiter creates a new RedisRateLimiter.
+func NewRedisRateLimiter(cfg RateLimitConfig, client *redis.Client) *RedisRateLimiter {
+	if cfg.BurstSize == 0 {
+		cfg.BurstSize = max(1, int(cfg.RequestsPerSecond))
+	}
+	if cfg.KeyFunc == nil {
+		cfg.KeyFunc = ipKeyFunc
+	}
+	if cfg.ErrorMessage == "" {
+		cfg.ErrorMessage = `{"error":"rate limit exceeded","code":14}`
+	}
+	return &RedisRateLimiter{
+		cfg:   cfg,
+		redis: client,
+	}
+}
+
+// Allow returns true if the request for the given key is within the rate limit.
+func (rl *RedisRateLimiter) Allow(ctx context.Context, key string) (remaining int64, ok bool) {
+	now := float64(time.Now().UnixNano()) / 1e9 // seconds as float
+	res, err := tokenBucketScript.Run(ctx, rl.redis, []string{"ratelimit:" + key}, rl.cfg.RequestsPerSecond, float64(rl.cfg.BurstSize), now).Result()
+	if err != nil {
+		// Fallback to deny if redis errors out
+		return 0, false
+	}
+
+	vals, ok := res.([]interface{})
+	if !ok || len(vals) != 2 {
+		return 0, false
+	}
+
+	newTokens, ok1 := vals[0].(int64)
+	isAllowed, ok2 := vals[1].(int64)
+	if !ok1 || !ok2 {
+		return 0, false
+	}
+
+	return newTokens, isAllowed == 1
+}
+
+// Interceptor returns a UnaryServerInterceptor that enforces the rate limit.
+func (rl *RedisRateLimiter) Interceptor() UnaryServerInterceptor {
+	return func(ctx context.Context, req interface{}, info *UnaryServerInfo, handler UnaryHandler) (interface{}, error) {
+		md, _ := FromContext(ctx)
+		key := "unknown"
+		if ip, ok := md[":remote-addr"]; ok && len(ip) > 0 {
+			key = ip[0]
+		} else if fwd, ok := md["x-forwarded-for"]; ok && len(fwd) > 0 {
+			key = fwd[0]
+		}
+
+		remaining, ok := rl.Allow(ctx, key)
+		if !ok {
+			retryAfter := fmt.Sprintf("%.0f", 1.0/rl.cfg.RequestsPerSecond)
+			return nil, &HelixError{
+				Code:    CodeUnavailable,
+				Message: fmt.Sprintf("rate limit exceeded; retry after %ss", retryAfter),
+			}
+		}
+		_ = remaining
+		return handler(ctx, req)
+	}
+}
+
+// HTTPMiddleware returns an http.Handler middleware for REST servers.
+func (rl *RedisRateLimiter) HTTPMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		key := rl.cfg.KeyFunc(r)
+		remaining, ok := rl.Allow(r.Context(), key)
+		limit := int64(rl.cfg.BurstSize)
+		retryAfter := fmt.Sprintf("%.3f", 1.0/rl.cfg.RequestsPerSecond)
+
+		w.Header().Set("X-RateLimit-Limit", fmt.Sprintf("%d", limit))
+		w.Header().Set("X-RateLimit-Remaining", fmt.Sprintf("%d", max64(0, remaining)))
+
+		if !ok {
+			w.Header().Set("Retry-After", retryAfter)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusTooManyRequests)
+			fmt.Fprint(w, rl.cfg.ErrorMessage)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // AdaptiveConcurrencyLimiter implements a concurrency limiter that dynamically

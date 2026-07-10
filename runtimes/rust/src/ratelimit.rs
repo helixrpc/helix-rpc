@@ -1,3 +1,4 @@
+use redis::Client;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
 use std::sync::{Arc, RwLock};
@@ -107,3 +108,76 @@ impl RateLimiter {
         self.rps
     }
 }
+
+const LUA_TOKEN_BUCKET: &str = r#"
+local key = KEYS[1]
+local rate = tonumber(ARGV[1])
+local burst = tonumber(ARGV[2])
+local now = tonumber(ARGV[3])
+
+local tokens_key = key .. ":tokens"
+local timestamp_key = key .. ":ts"
+
+local last_tokens = tonumber(redis.call("get", tokens_key))
+if last_tokens == nil then
+    last_tokens = burst
+end
+
+local last_refreshed = tonumber(redis.call("get", timestamp_key))
+if last_refreshed == nil then
+    last_refreshed = 0
+end
+
+local delta = math.max(0, now - last_refreshed)
+local filled_tokens = math.min(burst, last_tokens + (delta * rate))
+local allowed = filled_tokens >= 1
+local new_tokens = filled_tokens
+
+if allowed then
+    new_tokens = filled_tokens - 1
+end
+
+redis.call("setex", tokens_key, math.ceil(burst / rate), new_tokens)
+redis.call("setex", timestamp_key, math.ceil(burst / rate), now)
+
+return { new_tokens, allowed }
+"#;
+
+pub struct RedisRateLimiter {
+    client: Client,
+    rps: f64,
+    burst: i64,
+}
+
+impl RedisRateLimiter {
+    pub fn new(client: Client, rps: f64, burst_size: Option<i64>) -> Self {
+        let burst = burst_size.unwrap_or_else(|| rps.max(1.0) as i64);
+        Self { client, rps, burst }
+    }
+
+    pub async fn allow(&self, key: &str) -> redis::RedisResult<(i64, bool)> {
+        let mut con = self.client.get_async_connection().await?;
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs_f64();
+
+        let result: Vec<i64> = redis::Script::new(LUA_TOKEN_BUCKET)
+            .key(format!("ratelimit:{}", key))
+            .arg(self.rps)
+            .arg(self.burst)
+            .arg(now)
+            .invoke_async(&mut con)
+            .await?;
+
+        if result.len() == 2 {
+            Ok((result[0], result[1] == 1))
+        } else {
+            Err(redis::RedisError::from((
+                redis::ErrorKind::TypeError,
+                "Invalid response from Lua script",
+            )))
+        }
+    }
+}
+
