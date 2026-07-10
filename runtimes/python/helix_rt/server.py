@@ -153,6 +153,7 @@ class HelixServer:
             ct = request.content_type or ""
             is_grpc_web = ct.startswith("application/grpc-web")
             is_grpc_web_text = ct.startswith("application/grpc-web-text")
+            is_flatbuffers = "application/x-flatbuffers" in ct or "application/grpc+flatbuffers" in ct
 
             try:
                 if is_grpc_web or is_grpc_web_text:
@@ -176,10 +177,16 @@ class HelixServer:
                     if compressed_flag == 1:
                         payload = gzip.decompress(payload)
 
-                    payload_str = payload.decode("utf-8") if payload else ""
-                    body = json.loads(payload_str) if payload_str else {}
+                    if is_flatbuffers:
+                        body = payload
+                    else:
+                        payload_str = payload.decode("utf-8") if payload else ""
+                        body = json.loads(payload_str) if payload_str else {}
                 else:
-                    body = await request.json()
+                    if is_flatbuffers:
+                        body = await request.read()
+                    else:
+                        body = await request.json()
 
                 resp = await handler(body)
 
@@ -242,6 +249,8 @@ class HelixServer:
                     return response
 
                 # Standard unary response
+                if is_flatbuffers and hasattr(resp, "marshal_flatbuffers"):
+                    return web.Response(body=resp.marshal_flatbuffers(), content_type="application/x-flatbuffers")
                 if hasattr(resp, "__dataclass_fields__"):
                     resp = asdict(resp)
                 return web.json_response(resp)

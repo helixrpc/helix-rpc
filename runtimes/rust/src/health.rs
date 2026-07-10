@@ -57,9 +57,9 @@ impl HealthChecker {
     pub async fn handle_request(
         &self,
         body: &[u8],
-        is_json: bool,
+        codec: u8,
     ) -> Result<(Vec<u8>, String), String> {
-        if is_json {
+        if codec == 1 {
             self.handle_json(body).await
         } else {
             self.handle_proto(body).await
@@ -219,7 +219,7 @@ mod tests {
     async fn test_json_request() {
         let hc = HealthChecker::new();
         let body = b"{}";
-        let (resp, ct) = hc.handle_request(body, true).await.unwrap();
+        let (resp, ct) = hc.handle_request(body, 1).await.unwrap();
         assert_eq!(ct, "application/json");
         let v: serde_json::Value = serde_json::from_slice(&resp).unwrap();
         assert_eq!(v["status"], "SERVING");

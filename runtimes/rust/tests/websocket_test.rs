@@ -12,7 +12,7 @@ struct MockServiceHandler;
 
 #[async_trait::async_trait]
 impl HttpServiceHandler for MockServiceHandler {
-    async fn handle_request(&self, _path: &str, _req: Vec<u8>, _is_json: bool) -> Result<(Vec<u8>, String), String> {
+    async fn handle_request(&self, _path: &str, _req: Vec<u8>, _codec: u8) -> Result<(Vec<u8>, String), String> {
         Ok((vec![], "".to_string()))
     }
 }

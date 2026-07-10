@@ -34,6 +34,14 @@ type ProtoUnmarshaler interface {
 	Unmarshal([]byte) error
 }
 
+type FlatBuffersMarshaler interface {
+	MarshalFlatBuffers() []byte
+}
+
+type FlatBuffersUnmarshaler interface {
+	UnmarshalFlatBuffers([]byte) error
+}
+
 type UnaryServerInfo struct {
 	FullMethod string
 }
@@ -49,9 +57,10 @@ type ServerStream interface {
 }
 
 type serverStream struct {
-	ctx context.Context
-	w   http.ResponseWriter
-	r   *http.Request
+	ctx   context.Context
+	w     http.ResponseWriter
+	r     *http.Request
+	codec string
 }
 
 func (s *serverStream) Context() context.Context {
@@ -68,6 +77,13 @@ func (s *serverStream) Recv(v interface{}) error {
 	if _, err := io.ReadFull(s.r.Body, payload); err != nil {
 		return err
 	}
+	if s.codec == "flatbuffers" {
+		unmarshaler, ok := v.(FlatBuffersUnmarshaler)
+		if !ok {
+			return fmt.Errorf("type does not implement FlatBuffersUnmarshaler")
+		}
+		return unmarshaler.UnmarshalFlatBuffers(payload)
+	}
 	unmarshaler, ok := v.(ProtoUnmarshaler)
 	if !ok {
 		return fmt.Errorf("type does not implement ProtoUnmarshaler")
@@ -76,13 +92,23 @@ func (s *serverStream) Recv(v interface{}) error {
 }
 
 func (s *serverStream) Send(v interface{}) error {
-	marshaler, ok := v.(ProtoMarshaler)
-	if !ok {
-		return fmt.Errorf("type does not implement ProtoMarshaler")
-	}
-	payload, err := marshaler.Marshal()
-	if err != nil {
-		return err
+	var payload []byte
+	var err error
+	if s.codec == "flatbuffers" {
+		marshaler, ok := v.(FlatBuffersMarshaler)
+		if !ok {
+			return fmt.Errorf("type does not implement FlatBuffersMarshaler")
+		}
+		payload = marshaler.MarshalFlatBuffers()
+	} else {
+		marshaler, ok := v.(ProtoMarshaler)
+		if !ok {
+			return fmt.Errorf("type does not implement ProtoMarshaler")
+		}
+		payload, err = marshaler.Marshal()
+		if err != nil {
+			return err
+		}
 	}
 
 	header := make([]byte, 5)
@@ -271,6 +297,12 @@ func (h *GRPCHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	isGrpcWebText := strings.Contains(contentType, "application/grpc-web-text")
 	isGrpcWeb := isGrpcWebText || strings.Contains(contentType, "application/grpc-web")
+	isFlatBuffers := strings.Contains(contentType, "application/x-flatbuffers") || strings.Contains(contentType, "application/grpc+flatbuffers")
+	codec := "proto"
+	if isFlatBuffers {
+		codec = "flatbuffers"
+	}
+
 
 	if isGrpcWebText {
 		r.Body = io.NopCloser(base64.NewDecoder(base64.StdEncoding, r.Body))
@@ -430,11 +462,19 @@ func (h *GRPCHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				payload = decompressed
 			}
 		}
-		unmarshaler, ok := v.(ProtoUnmarshaler)
-		if !ok {
-			return fmt.Errorf("type does not implement ProtoUnmarshaler")
+		if codec == "flatbuffers" {
+			unmarshaler, ok := v.(FlatBuffersUnmarshaler)
+			if !ok {
+				return fmt.Errorf("type does not implement FlatBuffersUnmarshaler")
+			}
+			return unmarshaler.UnmarshalFlatBuffers(payload)
+		} else {
+			unmarshaler, ok := v.(ProtoUnmarshaler)
+			if !ok {
+				return fmt.Errorf("type does not implement ProtoUnmarshaler")
+			}
+			return unmarshaler.Unmarshal(payload)
 		}
-		return unmarshaler.Unmarshal(payload)
 	}
 
 	req, err := methodInfo.Decoder(dec)

@@ -1,0 +1,13 @@
+syntax = "proto3";
+package model;
+
+message UserProfile {
+    int32 id = 1;
+    string username = 2;
+    int64 created_at = 3;
+}
+
+service UserService {
+    rpc GetUser(UserProfile) returns (UserProfile);
+    rpc StreamUsers(UserProfile) returns (stream UserProfile);
+}

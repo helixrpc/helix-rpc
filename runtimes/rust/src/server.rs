@@ -127,7 +127,7 @@ pub trait HttpSseHandler: Send + Sync {
         &self,
         path: &str,
         body: Vec<u8>,
-        is_json: bool,
+        codec: u8,
     ) -> Result<tokio::sync::mpsc::Receiver<Result<String, String>>, String>;
 }
 
@@ -137,7 +137,7 @@ pub trait HttpServiceHandler: Send + Sync + 'static {
         &self,
         path: &str,
         body: Vec<u8>,
-        is_json: bool,
+        codec: u8,
     ) -> Result<(Vec<u8>, String), String>;
 }
 
@@ -262,13 +262,19 @@ where
                     .unwrap_or("");
 
                 // If REST endpoint call, default content_type to application/json if empty
-                let is_json = content_type == "application/json" || content_type.is_empty();
+                let codec = if content_type == "application/json" {
+                    1
+                } else if content_type.contains("application/x-flatbuffers") || content_type.contains("application/grpc+flatbuffers") {
+                    2
+                } else {
+                    0
+                };
                 let is_grpc_only = content_type == "application/grpc";
                 let is_grpc_web = content_type == "application/grpc-web";
                 let is_grpc_web_text = content_type == "application/grpc-web-text";
                 let is_grpc = is_grpc_only || is_grpc_web || is_grpc_web_text;
 
-                if !is_json && !is_grpc {
+                if codec != 1 && codec != 2 && !is_grpc {
                     let response = Response::builder()
                         .status(StatusCode::BAD_REQUEST)
                         .body(Body::from("Unsupported Content-Type"))
@@ -340,7 +346,7 @@ where
                         }
                     }
 
-                    match hc.handle_request(&payload, is_json).await {
+                    match hc.handle_request(&payload, codec).await {
                         Ok((resp_bytes, resp_content_type)) => {
                             if is_grpc_only {
                                 let mut frame = Vec::with_capacity(5 + resp_bytes.len());
@@ -419,7 +425,7 @@ where
             }
 
             // Merge path parameters into JSON body
-            if is_json && !path_params.is_empty() {
+            if codec == 1 && !path_params.is_empty() {
                 let mut request_payload_mut = request_payload.clone();
                 let mut json_val: simd_json::value::owned::Value = if request_payload_mut.is_empty() {
                     simd_json::value::owned::Value::Object(Box::new(simd_json::value::owned::Object::new()))
@@ -449,7 +455,7 @@ where
                         let matched_path_clone = matched_path.clone();
                         
                         // Execute the SSE handler
-                        match sse_h_clone.handle_sse(&matched_path_clone, request_payload.clone(), is_json).await {
+                        match sse_h_clone.handle_sse(&matched_path_clone, request_payload.clone(), codec).await {
                             Ok(mut rx) => {
                                 let (mut body_tx, body_rx) = Body::channel();
                                 tokio::spawn(async move {
@@ -722,7 +728,7 @@ where
 
             // Call the handler inside the tokio task-local metadata context scope
             let handler_fut = crate::metadata::METADATA.scope(md, async move {
-                handler.handle_request(&matched_path, request_payload, is_json).await
+                handler.handle_request(&matched_path, request_payload, codec).await
             });
 
             let handler_res = if let Some(timeout_duration) = deadline {
