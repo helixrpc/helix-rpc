@@ -1,0 +1,83 @@
+name: Helix RPC CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build-and-test:
+    name: Build & Test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+      fail-fast: false
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.23.0'
+
+    - name: Set up Rust
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Set up Java
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '21'
+
+    - name: Compile Helix Compiler
+      run: |
+        cd compiler
+        go build -o bin/helixc cmd/helixc/main.go
+        
+    - name: Test Go Runtime
+      run: |
+        cd runtimes/go
+        go test -v ./...
+        
+    - name: Test Rust Runtime
+      run: |
+        cd runtimes/rust
+        cargo test --verbose
+        
+    - name: Test Node.js Runtime
+      run: |
+        cd runtimes/node
+        npm install
+        npx tsc
+
+    - name: Test Python Runtime
+      run: |
+        cd runtimes/python
+        python -m pip install --upgrade pip
+        pip install pytest aiohttp
+        python -m py_compile helix_rt/ratelimit.py
+        
+    - name: Test Java Runtime
+      run: |
+        cd runtimes/java
+        mvn clean compile
+
+    - name: Test Kubernetes Operator
+      if: runner.os == 'Linux'
+      run: |
+        cd extensions/helix-operator
+        make build

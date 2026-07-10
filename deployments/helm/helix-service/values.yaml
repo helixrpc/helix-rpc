@@ -19,6 +19,15 @@ helixConfig:
   enable_jwt_auth: false
   jwt_secret: ""
 
+gitOps:
+  argoRollouts:
+    enabled: false
+    canary:
+      steps:
+        - setWeight: 20
+        - pause: {} # Wait indefinitely for manual ArgoCD approval
+        - setWeight: 100
+
 ebpf:
   enabled: false
 
