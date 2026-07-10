@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"fmt"
+	"net"
 	"sync"
 )
 
@@ -35,5 +36,28 @@ func (r *StaticResolver) Resolve(serviceName string) ([]string, error) {
 	if !ok {
 		return nil, fmt.Errorf("service %s not found in resolver targets", serviceName)
 	}
+	return addrs, nil
+}
+
+// CoreDNSResolver resolves standard Kubernetes service DNS names.
+// In simple scenarios, this acts just like DNS, but it can be extended 
+// with client-go endpoints watch for more advanced client-side load balancing.
+type CoreDNSResolver struct {
+	// Namespace for the resolution (e.g. "default")
+	Namespace string
+}
+
+func (k *CoreDNSResolver) Resolve(serviceName string) ([]string, error) {
+	fqdn := serviceName
+	if k.Namespace != "" {
+		fqdn = serviceName + "." + k.Namespace + ".svc.cluster.local"
+	}
+	
+	// Real DNS lookup for CoreDNS
+	addrs, err := net.LookupHost(fqdn)
+	if err != nil {
+		return nil, err
+	}
+
 	return addrs, nil
 }

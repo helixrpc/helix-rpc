@@ -75,3 +75,35 @@ impl Resolver for DnsResolver {
         }
     }
 }
+
+pub struct CoreDNSResolver {
+    pub namespace: Option<String>,
+}
+
+impl CoreDNSResolver {
+    pub fn new(namespace: Option<String>) -> Self {
+        Self { namespace }
+    }
+}
+
+impl Resolver for CoreDNSResolver {
+    fn resolve(&self, service_name: &str) -> Result<Vec<String>, String> {
+        let lookup_target = match &self.namespace {
+            Some(ns) => format!("{}.{}.svc.cluster.local:8080", service_name, ns),
+            None => format!("{}:8080", service_name),
+        };
+
+        match lookup_target.to_socket_addrs() {
+            Ok(addrs) => {
+                let ips: Vec<String> = addrs.map(|addr| addr.to_string()).collect();
+                if ips.is_empty() {
+                    Err(format!("No IP addresses resolved for {}", service_name))
+                } else {
+                    Ok(ips)
+                }
+            }
+            Err(e) => Err(e.to_string()),
+        }
+    }
+}
+

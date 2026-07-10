@@ -1,0 +1,35 @@
+replicaCount: 1
+
+image:
+  repository: my-helix-service
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+service:
+  type: ClusterIP
+  port: 8080
+
+helixConfig:
+  host: "0.0.0.0"
+  port: 8080
+  disable_gzip: false
+  disable_deadline: false
+  rate_limit_rate: 200.0
+  rate_limit_burst: 20
+  enable_jwt_auth: false
+  jwt_secret: ""
+
+ebpf:
+  enabled: false
+
+serviceMonitor:
+  enabled: true
+  interval: 15s
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
