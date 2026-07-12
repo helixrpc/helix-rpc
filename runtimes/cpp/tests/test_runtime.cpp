@@ -138,6 +138,10 @@ void TestTensor() {
 }
 
 int main() {
+#ifdef _WIN32
+    WSADATA wsaData;
+    WSAStartup(MAKEWORD(2, 2), &wsaData);
+#endif
     TestConsistentHashBalancer();
     TestSniffer();
     TestDeadline();

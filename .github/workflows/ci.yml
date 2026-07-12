@@ -80,6 +80,21 @@ jobs:
         cd runtimes/java
         mvn clean compile
 
+    - name: Test C++ Runtime
+      run: |
+        ./compiler/bin/helixc generate -idl tests/schema/test.proto -lang cpp -out runtimes/cpp/tests/test_helix_generated.h
+        cd runtimes/cpp
+        mkdir -p build && cd build
+        cmake ..
+        cmake --build .
+        if [ -f "Debug/test_runtime.exe" ]; then
+          ./Debug/test_runtime.exe
+          ./Debug/test_optimization.exe
+        else
+          ./test_runtime
+          ./test_optimization
+        fi
+
     - name: Test Kubernetes Operator
       if: runner.os == 'Linux'
       run: |

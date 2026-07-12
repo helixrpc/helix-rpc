@@ -1,9 +1,18 @@
 #pragma once
 
+#ifdef _WIN32
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#pragma comment(lib, "ws2_32.lib")
+typedef int socklen_t;
+typedef int ssize_t;
+#define close closesocket
+#else
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <unistd.h>
+#endif
 #include <thread>
 #include <functional>
 #include <string>

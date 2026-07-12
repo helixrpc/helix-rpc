@@ -1,4 +1,4 @@
-#include "/tmp/test_helix_generated.h"
+#include "test_helix_generated.h"
 #include <iostream>
 #include <cassert>
 #include <algorithm>

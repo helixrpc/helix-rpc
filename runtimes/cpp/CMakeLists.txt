@@ -21,3 +21,17 @@ endif()
 
 add_library(helix_rt INTERFACE)
 target_include_directories(helix_rt INTERFACE include)
+
+if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests")
+    add_executable(test_runtime tests/test_runtime.cpp)
+    target_link_libraries(test_runtime PRIVATE helix_rt)
+    if(WIN32)
+        target_link_libraries(test_runtime PRIVATE ws2_32)
+    endif()
+
+    add_executable(test_optimization tests/test_optimization.cpp)
+    target_link_libraries(test_optimization PRIVATE helix_rt)
+    if(WIN32)
+        target_link_libraries(test_optimization PRIVATE ws2_32)
+    endif()
+endif()
