@@ -51,6 +51,7 @@ jobs:
     - name: Test Go Runtime
       run: |
         cd runtimes/go
+        go mod tidy
         go test -v ./...
         
     - name: Test Rust Runtime

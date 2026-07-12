@@ -73,8 +73,9 @@ impl helix_rt::HttpServiceHandler for ServiceImpl {
         &self,
         path: &str,
         body: Vec<u8>,
-        is_json: bool,
+        codec: u8,
     ) -> Result<(Vec<u8>, String), String> {
+        let is_json = codec == 1;
         if path == "/helix_example.UserProfileService/GetUserProfile" {
             if is_json {
                 let req: UserProfile =
