@@ -62,14 +62,17 @@ jobs:
       run: |
         cd runtimes/node
         npm install
-        npx tsc
+        npm run build
+        npx jest --config jest.config.js
 
     - name: Test Python Runtime
       run: |
         cd runtimes/python
         python -m pip install --upgrade pip
-        pip install pytest aiohttp
-        python -m py_compile helix_rt/ratelimit.py
+        pip install pytest pytest-asyncio aiohttp opentelemetry-api opentelemetry-sdk \
+                    aiomcache redis aio-pika aiokafka
+        python -m pytest tests/test_cache.py tests/test_ratelimit.py \
+                         tests/test_rabbitmq.py tests/test_kafka.py -v
         
     - name: Test Java Runtime
       run: |

@@ -1,4 +1,4 @@
-import * as Memcached from 'memcached';
+import Memcached = require('memcached');
 import { createHash } from 'crypto';
 
 export class CacheInterceptor {

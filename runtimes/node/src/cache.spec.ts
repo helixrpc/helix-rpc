@@ -1,5 +1,5 @@
-import { CacheInterceptor } from './cache';
-import * as Memcached from 'memcached';
+import { CacheInterceptor } from './cache.js';
+import Memcached = require('memcached');
 
 jest.mock('memcached');
 
