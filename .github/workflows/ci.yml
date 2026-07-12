@@ -101,5 +101,5 @@ jobs:
     - name: Test Kubernetes Operator
       if: runner.os == 'Linux'
       run: |
-        cd extensions/helix-operator
+        cd integrations/helix-operator
         make build

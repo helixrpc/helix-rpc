@@ -83,7 +83,7 @@ helix-rpc/
 │   ├── go-python-ai/      # Go-to-Python AI E2E tests
 │   ├── node-node/         # Node.js E2E tests
 │   └── schema/            # Shared .proto / .thrift definitions
-├── extensions/            # Sidecar proxy extensions
+├── integrations/            # Sidecar proxy extensions
 │   └── envoy-filter/      # Envoy proxy-wasm filter in Rust
 └── examples/              # Quickstarts and architectural examples
 ```

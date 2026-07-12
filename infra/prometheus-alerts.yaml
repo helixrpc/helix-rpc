@@ -1,0 +1,32 @@
+groups:
+  - name: helix-rpc-alerts
+    rules:
+      # Alert if error rate exceeds 5% in a 2-minute window
+      - alert: HelixHighErrorRate
+        expr: sum(rate(helix_errors_total[2m])) / sum(rate(helix_requests_total[2m])) * 100 > 5
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High error rate detected on Helix RPC service"
+          description: "Service {{ $labels.job }} error rate is currently {{ $value | printf \"%.2f\" }}%."
+
+      # Alert if P99 latency exceeds 2 seconds
+      - alert: HelixHighP99Latency
+        expr: histogram_quantile(0.99, sum(rate(helix_request_duration_seconds_bucket[5m])) by (le, job)) > 2.0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High P99 latency on Helix RPC service"
+          description: "Service {{ $labels.job }} P99 latency is {{ $value | printf \"%.2f\" }}s."
+
+      # Alert if active connections to a backend drop to zero
+      - alert: HelixNoActiveBackends
+        expr: sum(helix_backend_active_connections) by (job) == 0
+        for: 1m
+        labels:
+          severity: page
+        annotations:
+          summary: "No active backend targets for Helix service"
+          description: "Helix service {{ $labels.job }} has zero active backend connections."

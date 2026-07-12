@@ -1,4 +1,0 @@
-## Append samples of your project ##
-resources:
-- orchestration_v1alpha1_helixservice.yaml
-# +kubebuilder:scaffold:manifestskustomizesamples
