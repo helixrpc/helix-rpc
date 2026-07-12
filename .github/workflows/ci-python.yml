@@ -27,7 +27,7 @@ jobs:
       - name: Install dependencies
         working-directory: ./runtimes/python
         run: |
-          pip install pytest aiohttp opentelemetry-api opentelemetry-sdk numpy PyJWT
+          pip install pytest aiohttp opentelemetry-api opentelemetry-sdk numpy PyJWT boto3 hvac
           # If a setup.py or requirements.txt exists, install it:
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
@@ -40,4 +40,4 @@ jobs:
       - name: Run unit tests
         working-directory: ./runtimes/python
         run: |
-          if [ -d tests ]; then pytest tests/ -v; fi
+          if [ -d tests ]; then python3 -m pytest tests/ -v; fi
