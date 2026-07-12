@@ -21,3 +21,7 @@ An architectural comparison matrix and operational analysis comparing Helix RPC 
 ### 4. [Polymorphic JIT Transpilation: Redefining High-Performance RPC Gateways](polymorphic-jit-transpilation.md)
 *Published: July 5, 2026*  
 A strategic look at Polymorphic JIT Transpilation, detailing why JIT-compiling native machine code on-the-fly for socket-level protocol transcoding is novel, why it is technically difficult to implement, and why standard sidecar proxies (like Envoy) cannot support it.
+
+### 5. [Multi-Protocol Architecture: The Case for Speaking Every Language at Once](multi-protocol-architecture.md)
+*Published: July 12, 2026*  
+A deep-dive into why single-protocol services are an architectural liability, and how multi-protocol frameworks enable universal client compatibility, protocol-optimal performance, zero-disruption migrations, unified security, and end-to-end observability — all from a single business logic handler.
