@@ -21,7 +21,7 @@ By utilizing a **Same-Port Multiplexer** and **Zero-Allocation Transpilers**, He
 - **Unified Multi-Protocol Server**: Accept gRPC, Thrift, HTTP/JSON REST, gRPC-Web, and SSE on a single TCP port.
 - **Zero-Downtime Migration**: Maintain legacy clients and migrate backend services gradually without writing translators or deploying sidecar proxies.
 - **Direct Kernel Bypass**: Automatically bypasses the TCP/IP stack using **eBPF Sockmaps** for co-located microservices on loopback.
-- **Zero-Copy Views**: Memory-slicing encoders/decoders in Go, Rust, Node.js, and Python consume up to 70% less memory under high throughput.
+- **Zero-Copy Views**: Memory-slicing encoders/decoders in Go, Rust, Python, Node.js, Java, and C++ consume up to 70% less memory under high throughput.
 
 ---
 
@@ -35,12 +35,27 @@ Read the full reproducible [Performance Benchmarks](benchmarks.md).
 
 **Install the Runtime Packages:**
 ```bash
+# Go
+go get github.com/helixrpc/helix-rpc/runtime-go
+
 # Rust
 cargo add helix-rt
 
 # Python
 pip install helix-rt
 pip install "helix-rt[tensor]" # For zero-copy numpy support
+
+# Node.js
+npm install helix-rt-node
+
+# Java (Maven)
+<dependency>
+  <groupId>io.helixrpc</groupId>
+  <artifactId>helix-rt</artifactId>
+</dependency>
+
+# C++ (CMake)
+include_directories(helix-rpc/runtimes/cpp/include)
 ```
 
 ---

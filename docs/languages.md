@@ -1,6 +1,6 @@
 # Language Support
 
-Helix RPC is designed around a multi-language philosophy, recognising that different languages excel at different parts of the AI stack. All three runtimes now share **100% feature parity** across the core production feature set.
+Helix RPC is designed around a multi-language philosophy, recognising that different languages excel at different parts of the AI stack. All **six runtimes** (Go, Rust, Python, Node.js, C++, and Java) now share **100% feature parity** across their respective core feature subsets.
 
 ---
 
@@ -98,9 +98,9 @@ C++ is the ultimate language for performance-critical systems, system integratio
 **Key Strengths:**
 - **Zero-Copy Sniffing** — High-performance TCP parser inspecting bytes directly from input stream.
 - **ConsistentHashBalancer** — Virtual node ring for distributed KVCache prompt routing.
-- **MultiplexedServer** — Same-port connection multiplexing and routing.
+- **MultiplexedServer** — Same-port connection multiplexing and routing natively integrated with Windows (Winsock2) and Unix.
 - **SSE Streaming** — Chunk-writer utilities supporting `text/event-stream` format.
-- **Header-Only Integration** — Clean compile and include flow.
+- **Tensor Integration** — Zero-copy memory boundaries for direct ML model serving wrappers.
 
 *Use C++ when writing latency-critical microservices or model serving wrappers.*
 
@@ -113,7 +113,8 @@ Java is the bedrock of enterprise backends and big-data streaming.
 **Key Strengths:**
 - **ByteBuffer Sniffing** — Stream-sniffing utilizing zero-allocation ByteBuffers.
 - **ConsistentHashBalancer** — High-efficiency thread-safe virtual node ring using `java.util.TreeMap`.
-- **MultiplexedServer** — Non-blocking multi-protocol single-port server loop.
+- **MultiplexedServer** — Non-blocking multi-protocol single-port server loop via modern Java NIO.
+- **Async Sinks** — Deep integration with enterprise queues via `KafkaAsyncSink` and `RabbitMQAsyncSink`.
 - **SSE Streaming** — Streaming chunk-writing helpers for generative response streams.
 
 *Use Java when deploying Helix RPC inside enterprise JVM environments.*

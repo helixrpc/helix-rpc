@@ -23,7 +23,7 @@ Helix RPC completely bypasses the network stack between the Gateway and the Mode
 ## Native SSE Streaming
 Chat UIs require real-time token streaming. Helix RPC implements native Server-Sent Events (SSE) across all three runtimes. When a client sends `Accept: text/event-stream`, the gateway automatically detects the stream, launches the async generator, and proxies yields into standard `data: {...}\n\n` SSE frames.
 
-**Available in:** Go, Rust, Python, Node.js
+**Available in:** Go, Rust, Python, Node.js, C++, Java
 
 ---
 
@@ -51,7 +51,9 @@ All three runtimes define a common `HelixError` type carrying a gRPC-compatible 
 - **Health Checking**: Standard `grpc.health.v1.Health/Check` auto-mounted so Kubernetes liveness/readiness probes work out of the box.
 - **Interceptors / Middleware**: Full unary interceptor chains in Go; `aiohttp` middleware stack in Python; `Service` wrappers in Rust.
 - **Deadline Propagation (`grpc-timeout`)**: All six units (`n/u/m/S/M/H`) parsed and converted into native `context.Context` deadlines (Go), `tokio::time::timeout` (Rust), or `asyncio.wait_for` (Python).
-- **Per-Message Compression**: Automatic `gzip` compress/decompress when the client sends `grpc-encoding: gzip`, across all three runtimes.
+- **Per-Message Compression**: Automatic `gzip` compress/decompress when the client sends `grpc-encoding: gzip`, across all runtimes.
+
+**Available in:** Go, Rust, Python, Node.js, C++, Java
 
 ---
 
@@ -79,7 +81,7 @@ Three resilience primitives work together to guarantee extreme availability:
 - **Round-Robin**: Thread-safe atomic counter; available in Go, Rust, Python, and Node.js.
 - **Least-Connections (`LeastConnBalancer`)**: Lock-free in Go (atomic pointer swaps + cache-line padding); `RwLock`-based in Rust. Dynamically routes new requests to the backend with the fewest in-flight connections — ideal for AI inference where request latency is highly variable.
 
-**Available in:** Go, Rust, Python, Node.js
+**Available in:** Go, Rust, Python, Node.js, C++, Java
 
 ---
 
@@ -91,7 +93,7 @@ Unlike frameworks that force you to choose a protocol, Helix RPC multiplexes **g
 - **REST/JSON**: Standard HTTP/1.1 with automatic JSON unmarshaling and path parameter extraction.
 - **Server-Sent Events (SSE)**: Built-in `text/event-stream` streaming.
 
-**Available in:** Go (all four protocols)
+**Available in:** Go, C++, Java (Sniffing & Multiplexing core)
 
 ---
 
