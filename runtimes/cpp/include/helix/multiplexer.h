@@ -1,4 +1,5 @@
 #pragma once
+#define NOMINMAX
 
 #ifdef _WIN32
 #include <winsock2.h>
@@ -25,11 +26,11 @@ namespace helix {
 class MultiplexedServer {
 public:
     explicit MultiplexedServer(int port = 0) {
-        fd_ = socket(AF_INET, SOCK_STREAM, 0);
+        fd_ = static_cast<int>(socket(AF_INET, SOCK_STREAM, 0));
         if (fd_ < 0) throw std::runtime_error("failed to create server socket");
 
         int opt = 1;
-        setsockopt(fd_, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+        setsockopt(fd_, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<const char*>(&opt), sizeof(opt));
 
         struct sockaddr_in addr{};
         addr.sin_family = AF_INET;
@@ -67,19 +68,19 @@ public:
             while (running_) {
                 struct sockaddr_in client_addr{};
                 socklen_t client_len = sizeof(client_addr);
-                int client_fd = accept(fd_, (struct sockaddr*)&client_addr, &client_len);
+                int client_fd = static_cast<int>(accept(fd_, (struct sockaddr*)&client_addr, &client_len));
                 if (client_fd < 0) {
                     if (!running_) break;
                     continue;
                 }
 
                 int flag = 1;
-                setsockopt(client_fd, IPPROTO_TCP, TCP_NODELAY, (char*)&flag, sizeof(int));
-                setsockopt(client_fd, SOL_SOCKET, SO_KEEPALIVE, (char*)&flag, sizeof(int));
+                setsockopt(client_fd, IPPROTO_TCP, TCP_NODELAY, reinterpret_cast<const char*>(&flag), sizeof(int));
+                setsockopt(client_fd, SOL_SOCKET, SO_KEEPALIVE, reinterpret_cast<const char*>(&flag), sizeof(int));
 
                 std::thread([client_fd, grpc_handler, http_handler]() {
                     std::vector<char> peek_buf(8);
-                    ssize_t n = recv(client_fd, peek_buf.data(), peek_buf.size(), MSG_PEEK);
+                    ssize_t n = recv(client_fd, reinterpret_cast<char*>(peek_buf.data()), static_cast<int>(peek_buf.size()), MSG_PEEK);
                     if (n >= 4 && std::string(peek_buf.data(), 4) == "PRI ") {
                         grpc_handler(client_fd);
                     } else {
@@ -110,7 +111,7 @@ private:
 
 inline void WriteSseChunk(int client_fd, const std::string& data) {
     std::string chunk = "data: " + data + "\n\n";
-    send(client_fd, chunk.data(), chunk.size(), 0);
+    send(client_fd, chunk.data(), static_cast<int>(chunk.size()), 0);
 }
 
 } // namespace helix

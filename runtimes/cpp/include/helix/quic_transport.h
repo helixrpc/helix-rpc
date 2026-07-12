@@ -1,4 +1,5 @@
 #pragma once
+#define NOMINMAX
 
 #include <vector>
 #include <string>
@@ -9,6 +10,7 @@
 #include <cstdint>
 #include <stdexcept>
 #ifdef _WIN32
+#define _WINSOCK_DEPRECATED_NO_WARNINGS
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #pragma comment(lib, "ws2_32.lib")
@@ -37,7 +39,7 @@ public:
         packet.push_back(static_cast<uint8_t>(stream_id_ & 0xFF));
         packet.insert(packet.end(), data.begin(), data.end());
 
-        sendto(fd_, packet.data(), packet.size(), 0, (struct sockaddr*)&addr_, sizeof(addr_));
+        sendto(fd_, reinterpret_cast<const char*>(packet.data()), static_cast<int>(packet.size()), 0, (struct sockaddr*)&addr_, sizeof(addr_));
     }
 
     void PushData(const std::vector<uint8_t>& data) {
@@ -64,7 +66,7 @@ private:
 class QuicListener {
 public:
     explicit QuicListener(int port = 0) {
-        fd_ = socket(AF_INET, SOCK_DGRAM, 0);
+        fd_ = static_cast<int>(socket(AF_INET, SOCK_DGRAM, 0));
         if (fd_ < 0) throw std::runtime_error("failed to create UDP socket");
 
         struct sockaddr_in addr{};
@@ -115,7 +117,7 @@ private:
         socklen_t client_len = sizeof(client_addr);
 
         while (running_) {
-            ssize_t n = recvfrom(fd_, buffer.data(), buffer.size(), 0, (struct sockaddr*)&client_addr, &client_len);
+            ssize_t n = recvfrom(fd_, reinterpret_cast<char*>(buffer.data()), static_cast<int>(buffer.size()), 0, (struct sockaddr*)&client_addr, &client_len);
             if (n < 4) continue;
 
             uint32_t stream_id = (static_cast<uint32_t>(buffer[0]) << 24) |
