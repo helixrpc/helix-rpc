@@ -44,7 +44,7 @@ jobs:
       uses: actions/setup-java@v4
       with:
         distribution: 'temurin'
-        java-version: '21'
+        java-version: '17'
 
     - name: Compile Helix Compiler
       run: |
@@ -74,7 +74,7 @@ jobs:
         cd runtimes/python
         python -m pip install --upgrade pip
         pip install pytest pytest-asyncio aiohttp opentelemetry-api opentelemetry-sdk \
-                    aiomcache redis aio-pika aiokafka
+                    aiomcache redis aio-pika aiokafka boto3 hvac
         python -m pytest tests/test_cache.py tests/test_ratelimit.py \
                          tests/test_rabbitmq.py tests/test_kafka.py -v
         
