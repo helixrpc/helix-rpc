@@ -9,16 +9,22 @@
     "build": "npx tsc -p tsconfig.build.json"
   },
   "devDependencies": {
+    "@aws-sdk/client-kms": "^3.1084.0",
     "@types/amqplib": "^0.10.8",
     "@types/jest": "^30.0.0",
     "@types/memcached": "^2.2.10",
     "@types/node": "^26.1.0",
+    "@types/node-vault": "^0.9.3",
     "jest": "^30.4.2",
+    "node-vault": "^0.9.2",
     "ts-jest": "^29.4.11",
     "typescript": "^5.3.3"
   },
+  "peerDependencies": {
+    "@aws-sdk/client-kms": "^3.0.0",
+    "node-vault": "^0.9.2"
+  },
   "dependencies": {
-    "@aws-sdk/client-kms": "^3.1084.0",
     "amqplib": "^2.0.1",
     "ioredis": "^5.11.1",
     "kafkajs": "^2.2.4",

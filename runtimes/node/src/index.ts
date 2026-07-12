@@ -11,3 +11,5 @@ export * from './ebpf.js';
 export * from './quic_transport.js';
 export * from './gateway.js';
 export * from './agent.js';
+export * from './kms.js';
+export * from './vault.js';

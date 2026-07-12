@@ -3,6 +3,11 @@ project(HelixRuntimeCpp)
 
 set(CMAKE_CXX_STANDARD 17)
 
+option(HELIX_ENABLE_CRYPTO "Enable Cryptography Parity" OFF)
+if (HELIX_ENABLE_CRYPTO)
+    add_compile_definitions(HELIX_ENABLE_CRYPTO)
+endif()
+
 # We assume hiredis, redis++, and libmemcached are available in the environment
 find_path(HIREDIS_INCLUDE_DIR hiredis/hiredis.h)
 find_path(REDIS_PLUS_PLUS_INCLUDE_DIR sw/redis++/redis++.h)

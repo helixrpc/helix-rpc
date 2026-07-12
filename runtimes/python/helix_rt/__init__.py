@@ -7,3 +7,9 @@ from .gateway import MultiTenantRateLimiter
 from .multiplexer import MultiplexedServer, write_sse_chunk
 from .tensor import Tensor
 from .agent import AgenticStream
+
+try:
+    from .kms import HelixKMS
+    from .vault import HelixVault
+except ImportError:
+    pass

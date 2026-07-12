@@ -1,0 +1,4 @@
+/Users/naveenchedeti/.gemini/antigravity/scratch/helix-rpc/runtimes/cpp/build_crypto/CMakeFiles/test_runtime.dir
+/Users/naveenchedeti/.gemini/antigravity/scratch/helix-rpc/runtimes/cpp/build_crypto/CMakeFiles/test_optimization.dir
+/Users/naveenchedeti/.gemini/antigravity/scratch/helix-rpc/runtimes/cpp/build_crypto/CMakeFiles/edit_cache.dir
+/Users/naveenchedeti/.gemini/antigravity/scratch/helix-rpc/runtimes/cpp/build_crypto/CMakeFiles/rebuild_cache.dir

@@ -58,3 +58,6 @@ pub use cache::CacheInterceptor;
 
 #[cfg(test)]
 mod tests_resilience;
+
+#[cfg(feature = "crypto")]
+pub mod crypto;

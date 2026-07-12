@@ -59,3 +59,20 @@ tokio-stream = { version = "0.1", features = ["net"] }
 
 
 
+[dependencies.aws-sdk-kms]
+version = "0.28.0"
+optional = true
+
+[dependencies.aws-config]
+version = "0.55.0"
+optional = true
+
+[dependencies.reqwest]
+version = "0.11"
+features = ["json", "rustls-tls"]
+default-features = false
+optional = true
+
+[features]
+default = []
+crypto = ["aws-sdk-kms", "aws-config", "reqwest"]
