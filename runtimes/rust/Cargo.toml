@@ -45,7 +45,7 @@ redis = { version = "0.23", features = ["tokio-comp"] }
 memcache-async = "0.10.1"
 sha2 = "0.10"
 hex = "0.4"
-rdkafka = "0.39.0"
+rdkafka = { version = "0.39.0", features = ["cmake-build"] }
 
 
 [dev-dependencies]
