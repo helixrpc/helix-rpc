@@ -22,7 +22,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: '1.23.0'
+        go-version: '1.24.0'
 
     - name: Set up Rust
       uses: dtolnay/rust-toolchain@stable
@@ -46,7 +46,7 @@ jobs:
     - name: Compile Helix Compiler
       run: |
         cd compiler
-        go build -o bin/helixc cmd/helixc/main.go
+        go build -o bin/helixc .
         
     - name: Test Go Runtime
       run: |
