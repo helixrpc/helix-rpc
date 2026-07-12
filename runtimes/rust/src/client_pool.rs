@@ -1,12 +1,15 @@
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
-use tokio::net::{TcpStream, UnixStream};
+use tokio::net::TcpStream;
+#[cfg(unix)]
+use tokio::net::UnixStream;
 use tokio::io::{AsyncRead, AsyncWrite};
 use std::pin::Pin;
 
 pub enum AnyStream {
     Tcp(TcpStream),
+    #[cfg(unix)]
     Unix(UnixStream),
 }
 
@@ -18,6 +21,7 @@ impl AsyncRead for AnyStream {
     ) -> std::task::Poll<std::io::Result<()>> {
         match self.get_mut() {
             AnyStream::Tcp(s) => Pin::new(s).poll_read(cx, buf),
+            #[cfg(unix)]
             AnyStream::Unix(s) => Pin::new(s).poll_read(cx, buf),
         }
     }
@@ -31,6 +35,7 @@ impl AsyncWrite for AnyStream {
     ) -> std::task::Poll<std::io::Result<usize>> {
         match self.get_mut() {
             AnyStream::Tcp(s) => Pin::new(s).poll_write(cx, buf),
+            #[cfg(unix)]
             AnyStream::Unix(s) => Pin::new(s).poll_write(cx, buf),
         }
     }
@@ -40,6 +45,7 @@ impl AsyncWrite for AnyStream {
     ) -> std::task::Poll<std::io::Result<()>> {
         match self.get_mut() {
             AnyStream::Tcp(s) => Pin::new(s).poll_flush(cx),
+            #[cfg(unix)]
             AnyStream::Unix(s) => Pin::new(s).poll_flush(cx),
         }
     }
@@ -49,6 +55,7 @@ impl AsyncWrite for AnyStream {
     ) -> std::task::Poll<std::io::Result<()>> {
         match self.get_mut() {
             AnyStream::Tcp(s) => Pin::new(s).poll_shutdown(cx),
+            #[cfg(unix)]
             AnyStream::Unix(s) => Pin::new(s).poll_shutdown(cx),
         }
     }
@@ -68,6 +75,7 @@ impl ClientConnPool {
     }
 
     pub async fn get(&self) -> Result<AnyStream, std::io::Error> {
+        #[cfg(unix)]
         if crate::ebpf::has_unix_prefix(&self.addr) {
             let path = crate::ebpf::strip_unix_prefix(&self.addr);
             let stream = UnixStream::connect(path).await?;

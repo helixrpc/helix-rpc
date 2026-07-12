@@ -1,4 +1,5 @@
 use std::fs::OpenOptions;
+#[cfg(unix)]
 use std::os::unix::io::AsRawFd;
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -7,6 +8,7 @@ use tokio::sync::Mutex;
 
 pub struct ShmConn {
     pub signal: TcpStream,
+    #[cfg(unix)]
     mmap_ptr: *mut libc::c_void,
     size: usize,
     write_mu: Arc<Mutex<()>>,
@@ -17,6 +19,7 @@ unsafe impl Send for ShmConn {}
 unsafe impl Sync for ShmConn {}
 
 impl ShmConn {
+    #[cfg(unix)]
     pub fn new(
         signal: TcpStream,
         shm_path: &str,
@@ -59,6 +62,20 @@ impl ShmConn {
         })
     }
 
+    #[cfg(not(unix))]
+    pub fn new(
+        _signal: TcpStream,
+        _shm_path: &str,
+        _size: usize,
+        _is_owner: bool,
+    ) -> Result<Self, std::io::Error> {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "Shared memory transport is not supported on Windows",
+        ))
+    }
+
+    #[cfg(unix)]
     pub async fn read_payload(&mut self) -> Result<Vec<u8>, std::io::Error> {
         let mut header = [0u8; 8];
         self.signal.read_exact(&mut header).await?;
@@ -82,6 +99,15 @@ impl ShmConn {
         Ok(data)
     }
 
+    #[cfg(not(unix))]
+    pub async fn read_payload(&mut self) -> Result<Vec<u8>, std::io::Error> {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "Shared memory transport is not supported on Windows",
+        ))
+    }
+
+    #[cfg(unix)]
     pub async fn write_payload(&mut self, payload: &[u8]) -> Result<(), std::io::Error> {
         let _guard = self.write_mu.lock().await;
 
@@ -109,10 +135,19 @@ impl ShmConn {
 
         Ok(())
     }
+
+    #[cfg(not(unix))]
+    pub async fn write_payload(&mut self, _payload: &[u8]) -> Result<(), std::io::Error> {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "Shared memory transport is not supported on Windows",
+        ))
+    }
 }
 
 impl Drop for ShmConn {
     fn drop(&mut self) {
+        #[cfg(unix)]
         unsafe {
             libc::munmap(self.mmap_ptr, self.size);
         }
