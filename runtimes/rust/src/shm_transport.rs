@@ -1,7 +1,9 @@
+#[cfg(unix)]
 use std::fs::OpenOptions;
 #[cfg(unix)]
 use std::os::unix::io::AsRawFd;
 use std::sync::Arc;
+#[cfg(unix)]
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::sync::Mutex;
