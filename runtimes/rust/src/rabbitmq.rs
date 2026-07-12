@@ -4,6 +4,8 @@ use lapin::{
 use std::sync::Arc;
 
 pub struct RabbitMQAsyncSink {
+    /// Kept alive to maintain the AMQP connection — dropped when the sink is dropped.
+    #[allow(dead_code)]
     connection: Arc<Connection>,
     channel: lapin::Channel,
     exchange: String,
